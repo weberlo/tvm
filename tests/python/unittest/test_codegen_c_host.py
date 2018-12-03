@@ -1,6 +1,10 @@
 import tvm
 import numpy as np
+import subprocess
 from tvm.contrib import util
+
+def dump_text():
+    print(subprocess.check_output(["objcopy", "--dump-section", ".text=text.bin", "/home/pratyush/test.so"]))
 
 def test_add():
     nn = 1024
@@ -15,10 +19,12 @@ def test_add():
         fsplits = [x for x in tvm.ir_pass.SplitHostDevice(f1)]
         fsplits[0] = tvm.ir_pass.LowerTVMBuiltin(fsplits[0])
         mhost = tvm.codegen.build_module(fsplits[0], "c")
+        print(mhost)
         temp = util.tempdir()
         path_dso = temp.relpath("temp.so")
         mhost.export_library(path_dso)
-        m = tvm.module.load(path_dso)
+        #m = tvm.module.load(path_dso, "openocd")
+        m = tvm.module.load("/home/pratyush/test.so", "openocd")
         fadd = m['fadd']
         ctx = tvm.cpu(0)
         # launch the kernel.
@@ -83,5 +89,9 @@ def test_add_pipeline():
         check_c()
 
 if __name__ == "__main__":
-    test_add()
-    test_add_pipeline()
+    f = tvm.convert(dump_text)
+    dump_text_c = tvm.get_global_func("dump_text_c")
+    dump_text_c(f)
+    dump_text()
+    #test_add()
+    #test_add_pipeline()

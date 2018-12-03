@@ -128,6 +128,8 @@ bool RuntimeEnabled(const std::string& target) {
     const PackedFunc* pf = runtime::Registry::Get("codegen.llvm_target_enabled");
     if (pf == nullptr) return false;
     return (*pf)(target);
+  } else if (target == "openocd") {
+    f_name = "device_api.openocd";
   } else {
     LOG(FATAL) << "Unknown optional runtime " << target;
   }
