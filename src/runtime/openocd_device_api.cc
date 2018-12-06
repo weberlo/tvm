@@ -15,75 +15,7 @@
 namespace tvm {
 namespace runtime {
 
-// TODO: implement something like this? (from VTA)
-struct DataBuffer {
-  /*! \return Virtual address of the data. */
-  void* virt_addr() const {
-    return data_;
-  }
-  /*! \return Physical address of the data. */
-  uint32_t phy_addr() const {
-    return phy_addr_;
-  }
-  /*!
-   * \brief Invalidate the cache of given location in data buffer.
-   * \param offset The offset to the data.
-   * \param size The size of the data.
-   */
-  void InvalidateCache(size_t offset, size_t size) {
-    if (!kBufferCoherent) {
-      VTAInvalidateCache(phy_addr_ + offset, size);
-    }
-  }
-  /*!
-   * \brief Invalidate the cache of certain location in data buffer.
-   * \param offset The offset to the data.
-   * \param size The size of the data.
-   */
-  void FlushCache(size_t offset, size_t size) {
-    if (!kBufferCoherent) {
-      VTAFlushCache(phy_addr_ + offset, size);
-    }
-  }
-  /*!
-   * \brief Allocate a buffer of a given size.
-   * \param size The size of the buffer.
-   */
-  static DataBuffer* Alloc(size_t size) {
-    void* data = VTAMemAlloc(size, 1);
-    CHECK(data != nullptr);
-    DataBuffer* buffer = new DataBuffer();
-    buffer->data_ = data;
-    buffer->phy_addr_ = VTAMemGetPhyAddr(data);
-    return buffer;
-  }
-  /*!
-   * \brief Free the data buffer.
-   * \param buffer The buffer to be freed.
-   */
-  static void Free(DataBuffer* buffer) {
-    VTAMemFree(buffer->data_);
-    delete buffer;
-  }
-  /*!
-   * \brief Create data buffer header from buffer ptr.
-   * \param buffer The buffer pointer.
-   * \return The corresponding data buffer header.
-   */
-  static DataBuffer* FromHandle(const void* buffer) {
-    return const_cast<DataBuffer*>(
-        reinterpret_cast<const DataBuffer*>(buffer));
-  }
-
- private:
-  /*! \brief The internal data. */
-  void* data_;
-  /*! \brief The physical address of the buffer, excluding header. */
-  uint32_t phy_addr_;
-}
-
 class OpenOCDDeviceAPI final : public DeviceAPI {
-  // TODO: where should the binary/.so loading be done?
   public:
   void SetDevice(TVMContext ctx) final {}
   void GetAttr(TVMContext ctx, DeviceAttrKind kind, TVMRetValue* rv) final {
@@ -91,20 +23,24 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
       *rv = 1;
     }
   }
+
   void* AllocDataSpace(TVMContext ctx,
                        size_t nbytes,
                        size_t alignment,
                        TVMType type_hint) final {
-    // TODO: where do these dynamic allocations go? we need a "heap" section.
-    // TODO: what are they used for?
+    // emulates silly heap section by incrementing last_alloc_ pointer
+    // TODO: how to get microdevice object from OpenOCDModule for better allocation?
+    // is alignment/type_hint necessary? how? with respect to what?
     printf("called allocdataspace\n");
-    void* ptr;
-    // TODO: check VTA, maybe make it similar?
-    md_->WriteToMemory();
+    CHECK (last_alloc_ + nbytes <= 50 * PAGE_SIZE)
+      << "out of allocation space\n";
+    void* ptr = last_alloc_;
+    last_alloc = last_alloc + nbytes;
     return ptr;
   }
 
   void FreeDataSpace(TVMContext ctx, void* ptr) final {
+    // TODO: make a better allocator to deal with frees, for now it should be ok
     printf("called freedataspace\n");
   }
 
@@ -117,6 +53,7 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
                       TVMContext ctx_to,
                       TVMType type_hint,
                       TVMStreamHandle stream) final {
+    // TODO: how exactly does this work? cpu_device_api just does memcpy, but what f it had to copy to the riscv board? are contexts single device only?
     printf("called copydatafromto\n");
   }
 
@@ -134,6 +71,8 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
   }
 
   private:
+  // TODO: make dynamic heap sizes
+  uint8_t* last_alloc_ = (uint8_t *) 40 * PAGE_SIZE;
 };
 
 struct OpenOCDWorkspacePool : public WorkspacePool {
