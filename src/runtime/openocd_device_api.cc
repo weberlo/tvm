@@ -7,12 +7,81 @@
 #include <dmlc/thread_local.h>
 #include <tvm/runtime/registry.h>
 #include <tvm/runtime/device_api.h>
+#include <tvm/runtime/micro_device_api.h>
 #include <cstdlib>
 #include <cstring>
 #include "workspace_pool.h"
 
 namespace tvm {
 namespace runtime {
+
+// TODO: implement something like this? (from VTA)
+struct DataBuffer {
+  /*! \return Virtual address of the data. */
+  void* virt_addr() const {
+    return data_;
+  }
+  /*! \return Physical address of the data. */
+  uint32_t phy_addr() const {
+    return phy_addr_;
+  }
+  /*!
+   * \brief Invalidate the cache of given location in data buffer.
+   * \param offset The offset to the data.
+   * \param size The size of the data.
+   */
+  void InvalidateCache(size_t offset, size_t size) {
+    if (!kBufferCoherent) {
+      VTAInvalidateCache(phy_addr_ + offset, size);
+    }
+  }
+  /*!
+   * \brief Invalidate the cache of certain location in data buffer.
+   * \param offset The offset to the data.
+   * \param size The size of the data.
+   */
+  void FlushCache(size_t offset, size_t size) {
+    if (!kBufferCoherent) {
+      VTAFlushCache(phy_addr_ + offset, size);
+    }
+  }
+  /*!
+   * \brief Allocate a buffer of a given size.
+   * \param size The size of the buffer.
+   */
+  static DataBuffer* Alloc(size_t size) {
+    void* data = VTAMemAlloc(size, 1);
+    CHECK(data != nullptr);
+    DataBuffer* buffer = new DataBuffer();
+    buffer->data_ = data;
+    buffer->phy_addr_ = VTAMemGetPhyAddr(data);
+    return buffer;
+  }
+  /*!
+   * \brief Free the data buffer.
+   * \param buffer The buffer to be freed.
+   */
+  static void Free(DataBuffer* buffer) {
+    VTAMemFree(buffer->data_);
+    delete buffer;
+  }
+  /*!
+   * \brief Create data buffer header from buffer ptr.
+   * \param buffer The buffer pointer.
+   * \return The corresponding data buffer header.
+   */
+  static DataBuffer* FromHandle(const void* buffer) {
+    return const_cast<DataBuffer*>(
+        reinterpret_cast<const DataBuffer*>(buffer));
+  }
+
+ private:
+  /*! \brief The internal data. */
+  void* data_;
+  /*! \brief The physical address of the buffer, excluding header. */
+  uint32_t phy_addr_;
+}
+
 class OpenOCDDeviceAPI final : public DeviceAPI {
   // TODO: where should the binary/.so loading be done?
   public:
@@ -27,7 +96,8 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
                        size_t alignment,
                        TVMType type_hint) final {
     void* ptr;
-    printf("called allocdataspace\n");
+    // TODO: check VTA, maybe make it similar?
+    md_->WriteToMemory();
     return ptr;
   }
 
@@ -59,14 +129,15 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
         std::make_shared<OpenOCDDeviceAPI>();
     return inst;
   }
+
+  private:
 };
 
 // TODO: OpenOCDWorkspacePool?
 struct OpenOCDWorkspacePool : public WorkspacePool {
   OpenOCDWorkspacePool() :
-    // TODO: kDLOpenOCD?
-    // TODO: kDLExtDev? was kDLCPU
-      WorkspacePool(kDLExtDev, OpenOCDDeviceAPI::Global()) {}
+    // TODO: kDLOpenOCD or kDLExtDev? was originally kDLCPU
+    WorkspacePool(kDLExtDev, OpenOCDDeviceAPI::Global()) {}
 };
 
 void* OpenOCDDeviceAPI::AllocWorkspace(TVMContext ctx,

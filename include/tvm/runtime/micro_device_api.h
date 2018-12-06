@@ -21,13 +21,13 @@ class MicroDeviceAPI {
   virtual ~MicroDeviceAPI() {}
 
   // TODO: Do I need the TVMContext? What to do with it?
-  virtual void WriteToMemory(TVMContext ctx, size_t offset, uint8_t* buf, size_t num_bytes);
+  virtual void WriteToMemory(TVMContext ctx, void* offset, uint8_t* buf, size_t num_bytes);
 
-  virtual void ReadFromMemory(TVMContext ctx, size_t offset, uint8_t* buf, size_t num_bytes);
+  virtual void ReadFromMemory(TVMContext ctx, void* offset, uint8_t* buf, size_t num_bytes);
 
-  virtual void ChangeMemoryProtection(TVMContext ctx, size_t offset, int prot, size_t num_bytes);
+  virtual void ChangeMemoryProtection(TVMContext ctx, void* offset, int prot, size_t num_bytes);
 
-  virtual void Execute(TVMContext ctx, size_t offset);
+  virtual void Execute(TVMContext ctx, void* offset);
 
   virtual void Reset(TVMContext ctx);
 

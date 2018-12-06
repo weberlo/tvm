@@ -3,7 +3,7 @@
  * \file x86_micro_device_api.cc
  * \brief x86-emulated micro device API
  */
-#include <tvm/runtime/openocd_micro_device_api.h>
+#include <tvm/runtime/micro_device_api.h>
 #include <sys/mman.h>
 
 namespace tvm {
@@ -16,10 +16,11 @@ class OpenOCDMicroDeviceAPI final : public MicroDeviceAPI {
       int prot = PROT_READ | PROT_WRITE | PROT_EXEC;
       int flags = MAP_ANONYMOUS;
       base_addr = (uint8_t*) mmap(NULL, size, prot, flags, -1, 0);
+      // TODO: init socket connection to openocd server
     }
 
     void WriteToMemory(TVMContext ctx,
-                       size_t offset,
+                       void* offset,
                        uint8_t* buf,
                        size_t num_bytes) final {
       uint8_t* real_addr = GetRealAddr(offset);
@@ -27,7 +28,7 @@ class OpenOCDMicroDeviceAPI final : public MicroDeviceAPI {
     }
 
     void ReadFromMemory(TVMContext ctx,
-                        size_t offset,
+                        void* offset,
                         uint8_t* buf,
                         size_t num_bytes) final {
       uint8_t* real_addr = GetRealAddr(offset);
@@ -35,16 +36,13 @@ class OpenOCDMicroDeviceAPI final : public MicroDeviceAPI {
     }
 
     void ChangeMemoryProtection(TVMContext ctx,
-                                size_t offset,
+                                void* offset,
                                 int prot,
                                 size_t num_bytes) final {
-      // TODO: doesn't seem to be required for RISCV at the microlevel
-      // TODO: this only works at page granularity, so num_bytes must be appropriate
-      uint8_t* real_addr = GetRealAddr(offset);
-      mprotect(real_addr, num_bytes, prot);
+      // doesn't seem to be required for openocd/RISCV at the microlevel, hence a no-op
     }
 
-    void Execute(TVMContext ctx, size_t offset) final {
+    void Execute(TVMContext ctx, void* offset) final {
       // TODO: need function signature at that addr
       uint8_t* real_addr = GetRealAddr(offset);
       void (*func)(void) = (void (*)(void)) real_addr;
@@ -53,7 +51,7 @@ class OpenOCDMicroDeviceAPI final : public MicroDeviceAPI {
 
 
     void Reset(TVMContext ctx) final {
-      // TODO: this seems required in openocd, not here maybe
+      // TODO: this seems required in openocd
     }
 
   private:
@@ -62,11 +60,11 @@ class OpenOCDMicroDeviceAPI final : public MicroDeviceAPI {
     // TODO: will the riscv device have a contiguous addr range?
     uint8_t* base_addr;
 
-    size_t GetOffset(uint8_t* real_addr) {
+    void* GetOffset(uint8_t* real_addr) {
       return real_addr - base_addr;
     }
 
-    uint8_t* GetRealAddr(size_t offset) {
+    uint8_t* GetRealAddr(void*  offset) {
       return base_addr + offset;
     }
 };
