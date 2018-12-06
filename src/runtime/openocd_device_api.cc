@@ -72,7 +72,7 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
 
   private:
   // TODO: make dynamic heap sizes
-  uint8_t* last_alloc_ = (uint8_t *) 40 * PAGE_SIZE;
+  uint8_t* last_alloc_ = (uint8_t *)(40 * PAGE_SIZE);
 };
 
 struct OpenOCDWorkspacePool : public WorkspacePool {

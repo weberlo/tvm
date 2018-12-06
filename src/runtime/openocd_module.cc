@@ -18,6 +18,7 @@
 #include "thread_storage_scope.h"
 #include "meta_data.h"
 #include "file_util.h"
+#include "module_util.h"
 
 #define PAGE_SIZE 4096
 
@@ -85,8 +86,9 @@ public:
    }
  }
 
- void Run(void* addr) {
-   md_->Execute(addr);
+ void Run(TVMContext ctx, void* addr) {
+   // TODO: what is the ctx in this case?
+   md_->Execute(ctx, addr);
  }
 
  void Init(const std::string& name) {
@@ -120,6 +122,8 @@ private:
   std::string binary_;
   // internal mutex when updating the module
   std::mutex mutex_;
+  // some context variable? TODO: how is this obtained?
+  TVMContext ctx_;
   // MicroDeviceAPI handle
   MicroDeviceAPI* md_;
 
@@ -131,8 +135,8 @@ private:
     } else {
       // Assumes cmd is in $PATH
       int ret = execvp(cmd.c_str(), args);
-      CHECK(false)
-        << "error in execvp " + cmd + " " + args + "\n";
+      CHECK(ret == 0)
+        << "error in execvp " + cmd + "\n";
     }
   }
 
@@ -148,9 +152,9 @@ private:
 
   void DumpSection(std::string binary, std::string section) {
     std::string cmd = "objcopy";
-    char *args[] = {cmd.c_str(), 
+    char *args[] = {(char *) cmd.c_str(), 
                     "--dump-section", 
-                    "." + section "=" + section + ".bin", 
+                    "." + section + "=" + section + ".bin", 
                     binary, 
                     NULL};
     ExecuteCommand(cmd, args);
@@ -164,12 +168,12 @@ private:
       return;
     }
     size_t size = f.tellg();
-    char* buf[size];
+    char buf[size];
     f.seekg(0, std::ios::beg);
     f.read(buf, size);
     f.close();
-    // TODO: what is the ctx here?
-    md_->WriteToMemory(ctx, addr, (int8_t *) buf, size);
+    // TODO: what is the ctx_ here?
+    md_->WriteToMemory(ctx_, addr, (uint8_t *) buf, size);
   }
 
   void FindSectionSize(std::string binary, std::string section) {
@@ -182,18 +186,18 @@ private:
                   void* data, 
                   void* bss) {
     std::string cmd = "ld";
-    char* text_addr[16];
-    char*  data_addr[16];
-    char*  bss_addr[16];
+    char text_addr[16];
+    char data_addr[16];
+    char bss_addr[16];
     sprintf(text_addr, "%p", text);
     sprintf(data_addr, "%p", data);
     sprintf(bss_addr, "%p", bss);
-    const char* args[] = {cmd.c_str(), 
-                    object.c_str(),
+    char* args[] = {(char *) cmd.c_str(), 
+                    (char *) object.c_str(),
                     "-Ttext", text_addr,
                     "-Tdata", data_addr,
                     "-Tbss", bss_addr,
-                    "-o", binary.c_str(), 
+                    "-o", (char *) binary.c_str(), 
                     NULL};
     ExecuteCommand(cmd, args);
   }
@@ -204,7 +208,7 @@ private:
     // TODO: function call arguments in callargs section of 10 pages
     // what to do with the name?
     size_t total_memory = 50 * PAGE_SIZE;
-    md_ = MicroDeviceAPI(total_memory);
+    md_ = new x86MicroDeviceAPI(total_memory);
     std::string binary = "";
     binary_ = binary;
     std::string object = "";
@@ -229,7 +233,7 @@ private:
   }
 
   void Unload() {
-    md_->Reset();
+    md_->Reset(ctx_);
   }
 };
 
@@ -246,7 +250,8 @@ public:
    m_ = m;
    sptr_ = sptr;
    func_name_ = func_name;
-   thread_axis_cfg_.Init(arg_size.size(), thread_axis_tags);
+   thread_axis_cfg_.Init(num_void_args, thread_axis_tags);
+   // TODO: initialize offset addr of function
  }
 
  // invoke the function with void arguments
@@ -255,10 +260,11 @@ public:
                  void** void_args) const {
    printf("Called Operator() of OpenOCDModuleNode\n");
    // TODO: Copy args to on-device section
+   // TODO: how to get  md_
    // what are void_args?
-   void* args_section = (void *) 30 * PAGE_SIZE;
-   md_->WriteToMemory(ctx, args_section, args, sizeof(args)); // need to write in binary, and somehow make a function that can read these args and execute
-   m_->Run();
+   void* args_section = (void *)(30 * PAGE_SIZE);
+   md_->WriteToMemory(ctx_, args_section, args, sizeof(args)); // need to write in binary, and somehow make a function that can read these args and execute
+   m_->Run(ctx_, addr);
  }
 
 private:
@@ -271,6 +277,9 @@ private:
  // Device function cache per device.
  // thread axis configuration
  ThreadAxisConfig thread_axis_cfg_;
+ // address of the function to be called
+ void* addr; 
+ TVMContext ctx_; // TODO: probably shouldn't be here
 };
 
 // TODO: complete this by wrapping around MicroDeviceAPIs function
@@ -290,7 +299,8 @@ PackedFunc OpenOCDModuleNode::GetFunction(
   }
   if (faddr == nullptr) return PackedFunc();
   OpenOCDWrappedFunc f;
-  f.Init(args);
+  // TODO: wrap f
+  // f.Init(args);
   return PackedFunc();
 }
 

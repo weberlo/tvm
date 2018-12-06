@@ -33,6 +33,7 @@ class MicroDeviceAPI {
   protected:
   // TODO: figure out endianness and mem alignment
   int endianness;
+  size_t size;
 };
   
 } // namespace runtime

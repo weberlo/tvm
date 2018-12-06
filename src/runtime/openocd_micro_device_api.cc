@@ -10,8 +10,8 @@ namespace tvm {
 namespace runtime {
 class OpenOCDMicroDeviceAPI final : public MicroDeviceAPI {
   public:
-    OpenOCDMicroDeviceAPI(size_t num_bytes) {
-      size = num_bytes;
+    OpenOCDMicroDeviceAPI(size_t num_bytes) 
+    : size(num_bytes) {
       size_in_pages = (num_bytes + PAGE_SIZE - 1) / PAGE_SIZE;
       int prot = PROT_READ | PROT_WRITE | PROT_EXEC;
       int flags = MAP_ANONYMOUS;
@@ -45,12 +45,11 @@ class OpenOCDMicroDeviceAPI final : public MicroDeviceAPI {
     void Execute(TVMContext ctx, void* offset) final {
       // TODO: need to maybe call init stub that calls the correct func
       // args need to be in binary/readable format in specific memory location
-      Reset();
+      Reset(ctx);
       uint8_t* real_addr = GetRealAddr(offset);
       void (*func)(void) = (void (*)(void)) real_addr;
       func();
     }
-
 
     void Reset(TVMContext ctx) final {
       // TODO: this seems required in openocd, send reset command to server

@@ -10,7 +10,8 @@ namespace tvm {
 namespace runtime {
 class x86MicroDeviceAPI final : public MicroDeviceAPI {
   public:
-    x86MicroDeviceAPI(size_t num_bytes) {
+    x86MicroDeviceAPI(size_t num_bytes) 
+      : size(num_bytes) {
       size = num_bytes;
       size_in_pages = (num_bytes + PAGE_SIZE - 1) / PAGE_SIZE;
       int prot = PROT_READ | PROT_WRITE | PROT_EXEC;
