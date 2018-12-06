@@ -38,38 +38,34 @@ class x86MicroDeviceAPI final : public MicroDeviceAPI {
                                 void* offset,
                                 int prot,
                                 size_t num_bytes) final {
-      // TODO: doesn't seem to be required for RISCV at the microlevel
-      // TODO: this only works at page granularity, so num_bytes must be appropriate
-      // TODO: in fact even x86 can just allocate all executable memory 
+      // needs to be page aligned
+      // we assume all memory is executable for now, so this isn't called
       uint8_t* real_addr = GetRealAddr(offset);
       mprotect(real_addr, num_bytes, prot);
     }
 
     void Execute(TVMContext ctx, void* offset) final {
-      // TODO: need function signature at that addr
+      // TODO: need to call init stub with this addr after copying args?
+      // args need to be in binary mode, readable for function
       uint8_t* real_addr = GetRealAddr(offset);
       void (*func)(void) = (void (*)(void)) real_addr;
       func();
     }
 
     void Reset(TVMContext ctx) final {
-      // TODO: this seems required in openocd, not here maybe
     }
 
   private:
     size_t size;
     size_t size_in_pages;
-    // TODO: will the riscv device have a contiguous addr range?
     uint8_t* base_addr;
 
-    // FIXME
     void* GetOffset(uint8_t* real_addr) {
-      return real_addr - base_addr;
+      return (void*) (real_addr - base_addr);
     }
 
-    // FIXME
     uint8_t* GetRealAddr(void* offset) {
-      return base_addr + offset;
+      return base_addr + reinterpret_cast<std::uintptr_t>(offset);
     }
 };
 

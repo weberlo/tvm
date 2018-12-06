@@ -32,10 +32,10 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
     // TODO: how to get microdevice object from OpenOCDModule for better allocation?
     // is alignment/type_hint necessary? how? with respect to what?
     printf("called allocdataspace\n");
-    CHECK (last_alloc_ + nbytes <= 50 * PAGE_SIZE)
+    CHECK (last_alloc_ + nbytes <= (uint8_t *)(50 * PAGE_SIZE))
       << "out of allocation space\n";
     void* ptr = last_alloc_;
-    last_alloc = last_alloc + nbytes;
+    last_alloc_ = last_alloc_ + nbytes;
     return ptr;
   }
 

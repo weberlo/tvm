@@ -3,7 +3,6 @@
  * \file tvm/runtime/micro_device_api.h
  * \brief Abstract micro device memory management API
  */
-// TODO: maybe name this micro_device_api?
 #ifndef TVM_RUNTIME_MICRO_DEVICE_API_H_
 #define TVM_RUNTIME_MICRO_DEVICE_API_H_
 

@@ -16,7 +16,7 @@ class OpenOCDMicroDeviceAPI final : public MicroDeviceAPI {
       int prot = PROT_READ | PROT_WRITE | PROT_EXEC;
       int flags = MAP_ANONYMOUS;
       base_addr = (uint8_t*) mmap(NULL, size, prot, flags, -1, 0);
-      // TODO: init socket connection to openocd server
+      // TODO: init socket connection to openocd server, and use that memory
     }
 
     void WriteToMemory(TVMContext ctx,
@@ -39,11 +39,13 @@ class OpenOCDMicroDeviceAPI final : public MicroDeviceAPI {
                                 void* offset,
                                 int prot,
                                 size_t num_bytes) final {
-      // doesn't seem to be required for openocd/RISCV at the microlevel, hence a no-op
+      // no-op because openocd doesn't do this
     }
 
     void Execute(TVMContext ctx, void* offset) final {
-      // TODO: need function signature at that addr
+      // TODO: need to maybe call init stub that calls the correct func
+      // args need to be in binary/readable format in specific memory location
+      Reset();
       uint8_t* real_addr = GetRealAddr(offset);
       void (*func)(void) = (void (*)(void)) real_addr;
       func();
@@ -51,7 +53,7 @@ class OpenOCDMicroDeviceAPI final : public MicroDeviceAPI {
 
 
     void Reset(TVMContext ctx) final {
-      // TODO: this seems required in openocd
+      // TODO: this seems required in openocd, send reset command to server
     }
 
   private:
@@ -61,11 +63,11 @@ class OpenOCDMicroDeviceAPI final : public MicroDeviceAPI {
     uint8_t* base_addr;
 
     void* GetOffset(uint8_t* real_addr) {
-      return real_addr - base_addr;
+      return (void *) (real_addr - base_addr);
     }
 
     uint8_t* GetRealAddr(void*  offset) {
-      return base_addr + offset;
+      return base_addr + reinterpret_cast<std::uintptr_t>(offset);
     }
 };
 

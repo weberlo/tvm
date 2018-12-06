@@ -10,6 +10,10 @@
 #include <mutex>
 #include <iostream>
 #include <fstream>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <stdio.h>
 #include "pack_args.h"
 #include "thread_storage_scope.h"
 #include "meta_data.h"
@@ -81,8 +85,8 @@ public:
    }
  }
 
- void Run(void* addr) final {
-   _md->Execute(addr);
+ void Run(void* addr) {
+   md_->Execute(addr);
  }
 
  void Init(const std::string& name) {
@@ -112,10 +116,12 @@ private:
   std::unordered_map<std::string, FunctionInfo> fmap_;
   // The module source
   std::string source_;
+  // The module binary 
+  std::string binary_;
   // internal mutex when updating the module
   std::mutex mutex_;
   // MicroDeviceAPI handle
-  MicroDeviceAPI md_;
+  MicroDeviceAPI* md_;
 
   void ExecuteCommand(std::string cmd, char* args[]) {
     // TODO: host OS specific code?
@@ -126,7 +132,7 @@ private:
       // Assumes cmd is in $PATH
       int ret = execvp(cmd.c_str(), args);
       CHECK(false)
-        << "error in execvp " + cmd.c_str() + " " + args + "\n";
+        << "error in execvp " + cmd + " " + args + "\n";
     }
   }
 
@@ -135,7 +141,7 @@ private:
     f = popen(cmd.c_str(), "r");
     if (f == NULL) {
       CHECK(false)
-        << "error in popen " + cmd.c_str() + "\n";
+        << "error in popen " + cmd + "\n";
     }
     return f;
   }
@@ -171,18 +177,18 @@ private:
   }
 
   void CustomLink(std::string object,
-                  string:: binary,
+                  std::string binary,
                   void* text, 
                   void* data, 
                   void* bss) {
     std::string cmd = "ld";
-    std::string text_addr;
-    std::string data_addr;
-    std::string bss_addr;
+    char* text_addr[16];
+    char*  data_addr[16];
+    char*  bss_addr[16];
     sprintf(text_addr, "%p", text);
-    sprintf(data_addr, "%p", text);
-    sprintf(bss_addr, "%p", text);
-    char *args[] = {cmd.c_str(), 
+    sprintf(data_addr, "%p", data);
+    sprintf(bss_addr, "%p", bss);
+    const char* args[] = {cmd.c_str(), 
                     object.c_str(),
                     "-Ttext", text_addr,
                     "-Tdata", data_addr,
@@ -194,22 +200,27 @@ private:
 
   // load the library
   void Load(const std::string& name) {
-    // TODO: static microdevice size of 30 pages, change to dynamic eventually
+    // TODO: static microdevice size of 50 pages, change to dynamic eventually
     // TODO: function call arguments in callargs section of 10 pages
-    md_ = MicroDeviceAPI(name.c_str(), 40 * PAGE_SIZE);
+    // what to do with the name?
+    size_t total_memory = 50 * PAGE_SIZE;
+    md_ = MicroDeviceAPI(total_memory);
+    std::string binary = "";
+    binary_ = binary;
+    std::string object = "";
     // 10 pages each of text, data and bss
     CustomLink(object, binary, (void*)0, (void*)(10 * PAGE_SIZE), (void*)(20 * PAGE_SIZE));
     DumpSection(binary, "text");
     DumpSection(binary, "data");
     DumpSection(binary, "bss");
     LoadSection("text", (void *) 0);
-    LoadSection("data", (void *)(20 * PAGE_SIZE));
+    LoadSection("data", (void *)(10 * PAGE_SIZE));
     LoadSection("bss", (void *)(20 * PAGE_SIZE));
   }
 
   void* GetSymbol(const char* name) {
     void* addr;
-    std::string cmd = "nm -C " + binary + " | grep -w " + name;
+    std::string cmd = "nm -C " + binary_ + " | grep -w " + name;
     FILE* f = ExecuteCommandWithOutput(cmd);
     if (!fscanf(f, "%p", &addr)) {
       addr = nullptr;
@@ -234,9 +245,7 @@ public:
    printf("Called Init of OpenOCDModuleNode\n");
    m_ = m;
    sptr_ = sptr;
-   entry_ = entry;
    func_name_ = func_name;
-   arg_size_ = arg_size;
    thread_axis_cfg_.Init(arg_size.size(), thread_axis_tags);
  }
 
@@ -247,7 +256,7 @@ public:
    printf("Called Operator() of OpenOCDModuleNode\n");
    // TODO: Copy args to on-device section
    // what are void_args?
-   void* args_section = 30 * PAGE_SIZE;
+   void* args_section = (void *) 30 * PAGE_SIZE;
    md_->WriteToMemory(ctx, args_section, args, sizeof(args)); // need to write in binary, and somehow make a function that can read these args and execute
    m_->Run();
  }
