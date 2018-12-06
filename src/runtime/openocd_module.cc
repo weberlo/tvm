@@ -81,6 +81,28 @@ public:
    }
  }
 
+ void Run(void* addr) final {
+   _md->Execute(addr);
+ }
+
+ void Init(const std::string& name) {
+   Load(name);
+   if (auto *ctx_addr =
+       reinterpret_cast<void**>(GetSymbol(runtime::symbol::tvm_module_ctx))) {
+     *ctx_addr = this;
+   }
+   InitContextFunctions([this](const char* fname) {
+       return GetSymbol(fname);
+     });
+   // Load the imported modules
+   const char* dev_mblob =
+       reinterpret_cast<const char*>(
+           GetSymbol(runtime::symbol::tvm_dev_mblob));
+   if (dev_mblob != nullptr) {
+     ImportModuleBlob(dev_mblob, &imports_);
+   }
+ }
+
 private:
   // the binary data
   std::string data_;
@@ -173,7 +195,8 @@ private:
   // load the library
   void Load(const std::string& name) {
     // TODO: static microdevice size of 30 pages, change to dynamic eventually
-    md_ = MicroDeviceAPI(name.c_str(), 30 * PAGE_SIZE);
+    // TODO: function call arguments in callargs section of 10 pages
+    md_ = MicroDeviceAPI(name.c_str(), 40 * PAGE_SIZE);
     // 10 pages each of text, data and bss
     CustomLink(object, binary, (void*)0, (void*)(10 * PAGE_SIZE), (void*)(20 * PAGE_SIZE));
     DumpSection(binary, "text");
@@ -188,7 +211,9 @@ private:
     void* addr;
     std::string cmd = "nm -C " + binary + " | grep -w " + name;
     FILE* f = ExecuteCommandWithOutput(cmd);
-    fscanf(f, "%p", &addr);
+    if (!fscanf(f, "%p", &addr)) {
+      addr = nullptr;
+    }
     return addr;
   }
 
@@ -221,8 +246,10 @@ public:
                  void** void_args) const {
    printf("Called Operator() of OpenOCDModuleNode\n");
    // TODO: Copy args to on-device section
-   // TODO: Call OpenOCDMicroDeviceAPI->Run()
-   m->Run();
+   // what are void_args?
+   void* args_section = 30 * PAGE_SIZE;
+   md_->WriteToMemory(ctx, args_section, args, sizeof(args)); // need to write in binary, and somehow make a function that can read these args and execute
+   m_->Run();
  }
 
 private:

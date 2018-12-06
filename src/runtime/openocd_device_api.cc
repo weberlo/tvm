@@ -95,6 +95,9 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
                        size_t nbytes,
                        size_t alignment,
                        TVMType type_hint) final {
+    // TODO: where do these dynamic allocations go? we need a "heap" section.
+    // TODO: what are they used for?
+    printf("called allocdataspace\n");
     void* ptr;
     // TODO: check VTA, maybe make it similar?
     md_->WriteToMemory();
@@ -133,7 +136,6 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
   private:
 };
 
-// TODO: OpenOCDWorkspacePool?
 struct OpenOCDWorkspacePool : public WorkspacePool {
   OpenOCDWorkspacePool() :
     // TODO: kDLOpenOCD or kDLExtDev? was originally kDLCPU
