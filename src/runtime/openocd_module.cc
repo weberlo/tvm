@@ -152,10 +152,10 @@ private:
 
   void DumpSection(std::string binary, std::string section) {
     std::string cmd = "objcopy";
-    char *args[] = {(char *) cmd.c_str(), 
+    char* args[] = {(char *) cmd.c_str(), 
                     "--dump-section", 
-                    "." + section + "=" + section + ".bin", 
-                    binary, 
+                    (char *)("." + section + "=" + section + ".bin").c_str(), 
+                    (char *) binary.c_str(), 
                     NULL};
     ExecuteCommand(cmd, args);
   }
@@ -208,7 +208,10 @@ private:
     // TODO: function call arguments in callargs section of 10 pages
     // what to do with the name?
     size_t total_memory = 50 * PAGE_SIZE;
-    md_ = new x86MicroDeviceAPI(total_memory);
+    // TODO: make this some sort of an optional flag: x86 or openocd
+    // maybe global ptr like with DeviceAPI?
+    md_ = new MicroDeviceAPI();
+    // TODO: where to get these binary and object from?
     std::string binary = "";
     binary_ = binary;
     std::string object = "";
@@ -263,7 +266,7 @@ public:
    // TODO: how to get  md_
    // what are void_args?
    void* args_section = (void *)(30 * PAGE_SIZE);
-   md_->WriteToMemory(ctx_, args_section, args, sizeof(args)); // need to write in binary, and somehow make a function that can read these args and execute
+   //md_->WriteToMemory(ctx_, args_section, args, sizeof(args)); // need to write in binary, and somehow make a function that can read these args and execute
    m_->Run(ctx_, addr);
  }
 
