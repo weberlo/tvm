@@ -27,7 +27,7 @@ class MicroDeviceAPI {
 
   virtual void ChangeMemoryProtection(TVMContext ctx, void* offset, int prot, size_t num_bytes);
 
-  virtual void Execute(TVMContext ctx, void* offset);
+  virtual void Execute(TVMContext ctx, TVMArgs args, TVMRetValue *rv, void* offset);
 
   virtual void Reset(TVMContext ctx);
 

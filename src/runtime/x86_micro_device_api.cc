@@ -5,6 +5,7 @@
  */
 #include <tvm/runtime/micro_device_api.h>
 #include <sys/mman.h>
+#include <dmlc/memory_io.h>
 #include <mutex>
 
 namespace tvm {
@@ -18,6 +19,8 @@ class x86MicroDeviceAPI final : public MicroDeviceAPI {
       int prot = PROT_READ | PROT_WRITE | PROT_EXEC;
       int flags = MAP_ANONYMOUS;
       base_addr = (uint8_t*) mmap(NULL, size, prot, flags, -1, 0);
+      //int buf_size = 10 * PAGE_SIZE;
+      stream = new dmlc::MemoryStringStream(&args_buf);
     }
 
     ~x86MicroDeviceAPI() {
@@ -50,9 +53,12 @@ class x86MicroDeviceAPI final : public MicroDeviceAPI {
       mprotect(real_addr, num_bytes, prot);
     }
 
-    void Execute(TVMContext ctx, void* offset) final {
+    void Execute(TVMContext ctx, TVMArgs args, TVMRetValue *rv, void* offset) final {
       // TODO: need to call init stub with this addr after copying args?
       // args need to be in binary mode, readable for function
+      // TODO: use MemoryIO or Stream from dmlc_core to write args in binary
+      //CopyArgs(args, rv);
+      void* args_section = (void *)(30 * PAGE_SIZE);
       uint8_t* real_addr = GetRealAddr(offset);
       void (*func)(void) = (void (*)(void)) real_addr;
       func();
@@ -69,6 +75,8 @@ class x86MicroDeviceAPI final : public MicroDeviceAPI {
     size_t size;
     size_t size_in_pages;
     uint8_t* base_addr;
+    dmlc::MemoryStringStream* stream;
+    std::string args_buf;
 
     void* GetOffset(uint8_t* real_addr) {
       return (void*) (real_addr - base_addr);

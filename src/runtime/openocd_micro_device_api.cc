@@ -42,7 +42,7 @@ class OpenOCDMicroDeviceAPI final : public MicroDeviceAPI {
       // no-op because openocd doesn't do this
     }
 
-    void Execute(TVMContext ctx, void* offset) final {
+    void Execute(TVMContext ctx, TVMArgs args, TVMRetValue *rv, void* offset) final {
       // TODO: need to maybe call init stub that calls the correct func
       // args need to be in binary/readable format in specific memory location
       Reset(ctx);

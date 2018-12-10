@@ -4,6 +4,7 @@
 */
 #include <tvm/runtime/registry.h>
 #include <tvm/runtime/micro_device_api.h>
+#include <dmlc/memory_io.h>
 #include <vector>
 #include <array>
 #include <string>
@@ -15,7 +16,6 @@
 #include <sys/wait.h>
 #include <stdio.h>
 #include "pack_args.h"
-#include "thread_storage_scope.h"
 #include "meta_data.h"
 #include "file_util.h"
 #include "module_util.h"
@@ -50,7 +50,6 @@ public:
 
  void SaveToFile(const std::string& file_name,
                  const std::string& format) final {
-   // TODO: Do we need this? I think no.
    printf("Called SaveToFile of OpenOCDModuleNode\n");
    std::string fmt = GetFileFormat(file_name, format);
    std::string meta_file = GetMetaFilePath(file_name);
@@ -67,7 +66,6 @@ public:
  }
 
  void SaveToBinary(dmlc::Stream* stream) final {
-   // TODO: Do we need this? I think no.
    printf("Called SaveToBinary of OpenOCDModuleNode\n");
    stream->Write(fmt_);
    stream->Write(fmap_);
@@ -75,7 +73,6 @@ public:
  }
 
  std::string GetSource(const std::string& format) final {
-   // TODO: Do we need this? I think no.
    printf("Called GetSource of OpenOCDModuleNode\n");
    if (format == fmt_) return data_;
    if (source_.length() != 0) {
@@ -85,9 +82,8 @@ public:
    }
  }
 
- void Run(TVMContext ctx, void* addr) {
-   // TODO: what is the ctx in this case?
-   md_->Execute(ctx, addr);
+ void Run(TVMContext ctx, TVMArgs args, TVMRetValue *rv, void* addr) {
+   md_->Execute(ctx, args, rv, addr);
  }
 
  void Init(const std::string& name) {
@@ -121,18 +117,18 @@ private:
   std::string binary_;
   // internal mutex when updating the module
   std::mutex mutex_;
-  // some context variable? TODO: how is this obtained?
+  // some context variable - unneeded for now
   TVMContext ctx_;
   // MicroDeviceAPI handle
   std::shared_ptr<MicroDeviceAPI> md_;
 
-  // TODO: is this the API we want? what is distinguishing factor btwn x86 / OpenOCD here?
+  // TODO: API okay? what is distinguishing factor btwn x86 / OpenOCD here?
   std::shared_ptr<MicroDeviceAPI> MicroDeviceConnect(size_t num_bytes) {
     return MicroDeviceAPI::Create(num_bytes);
   }
 
   void ExecuteCommand(std::string cmd, char* args[]) {
-    // TODO: host OS specific code?
+    // TODO: this is linux specific code, make windows compatible eventually
     int pid = fork();
     if (pid) {
       wait(0);
@@ -176,7 +172,6 @@ private:
     f.seekg(0, std::ios::beg);
     f.read(buf, size);
     f.close();
-    // TODO: what is the ctx_ here?
     md_->WriteToMemory(ctx_, addr, (uint8_t *) buf, size);
   }
 
@@ -210,12 +205,11 @@ private:
   void Load(const std::string& name) {
     // TODO: static microdevice size of 50 pages, change to dynamic eventually
     // TODO: function call arguments in callargs section of 10 pages
-    // what to do with the name?
+    // what to do with the name? that should be the object right
     size_t total_memory = 50 * PAGE_SIZE;
     md_ = MicroDeviceConnect(total_memory);
-    // TODO: make this some sort of an optional flag:  or openocd
     // maybe global ptr like with DeviceAPI?
-    // TODO: where to get these binary and object from?
+    // TODO: where to get these binary and object file/names from?
     std::string binary = "";
     binary_ = binary;
     std::string object = "";
@@ -251,13 +245,11 @@ public:
  void Init(OpenOCDModuleNode* m,
            std::shared_ptr<ModuleNode> sptr,
            const std::string& func_name,
-           size_t num_void_args,
-           const std::vector<std::string>& thread_axis_tags) {
+           size_t num_void_args) {
    printf("Called Init of OpenOCDModuleNode\n");
    m_ = m;
    sptr_ = sptr;
    func_name_ = func_name;
-   thread_axis_cfg_.Init(num_void_args, thread_axis_tags);
    // TODO: initialize offset addr of function
  }
 
@@ -266,13 +258,7 @@ public:
                  TVMRetValue* rv,
                  void** void_args) const {
    printf("Called Operator() of OpenOCDModuleNode\n");
-   // TODO: Copy args to on-device section
-   // TODO: how to get  md_
-   // what are void_args?
-   void* args_section = (void *)(30 * PAGE_SIZE);
-   //md_->WriteToMemory(ctx_, args_section, args, sizeof(args)); // need to write in binary, and somehow make a function that can read these args and execute
-   // TODO: use MemoryIO or Stream from dmlc_core
-   m_->Run(ctx_, addr);
+   m_->Run(ctx_, args, rv, addr);
  }
 
 private:
@@ -282,12 +268,10 @@ private:
  std::shared_ptr<ModuleNode> sptr_;
  // The name of the function.
  std::string func_name_;
- // Device function cache per device.
- // thread axis configuration
- ThreadAxisConfig thread_axis_cfg_;
  // address of the function to be called
  void* addr; 
- TVMContext ctx_; // TODO: probably shouldn't be here
+ // dummy context variable, unneeded for OpenOCD
+ TVMContext ctx_; 
 };
 
 // TODO: complete this by wrapping around MicroDeviceAPIs function
@@ -326,7 +310,6 @@ Module OpenOCDModuleCreate(
 // Load module from module.
 Module OpenOCDModuleLoadFile(const std::string& file_name,
                          const std::string& format) {
-   // TODO: Do we need this? I think no.
   printf("Called OpenOCDModuleLoadFile of OpenOCDModuleNode\n");
   std::string data;
   std::unordered_map<std::string, FunctionInfo> fmap;
@@ -338,7 +321,6 @@ Module OpenOCDModuleLoadFile(const std::string& file_name,
 }
 
 Module OpenOCDModuleLoadBinary(void* strm) {
-   // TODO: Do we need this? I think no.
   printf("Called OpenOCDModuleLoadBinary of OpenOCDModuleNode\n");
   dmlc::Stream* stream = static_cast<dmlc::Stream*>(strm);
   std::string data;
@@ -350,6 +332,7 @@ Module OpenOCDModuleLoadBinary(void* strm) {
   return OpenOCDModuleCreate(data, fmt, fmap, std::string());
 }
 
+// re-examine
 TVM_REGISTER_GLOBAL("module.loadfile_openocd")
 .set_body([](TVMArgs args, TVMRetValue* rv) {
    *rv = OpenOCDModuleLoadFile(args[0], args[1]);
