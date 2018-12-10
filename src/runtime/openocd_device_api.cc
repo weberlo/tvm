@@ -30,9 +30,11 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
                        TVMType type_hint) final {
     // emulates silly heap section by incrementing last_alloc_ pointer
     // TODO: how to get microdevice object from OpenOCDModule for better allocation?
+    // TODO: have to get microdevice for each call. Could store it but maybe multiple use?
     // is alignment/type_hint necessary? how? with respect to what?
     // make better allocator with frees, for now it's fine
     printf("called allocdataspace\n");
+    std::shared_ptr<MicroDeviceAPI> md_ = GetMicroDev(ctx);
     CHECK (last_alloc_ + nbytes <= (uint8_t *)(50 * PAGE_SIZE))
       << "out of allocation space\n";
     void* ptr = last_alloc_;
@@ -55,18 +57,22 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
                       TVMStreamHandle stream) final {
     // TODO: use proper microdevice
     printf("called copydatafromto\n");
-    char buffer[size];
+    uint8_t buffer[size];
     if (ctx_from.device_type == kDLExtDev && ctx_to.device_type == kDLExtDev) {
-      ReadFromMemory(ctx_from, static_cast<char*>(from) + from_offset, buffer, size);
-      WriteToMemory(ctx_to, static_cast<char*>(to) + to_offset, buffer, size);
+      std::shared_ptr<MicroDeviceAPI> from_md = GetMicroDev(ctx_from);
+      std::shared_ptr<MicroDeviceAPI> to_md = GetMicroDev(ctx_to); // these currently can't be different
+      from_md->ReadFromMemory(ctx_from, (char*)(from) + from_offset, buffer, size);
+      to_md->WriteToMemory(ctx_to, (char*)(to) + to_offset, buffer, size);
     } else if (ctx_from.device_type == kDLExtDev && ctx_to.device_type == kDLCPU) {
-      ReadFromMemory(ctx_from, static_cast<char*>(from) + from_offset, 
+      std::shared_ptr<MicroDeviceAPI> from_md = GetMicroDev(ctx_from);
+      from_md->ReadFromMemory(ctx_from, (char*)(from) + from_offset, 
                      buffer, size);
       memcpy(static_cast<char*>(to) + to_offset, buffer, size);
 
     } else if (ctx_from.device_type  == kDLCPU && ctx_to.device_type == kDLExtDev) {
-      WriteToMemory(ctx_to, static_cast<char*>(to) + to_offset, 
-                    static_cast<char*>(from) + from_offset, size);
+      std::shared_ptr<MicroDeviceAPI> to_md = GetMicroDev(ctx_to);
+      to_md->WriteToMemory(ctx_to, (char*)(to) + to_offset, 
+                    (uint8_t*)(from) + from_offset, size);
     } else {
       LOG(FATAL) << "expect copy from/to OpenOCD or between OpenOCD\n";
     }
@@ -88,11 +94,18 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
   private:
   // TODO: make dynamic heap sizes
   uint8_t* last_alloc_ = (uint8_t *)(40 * PAGE_SIZE);
+
+  std::shared_ptr<MicroDeviceAPI> GetMicroDev(TVMContext ctx) {
+    int dev_type = ctx.device_type;
+    CHECK_EQ(dev_type, kDLExtDev); // TODO: proper device tag
+    int tbl_index = 1; // TODO: find correct table index
+    return MicroDeviceAPI::Get(tbl_index);
+  }
 };
 
 struct OpenOCDWorkspacePool : public WorkspacePool {
   OpenOCDWorkspacePool() :
-    // TODO: kDLOpenOCD or kDLExtDev? was originally kDLCPU
+    // TODO: kDLOpenOCD or kDLExtDev?
     WorkspacePool(kDLExtDev, OpenOCDDeviceAPI::Global()) {}
 };
 

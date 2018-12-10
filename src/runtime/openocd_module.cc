@@ -32,7 +32,6 @@ public:
                          std::string source)
      : data_(data), fmt_(fmt), fmap_(fmap), source_(source) {
   printf("Called constructor of OpenOCDModuleNode\n");
-  // TODO: nothing here, right?
  }
 
  // destructor
@@ -125,7 +124,12 @@ private:
   // some context variable? TODO: how is this obtained?
   TVMContext ctx_;
   // MicroDeviceAPI handle
-  MicroDeviceAPI* md_;
+  std::shared_ptr<MicroDeviceAPI> md_;
+
+  // TODO: is this the API we want? what is distinguishing factor
+  std::shared_ptr<MicroDeviceAPI> MicroDeviceConnect(size_t num_bytes) {
+    return MicroDeviceAPI::Create(num_bytes);
+  }
 
   void ExecuteCommand(std::string cmd, char* args[]) {
     // TODO: host OS specific code?
@@ -208,9 +212,9 @@ private:
     // TODO: function call arguments in callargs section of 10 pages
     // what to do with the name?
     size_t total_memory = 50 * PAGE_SIZE;
-    // TODO: make this some sort of an optional flag: x86 or openocd
+    md_ = MicroDeviceConnect(total_memory);
+    // TODO: make this some sort of an optional flag:  or openocd
     // maybe global ptr like with DeviceAPI?
-    md_ = new MicroDeviceAPI();
     // TODO: where to get these binary and object from?
     std::string binary = "";
     binary_ = binary;

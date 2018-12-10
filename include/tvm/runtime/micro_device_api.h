@@ -30,6 +30,10 @@ class MicroDeviceAPI {
 
   virtual void Reset(TVMContext ctx);
 
+  static std::shared_ptr<MicroDeviceAPI> Get(int table_index);
+
+  static std::shared_ptr<MicroDeviceAPI> Create(size_t num_bytes);
+
   protected:
   // TODO: figure out endianness and mem alignment
   int endianness;
