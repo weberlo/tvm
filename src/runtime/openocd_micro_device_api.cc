@@ -1,7 +1,7 @@
 /*!
  *  Copyright (c) 2018 by Contributors
- * \file x86_micro_device_api.cc
- * \brief x86-emulated micro device API
+ * \file openocd_micro_device_api.cc
+ * \brief OpenOCD micro device API
  */
 #include <tvm/runtime/micro_device_api.h>
 #include <sys/mman.h>
@@ -55,6 +55,10 @@ class OpenOCDMicroDeviceAPI final : public MicroDeviceAPI {
       // TODO: this seems required in openocd, send reset command to server
     }
 
+    static std::shared_ptr<MicroDeviceAPI> Create(size_t num_bytes);
+
+    static std::shared_ptr<MicroDeviceAPI> Get(int table_index);
+
   private:
     size_t size;
     size_t size_in_pages;
@@ -69,6 +73,18 @@ class OpenOCDMicroDeviceAPI final : public MicroDeviceAPI {
       return base_addr + reinterpret_cast<std::uintptr_t>(offset);
     }
 };
+
+
+std::shared_ptr<MicroDeviceAPI> OpenOCDMicroDeviceAPI::Create(size_t num_bytes) {
+  std::shared_ptr<OpenOCDMicroDeviceAPI> micro_dev = 
+    std::make_shared<OpenOCDMicroDeviceAPI>(num_bytes);
+  micro_dev->table_index_ = MicroDevTable::Global()->Insert(micro_dev);
+  return micro_dev;
+}
+
+std::shared_ptr<MicroDeviceAPI> OpenOCDMicroDeviceAPI::Get(int table_index) {
+  return MicroDevTable::Global()->Get(table_index);
+}
 
 } // namespace runtime
 } // namespace tvm

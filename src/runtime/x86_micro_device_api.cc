@@ -69,7 +69,6 @@ class x86MicroDeviceAPI final : public MicroDeviceAPI {
     size_t size;
     size_t size_in_pages;
     uint8_t* base_addr;
-    int table_index_{0};
 
     void* GetOffset(uint8_t* real_addr) {
       return (void*) (real_addr - base_addr);
@@ -82,40 +81,6 @@ class x86MicroDeviceAPI final : public MicroDeviceAPI {
     void Shutdown() {
       munmap(base_addr, size);
     }
-};
-
-struct MicroDevTable {
- public:
-  static constexpr int kMaxMicroDevion = 1;
-  // Get global singleton
-  static MicroDevTable* Global() {
-    static MicroDevTable inst;
-    return &inst;
-  }
-  // Get session from table
-  // TODO: does this have to be a shared_ptr? reference should work I think
-  std::shared_ptr<x86MicroDeviceAPI> Get(int index) {
-    CHECK(index >= 0 && index < kMaxMicroDevion);
-    return tbl_[index].lock();
-  }
-  // Insert session into table.
-  int Insert(std::shared_ptr<x86MicroDeviceAPI> ptr) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    for (int i = 0; i < kMaxMicroDevion; ++i) {
-      if (tbl_[i].lock() == nullptr) {
-        tbl_[i] = ptr; return i;
-      }
-    }
-    LOG(FATAL) << "maximum number of micro session reached";
-    return 0;
-  }
-
- private:
-  // The mutex
-  std::mutex mutex_;
-  // Use weak_ptr intentionally
-  // If the RPCDevion get released, the pointer session will be released
-  std::array<std::weak_ptr<x86MicroDeviceAPI>, kMaxMicroDevion> tbl_;
 };
 
 std::shared_ptr<MicroDeviceAPI> x86MicroDeviceAPI::Create(size_t num_bytes) {

@@ -126,7 +126,7 @@ private:
   // MicroDeviceAPI handle
   std::shared_ptr<MicroDeviceAPI> md_;
 
-  // TODO: is this the API we want? what is distinguishing factor
+  // TODO: is this the API we want? what is distinguishing factor btwn x86 / OpenOCD here?
   std::shared_ptr<MicroDeviceAPI> MicroDeviceConnect(size_t num_bytes) {
     return MicroDeviceAPI::Create(num_bytes);
   }
@@ -271,6 +271,7 @@ public:
    // what are void_args?
    void* args_section = (void *)(30 * PAGE_SIZE);
    //md_->WriteToMemory(ctx_, args_section, args, sizeof(args)); // need to write in binary, and somehow make a function that can read these args and execute
+   // TODO: use MemoryIO or Stream from dmlc_core
    m_->Run(ctx_, addr);
  }
 
