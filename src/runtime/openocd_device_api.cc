@@ -31,6 +31,7 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
     // emulates silly heap section by incrementing last_alloc_ pointer
     // TODO: how to get microdevice object from OpenOCDModule for better allocation?
     // is alignment/type_hint necessary? how? with respect to what?
+    // make better allocator with frees, for now it's fine
     printf("called allocdataspace\n");
     CHECK (last_alloc_ + nbytes <= (uint8_t *)(50 * PAGE_SIZE))
       << "out of allocation space\n";
@@ -40,7 +41,6 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
   }
 
   void FreeDataSpace(TVMContext ctx, void* ptr) final {
-    // TODO: make a better allocator to deal with frees, for now it should be ok
     printf("called freedataspace\n");
   }
 
@@ -53,8 +53,23 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
                       TVMContext ctx_to,
                       TVMType type_hint,
                       TVMStreamHandle stream) final {
-    // TODO: how exactly does this work? cpu_device_api just does memcpy, but what f it had to copy to the riscv board? are contexts single device only?
+    // TODO: use proper microdevice
     printf("called copydatafromto\n");
+    char buffer[size];
+    if (ctx_from.device_type == kDLExtDev && ctx_to.device_type == kDLExtDev) {
+      ReadFromMemory(ctx_from, static_cast<char*>(from) + from_offset, buffer, size);
+      WriteToMemory(ctx_to, static_cast<char*>(to) + to_offset, buffer, size);
+    } else if (ctx_from.device_type == kDLExtDev && ctx_to.device_type == kDLCPU) {
+      ReadFromMemory(ctx_from, static_cast<char*>(from) + from_offset, 
+                     buffer, size);
+      memcpy(static_cast<char*>(to) + to_offset, buffer, size);
+
+    } else if (ctx_from.device_type  == kDLCPU && ctx_to.device_type == kDLExtDev) {
+      WriteToMemory(ctx_to, static_cast<char*>(to) + to_offset, 
+                    static_cast<char*>(from) + from_offset, size);
+    } else {
+      LOG(FATAL) << "expect copy from/to OpenOCD or between OpenOCD\n";
+    }
   }
 
   void StreamSync(TVMContext ctx, TVMStreamHandle stream) final {
