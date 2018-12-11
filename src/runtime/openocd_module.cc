@@ -203,18 +203,16 @@ private:
 
   // load the library
   void Load(const std::string& name) {
-    // TODO: static microdevice size of 50 pages, change to dynamic eventually
-    // TODO: function call arguments in callargs section of 10 pages
-    // what to do with the name? that should be the object right
+    // static microdevice size of 50 pages, change to dynamic eventually
+    // function call arguments in callargs section of 10 pages
     size_t total_memory = 50 * PAGE_SIZE;
     md_ = MicroDeviceConnect(total_memory);
     // maybe global ptr like with DeviceAPI?
-    // TODO: where to get these binary and object file/names from?
-    std::string binary = "";
+    // TODO: check if name / binary are correctly used
+    std::string binary = name + ".bin";
     binary_ = binary;
-    std::string object = "";
     // 10 pages each of text, data and bss
-    CustomLink(object, binary, (void*)0, (void*)(10 * PAGE_SIZE), (void*)(20 * PAGE_SIZE));
+    CustomLink(name, binary, (void*)0, (void*)(10 * PAGE_SIZE), (void*)(20 * PAGE_SIZE));
     DumpSection(binary, "text");
     DumpSection(binary, "data");
     DumpSection(binary, "bss");
@@ -245,12 +243,12 @@ public:
  void Init(OpenOCDModuleNode* m,
            std::shared_ptr<ModuleNode> sptr,
            const std::string& func_name,
-           size_t num_void_args) {
+           void* func_addr) {
    printf("Called Init of OpenOCDModuleNode\n");
    m_ = m;
    sptr_ = sptr;
    func_name_ = func_name;
-   // TODO: initialize offset addr of function
+   func_addr_ = func_addr;
  }
 
  // invoke the function with void arguments
@@ -258,7 +256,7 @@ public:
                  TVMRetValue* rv,
                  void** void_args) const {
    printf("Called Operator() of OpenOCDModuleNode\n");
-   m_->Run(ctx_, args, rv, addr);
+   m_->Run(ctx_, args, rv, func_addr_);
  }
 
 private:
@@ -269,12 +267,11 @@ private:
  // The name of the function.
  std::string func_name_;
  // address of the function to be called
- void* addr; 
+ void* func_addr_; 
  // dummy context variable, unneeded for OpenOCD
  TVMContext ctx_; 
 };
 
-// TODO: complete this by wrapping around MicroDeviceAPIs function
 PackedFunc OpenOCDModuleNode::GetFunction(
      const std::string& name,
      const std::shared_ptr<ModuleNode>& sptr_to_self) {
@@ -291,9 +288,9 @@ PackedFunc OpenOCDModuleNode::GetFunction(
   }
   if (faddr == nullptr) return PackedFunc();
   OpenOCDWrappedFunc f;
-  // TODO: wrap f
-  // f.Init(args);
-  return PackedFunc();
+  // TODO: wrap f -- is this correct?
+  f.Init(this, sptr_to_self, name, (void*) faddr);
+  return PackFuncVoidAddr(f, std::vector<TVMType>());
 }
 
 Module OpenOCDModuleCreate(
@@ -332,7 +329,7 @@ Module OpenOCDModuleLoadBinary(void* strm) {
   return OpenOCDModuleCreate(data, fmt, fmap, std::string());
 }
 
-// re-examine
+// re-examine, given they are unnecessary?
 TVM_REGISTER_GLOBAL("module.loadfile_openocd")
 .set_body([](TVMArgs args, TVMRetValue* rv) {
    *rv = OpenOCDModuleLoadFile(args[0], args[1]);

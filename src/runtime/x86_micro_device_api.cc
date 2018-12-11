@@ -53,13 +53,22 @@ class x86MicroDeviceAPI final : public MicroDeviceAPI {
       mprotect(real_addr, num_bytes, prot);
     }
 
+    /* Description of the args section
+     * 
+     * it will have void* args_location
+     */
+
     void Execute(TVMContext ctx, TVMArgs args, TVMRetValue *rv, void* offset) final {
       // TODO: need to call init stub with this addr after copying args?
-      // args need to be in binary mode, readable for function
+      // how will init stub know which function to call?
       // TODO: use MemoryIO or Stream from dmlc_core to write args in binary
-      //CopyArgs(args, rv);
+      // TODO: should args section choice be at the micro level?
+      // CopyArgs(args, rv);
+      stream->Write((void*) &args, (size_t) 10 * PAGE_SIZE); // find correct/exact size
       void* args_section = (void *)(30 * PAGE_SIZE);
+      WriteToMemory(ctx, args_section, (uint8_t*) &args_buf[0], (size_t) 10 * PAGE_SIZE);
       uint8_t* real_addr = GetRealAddr(offset);
+      // This should be the function signature if it's to know where things are
       void (*func)(void) = (void (*)(void)) real_addr;
       func();
     }
@@ -75,6 +84,7 @@ class x86MicroDeviceAPI final : public MicroDeviceAPI {
     size_t size;
     size_t size_in_pages;
     uint8_t* base_addr;
+    uint8_t* args_section;
     dmlc::MemoryStringStream* stream;
     std::string args_buf;
 

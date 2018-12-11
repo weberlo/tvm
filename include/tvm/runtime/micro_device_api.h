@@ -20,7 +20,7 @@ class MicroDeviceAPI {
   /*! \brief virtual destructor */
   virtual ~MicroDeviceAPI() {}
 
-  // TODO: Do I need the TVMContext? What to do with it?
+  // ignore TVMContext for now, it's not useful
   virtual void WriteToMemory(TVMContext ctx, void* offset, uint8_t* buf, size_t num_bytes);
 
   virtual void ReadFromMemory(TVMContext ctx, void* offset, uint8_t* buf, size_t num_bytes);
@@ -51,7 +51,6 @@ struct MicroDevTable {
     return &inst;
   }
   // Get session from table
-  // TODO: does this have to be a shared_ptr? reference should work I think
   std::shared_ptr<MicroDeviceAPI> Get(int index) {
     CHECK(index >= 0 && index < kMaxMicroDevion);
     return tbl_[index].lock();
