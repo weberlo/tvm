@@ -3,7 +3,8 @@
 * \file openocd_module.cc
 */
 #include <tvm/runtime/registry.h>
-#include <tvm/runtime/micro_device_api.h>
+#include "x86_micro_device_api.h"
+#include <tvm/runtime/module.h>
 #include <dmlc/memory_io.h>
 #include <vector>
 #include <array>
@@ -24,15 +25,16 @@
 
 namespace tvm {
 namespace runtime {
-class OpenOCDModuleNode : public runtime::ModuleNode {
+class OpenOCDModuleNode final : public ModuleNode {
 public:
+  /*
  explicit OpenOCDModuleNode(std::string data,
                          std::string fmt,
                          std::unordered_map<std::string, FunctionInfo> fmap,
                          std::string source)
      : data_(data), fmt_(fmt), fmap_(fmap), source_(source) {
   printf("Called constructor of OpenOCDModuleNode\n");
- }
+ }*/
 
  // destructor
  ~OpenOCDModuleNode() {
@@ -83,25 +85,12 @@ public:
  }
 
  void Run(TVMContext ctx, TVMArgs args, TVMRetValue *rv, void* addr) {
+   printf("Calling run openocd_module\n");
    md_->Execute(ctx, args, rv, addr);
  }
 
  void Init(const std::string& name) {
    Load(name);
-   if (auto *ctx_addr =
-       reinterpret_cast<void**>(GetSymbol(runtime::symbol::tvm_module_ctx))) {
-     *ctx_addr = this;
-   }
-   InitContextFunctions([this](const char* fname) {
-       return GetSymbol(fname);
-     });
-   // Load the imported modules
-   const char* dev_mblob =
-       reinterpret_cast<const char*>(
-           GetSymbol(runtime::symbol::tvm_dev_mblob));
-   if (dev_mblob != nullptr) {
-     ImportModuleBlob(dev_mblob, &imports_);
-   }
  }
 
 private:
@@ -119,12 +108,15 @@ private:
   std::mutex mutex_;
   // some context variable - unneeded for now
   TVMContext ctx_;
-  // MicroDeviceAPI handle
-  std::shared_ptr<MicroDeviceAPI> md_;
+  // x86MicroDeviceAPI handle
+  std::shared_ptr<x86MicroDeviceAPI> md_;
 
-  // TODO: API okay? what is distinguishing factor btwn x86 / OpenOCD here?
-  std::shared_ptr<MicroDeviceAPI> MicroDeviceConnect(size_t num_bytes) {
-    return MicroDeviceAPI::Create(num_bytes);
+  // TODO: API? what is distinguishing factor btwn x86 / OpenOCD here?
+  std::shared_ptr<x86MicroDeviceAPI> x86MicroDeviceConnect(size_t num_bytes) {
+    printf("creating x86microdeviceapi in openocd module\n");
+    std::shared_ptr<x86MicroDeviceAPI> ret = x86MicroDeviceAPI::Create(num_bytes);
+    printf("created %p  %p\n", ret, ret.get());
+    return ret;
   }
 
   void ExecuteCommand(std::string cmd, char* args[]) {
@@ -163,16 +155,20 @@ private:
   void LoadSection(std::string section, void* addr) {
     std::ifstream f(section+".bin", std::ios::in | std::ios::binary | std::ios::ate);
     if (!f) {
-      CHECK(false)
-        << "error occurred in opening " + section + ".bin\n";
+      printf("lel\n");
+      fflush(stdout);
       return;
     }
     size_t size = f.tellg();
     char buf[size];
+    printf("reading file\n");
     f.seekg(0, std::ios::beg);
     f.read(buf, size);
     f.close();
+    printf("read file\n");
+    printf("md_ %p %d, size %d\n", md_, md_->x, size);
     md_->WriteToMemory(ctx_, addr, (uint8_t *) buf, size);
+    printf("loaded\n");
   }
 
   void FindSectionSize(std::string binary, std::string section) {
@@ -191,6 +187,14 @@ private:
     sprintf(text_addr, "%p", text);
     sprintf(data_addr, "%p", data);
     sprintf(bss_addr, "%p", bss);
+    printf("%p %p %p\n", text, data, bss);
+    if(text == NULL)
+      sprintf(text_addr, "0x0");
+    if(data == NULL)
+      sprintf(data_addr, "0x0");
+    if(bss == NULL)
+      sprintf(bss_addr, "0x0");
+
     char* args[] = {(char *) cmd.c_str(), 
                     (char *) object.c_str(),
                     "-Ttext", text_addr,
@@ -206,19 +210,25 @@ private:
     // static microdevice size of 50 pages, change to dynamic eventually
     // function call arguments in callargs section of 10 pages
     size_t total_memory = 50 * PAGE_SIZE;
-    md_ = MicroDeviceConnect(total_memory);
+    md_ = x86MicroDeviceConnect(total_memory);
+    printf("returned md_ %p\n", md_);
     // maybe global ptr like with DeviceAPI?
     // TODO: check if name / binary are correctly used
     std::string binary = name + ".bin";
+    printf("%s\n", binary.c_str());
     binary_ = binary;
     // 10 pages each of text, data and bss
     CustomLink(name, binary, (void*)0, (void*)(10 * PAGE_SIZE), (void*)(20 * PAGE_SIZE));
     DumpSection(binary, "text");
     DumpSection(binary, "data");
     DumpSection(binary, "bss");
-    LoadSection("text", (void *) 0);
+    printf("now md_ %p\n", md_);
+    LoadSection("text", NULL);
+    printf("2nd md_ %p\n", md_);
     LoadSection("data", (void *)(10 * PAGE_SIZE));
     LoadSection("bss", (void *)(20 * PAGE_SIZE));
+    printf("done load\n", md_);
+    fflush(stdout);
   }
 
   void* GetSymbol(const char* name) {
@@ -284,15 +294,19 @@ PackedFunc OpenOCDModuleNode::GetFunction(
         << "Symbol " << runtime::symbol::tvm_module_main << " is not presented";
     faddr = reinterpret_cast<BackendPackedCFunc>(GetSymbol(entry_name));
   } else {
+    printf("else in getfunction\n");
     faddr = reinterpret_cast<BackendPackedCFunc>(GetSymbol(name.c_str()));
   }
-  if (faddr == nullptr) return PackedFunc();
+  //if (faddr == nullptr) return PackedFunc();
+  printf("wrappedfunc faddr is %p\n", faddr);
+  fflush(stdout);
   OpenOCDWrappedFunc f;
   // TODO: wrap f -- is this correct?
   f.Init(this, sptr_to_self, name, (void*) faddr);
   return PackFuncVoidAddr(f, std::vector<TVMType>());
 }
 
+/*
 Module OpenOCDModuleCreate(
    std::string data,
    std::string fmt,
@@ -300,9 +314,9 @@ Module OpenOCDModuleCreate(
    std::string source) {
   printf("Called OpenOCDModuleCreate of OpenOCDModuleNode\n");
   std::shared_ptr<OpenOCDModuleNode> n =
-     std::make_shared<OpenOCDModuleNode>(data, fmt, fmap, source);
+     std::make_shared<OpenOCDModuleNode>();
   return Module(n);
-}
+}*/
 
 // Load module from module.
 Module OpenOCDModuleLoadFile(const std::string& file_name,
@@ -314,7 +328,8 @@ Module OpenOCDModuleLoadFile(const std::string& file_name,
   std::string meta_file = GetMetaFilePath(file_name);
   std::cout << file_name << "  " << meta_file << std::endl;
   LoadBinaryFromFile(file_name, &data);
-  return OpenOCDModuleCreate(data, fmt, fmap, std::string());
+//  return OpenOCDModuleCreate(data, fmt, fmap, std::string());
+  return Module();
 }
 
 Module OpenOCDModuleLoadBinary(void* strm) {
@@ -326,13 +341,17 @@ Module OpenOCDModuleLoadBinary(void* strm) {
   stream->Read(&fmt);
   stream->Read(&fmap);
   stream->Read(&data);
-  return OpenOCDModuleCreate(data, fmt, fmap, std::string());
+//  return OpenOCDModuleCreate(data, fmt, fmap, std::string());
+  return Module();
 }
 
 // re-examine, given they are unnecessary?
 TVM_REGISTER_GLOBAL("module.loadfile_openocd")
 .set_body([](TVMArgs args, TVMRetValue* rv) {
-   *rv = OpenOCDModuleLoadFile(args[0], args[1]);
+  std::shared_ptr<OpenOCDModuleNode> n = std::make_shared<OpenOCDModuleNode>();
+  n->Init(args[0]);
+  *rv = runtime::Module(n);
+//   *rv = OpenOCDModuleLoadFile(args[0], args[1]);
  });
 
 TVM_REGISTER_GLOBAL("module.loadbinary_openocd")
