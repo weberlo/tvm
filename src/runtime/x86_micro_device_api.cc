@@ -98,7 +98,7 @@ namespace runtime {
     fflush(stdout);
     printf("size of args_buf %d\n", sizeof(args_buf));
     fflush(stdout);
-    WriteToMemory(ctx, args_section, (uint8_t*) &args_buf[0], (size_t) sizeof(args_buf));
+    WriteToMemory(ctx, args_section, (uint8_t*) &args_buf[0], (size_t) 10 * PAGE_SIZE);
     //ReadFromMemory(ctx, args_section, read_buffer, num_args * (sizeof(TVMValue) + sizeof(int)) );
     printf("Execute: wrote args to memory\n");
     fflush(stdout);
@@ -106,8 +106,10 @@ namespace runtime {
     // This should be the function signature if it's to know where things are
     printf("Execute: calling function\n");
     fflush(stdout);
-    void (*func)(const void*, const void*, int) = (void (*)(const void*, const void*, int)) real_addr;
-    func(args.values, args.type_codes, args.num_args);
+    //void (*func)(const void*, const void*, int) = (void (*)(const void*, const void*, int)) real_addr;
+    void (*func)(void) = (void (*)(void)) real_addr;
+    func();
+    // TODO: there needs to be a copy-back phase, from MicroDevice into TVMArgs
     printf("Execute: called function\n");
     fflush(stdout);
   }
