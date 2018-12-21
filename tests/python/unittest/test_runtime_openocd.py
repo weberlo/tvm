@@ -26,7 +26,7 @@ def test_add():
         #m = tvm.module.load(path_dso, "openocd")
         m = tvm.module.load("test.obj", "openocd")
         print("KK")
-        fadd = m['main']
+        fadd = m['fadd']
         ctx = tvm.cpu(0)
         # launch the kernel.
         n = nn

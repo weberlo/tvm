@@ -13,8 +13,12 @@ TVM_DLL int32_t fadd( void* args,  void* arg_type_ids, int32_t num_args) {
   if (!((num_args == 3))) {
     return -1;
   }
+  void *x = (void*) 0x7ffff7e1f000;
+  if (args == x)
+    return -1;
   void* arg0 = (((TVMValue*)args)[0].v_handle);
   int32_t arg0_code = (( int32_t*)arg_type_ids)[0];
+  return 0;
   void* arg1 = (((TVMValue*)args)[1].v_handle);
   int32_t arg1_code = (( int32_t*)arg_type_ids)[1];
   void* arg2 = (((TVMValue*)args)[2].v_handle);
@@ -108,16 +112,14 @@ TVM_DLL int32_t fadd( void* args,  void* arg_type_ids, int32_t num_args) {
   return 0;
 }
 
-void* args;
-void* arg_type_ids;
-int32_t num_args;
-int (*func)(void*, void*, int32_t) = NULL;
+void** args;
+void** arg_type_ids;
+int32_t* num_args;
+int (*func)(void*, void*, int32_t);
 
 // init stub
 int main()
 {
-  // the issue is these are on the stack, so i can't "change" them
-  // should be global vars maybe
-  func(args, arg_type_ids, num_args);
+  func(*args, *arg_type_ids, *num_args);
   return 0;
 }

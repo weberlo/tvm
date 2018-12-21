@@ -86,6 +86,24 @@ public:
 
  void Run(TVMContext ctx, TVMArgs args, TVMRetValue *rv, void* addr) {
    printf("Calling run openocd_module\n");
+	 int num_args = args.num_args;
+	 void* base_addr = md_->base_addr + (30 * PAGE_SIZE);
+   void* values_addr = base_addr;
+   void* type_codes_addr = values_addr + sizeof(TVMValue*) * num_args;
+   void* num_args_addr = type_codes_addr + sizeof(const int*) * num_args;
+	 void* fadd_addr = GetSymbol("fadd");
+   void* func_addr = md_->base_addr + reinterpret_cast<std::uintptr_t>(fadd_addr);
+	 void* args_sym = GetSymbol("args");
+	 void* arg_types_sym = GetSymbol("arg_type_ids");
+	 printf("sym of args %p\n", args_sym);
+	 printf("sym of arg_type_ids %p\n", arg_types_sym);
+	 printf("nonsym args addr %p\n", values_addr);
+	 printf("nonsym typecodes addr %p\n", type_codes_addr);
+   md_->WriteToMemory(ctx, GetSymbol("args"), (uint8_t*) &values_addr, (size_t) sizeof(void**));
+   md_->WriteToMemory(ctx, GetSymbol("arg_type_ids"), (uint8_t*)  &type_codes_addr, (size_t) sizeof(void**));
+   md_->WriteToMemory(ctx, GetSymbol("num_args"), (uint8_t*)  &num_args_addr, (size_t) sizeof(int32_t*));
+   md_->WriteToMemory(ctx, GetSymbol("func"), (uint8_t*)  &func_addr, (size_t) sizeof(void*));
+   printf("Updated func and args pointers");
    md_->Execute(ctx, args, rv, addr);
  }
 
@@ -213,7 +231,6 @@ private:
     md_ = x86MicroDeviceConnect(total_memory);
     printf("returned md_ %p\n", md_);
     // maybe global ptr like with DeviceAPI?
-    // TODO: check if name / binary are correctly used
     std::string binary = name + ".bin";
     printf("%s\n", binary.c_str());
     binary_ = binary;
@@ -287,7 +304,8 @@ PackedFunc OpenOCDModuleNode::GetFunction(
      const std::shared_ptr<ModuleNode>& sptr_to_self) {
   printf("Called GetFunction of OpenOCDModuleNode\n");
   BackendPackedCFunc faddr;
-  if (name == runtime::symbol::tvm_module_main) {
+	std::string name2 = "main";
+  if (name2 == runtime::symbol::tvm_module_main) {
     const char* entry_name = reinterpret_cast<const char*>(
         GetSymbol(runtime::symbol::tvm_module_main));
     CHECK(entry_name!= nullptr)
@@ -295,7 +313,7 @@ PackedFunc OpenOCDModuleNode::GetFunction(
     faddr = reinterpret_cast<BackendPackedCFunc>(GetSymbol(entry_name));
   } else {
     printf("else in getfunction\n");
-    faddr = reinterpret_cast<BackendPackedCFunc>(GetSymbol(name.c_str()));
+    faddr = reinterpret_cast<BackendPackedCFunc>(GetSymbol(name2.c_str()));
   }
   //if (faddr == nullptr) return PackedFunc();
   printf("wrappedfunc faddr is %p\n", faddr);

@@ -12,7 +12,7 @@
 #include <vector>
 #include <string>
 #include <sys/mman.h>
-#include <dmlc/memory_io.h>
+#include "allocator_stream.h"
 #include <mutex>
 
 namespace tvm {
@@ -49,12 +49,12 @@ class x86MicroDeviceAPI final : public MicroDeviceAPI {
     static std::shared_ptr<x86MicroDeviceAPI> Get(int table_index);
 
     int x = 992;
+    uint8_t* base_addr;
   private:
     size_t size;
     size_t size_in_pages;
-    uint8_t* base_addr;
     uint8_t* args_section;
-    dmlc::MemoryStringStream* stream;
+    AllocatorStream* stream;
     std::string args_buf;
     int table_index_{0};
 
