@@ -66,6 +66,7 @@ class x86MicroDeviceAPI final : public MicroDeviceAPI {
       printf("base addr %p\n", base_addr);;
       printf("offset ptr %p\n", offset);
       printf("offset int %d\n", reinterpret_cast<std::uintptr_t>(offset));;
+      //printf("offset int %" PRIxPTR "\n", reinterpret_cast<std::uintptr_t>(offset));;
       return base_addr + reinterpret_cast<std::uintptr_t>(offset);
     }
 

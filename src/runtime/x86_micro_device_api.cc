@@ -253,11 +253,11 @@ namespace runtime {
     printf("Execute: called function\n");
     fflush(stdout);
     const TVMValue* values = args.values;
-    for(int x = 0; x < 1024; x++)
-      printf("%lf ", ((float*)((TVMArray*)(val0[2].v_handle))->data)[x]);
+    //for(int x = 0; x < 1024; x++)
+      //printf("%lf ", ((float*)((TVMArray*)(val0[2].v_handle))->data)[x]);
       //printf("%lf ", ((float*)((TVMArray*)(values[2].v_handle))->data)[x]);
-    //ReadFromMemory(ctx, ((TVMArray*)(args_section + sizeof(TVMValue*) * 2))->data, 
-    //    (uint8_t*) ((TVMArray*)(values[2].v_handle))->data, 1024 * 4);
+    //float dat[4099];
+    ReadFromMemory(ctx, (void*)((uint8_t*)((TVMArray*)(val0[2].v_handle))->data - base_addr), (uint8_t*) ((TVMArray*)(values[2].v_handle))->data, 1024 * 4);
     fflush(stdout);
   }
 

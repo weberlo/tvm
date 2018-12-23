@@ -99,8 +99,14 @@ public:
 	 printf("sym of arg_type_ids %p\n", arg_types_sym);
 	 printf("nonsym args addr %p\n", values_addr);
 	 printf("nonsym typecodes addr %p\n", type_codes_addr);
+	 void* dummy;
+	 void* dummy2;
    md_->WriteToMemory(ctx, GetSymbol("args"), (uint8_t*) &values_addr, (size_t) sizeof(void**));
+   md_->ReadFromMemory(ctx, GetSymbol("args"), (uint8_t*) &dummy, (size_t) sizeof(void**));
+   printf("test dum %p\n", dummy);
    md_->WriteToMemory(ctx, GetSymbol("arg_type_ids"), (uint8_t*)  &type_codes_addr, (size_t) sizeof(void**));
+   md_->ReadFromMemory(ctx, GetSymbol("arg_type_ids"), (uint8_t*) &dummy2, (size_t) sizeof(void**));
+   printf("test dum2 %p\n", dummy2);
    md_->WriteToMemory(ctx, GetSymbol("num_args"), (uint8_t*)  &num_args_addr, (size_t) sizeof(int32_t*));
    md_->WriteToMemory(ctx, GetSymbol("func"), (uint8_t*)  &func_addr, (size_t) sizeof(void*));
    printf("Updated func and args pointers");
@@ -199,9 +205,9 @@ private:
                   void* data, 
                   void* bss) {
     std::string cmd = "ld";
-    char text_addr[16];
-    char data_addr[16];
-    char bss_addr[16];
+    char text_addr[20];
+    char data_addr[20];
+    char bss_addr[20];
     sprintf(text_addr, "%p", text);
     sprintf(data_addr, "%p", data);
     sprintf(bss_addr, "%p", bss);
@@ -235,7 +241,8 @@ private:
     printf("%s\n", binary.c_str());
     binary_ = binary;
     // 10 pages each of text, data and bss
-    CustomLink(name, binary, (void*)0, (void*)(10 * PAGE_SIZE), (void*)(20 * PAGE_SIZE));
+    //CustomLink(name, binary, (void*)0, (void*)(10 * PAGE_SIZE), (void*)(20 * PAGE_SIZE));
+    CustomLink(name, binary, md_->base_addr + 0, md_->base_addr + (10 * PAGE_SIZE), md_->base_addr + (20 * PAGE_SIZE));
     DumpSection(binary, "text");
     DumpSection(binary, "data");
     DumpSection(binary, "bss");
@@ -249,13 +256,13 @@ private:
   }
 
   void* GetSymbol(const char* name) {
-    void* addr;
+    uint8_t* addr;
     std::string cmd = "nm -C " + binary_ + " | grep -w " + name;
     FILE* f = ExecuteCommandWithOutput(cmd);
     if (!fscanf(f, "%p", &addr)) {
       addr = nullptr;
     }
-    return addr;
+    return (void*)(addr - md_->base_addr);
   }
 
   void Unload() {
