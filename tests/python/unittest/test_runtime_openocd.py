@@ -19,15 +19,13 @@ def test_add():
         fsplits = [x for x in tvm.ir_pass.SplitHostDevice(f1)]
         fsplits[0] = tvm.ir_pass.LowerTVMBuiltin(fsplits[0])
         mhost = tvm.codegen.build_module(fsplits[0], "c")
-        print(mhost)
         temp = util.tempdir()
         path_dso = temp.relpath("temp.so")
         mhost.export_library(path_dso)
         #m = tvm.module.load(path_dso, "openocd")
         m = tvm.module.load("test.obj", "openocd")
-        print("KK")
         fadd = m['fadd']
-        ctx = tvm.cpu(0)
+        ctx = tvm.openocd(0)
         # launch the kernel.
         n = nn
         a = tvm.nd.array(np.random.uniform(size=n).astype(A.dtype), ctx)

@@ -10,7 +10,9 @@
 #include <tvm/runtime/micro_device_api.h>
 #include <cstdlib>
 #include <cstring>
+#include "x86_micro_device_api.h"
 #include "workspace_pool.h"
+#include "device_memory_offsets.h"
 
 namespace tvm {
 namespace runtime {
@@ -29,12 +31,9 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
                        size_t alignment,
                        TVMType type_hint) final {
     // emulates silly heap section by incrementing last_alloc_ pointer
-    // TODO: use obtained MicroDeviceAPI for proper allocation
-    // TODO: Could store microdeviceapi for multiple use? instead of getting each time
     // TODO: is alignment/type_hint necessary? how? with respect to what?
-    printf("called allocdataspace\n");
     std::shared_ptr<MicroDeviceAPI> md_ = GetMicroDev(ctx);
-    CHECK (last_alloc_ + nbytes <= (uint8_t *)(50 * PAGE_SIZE))
+    CHECK (last_alloc_ + nbytes <= (uint8_t *) MEMORY_SIZE)
       << "out of allocation space\n";
     void* ptr = last_alloc_;
     last_alloc_ = last_alloc_ + nbytes;
@@ -42,8 +41,7 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
   }
 
   void FreeDataSpace(TVMContext ctx, void* ptr) final {
-    // make better allocator with frees, for now it's fine
-    printf("called freedataspace\n");
+    // TODO: implement better allocator with frees
   }
 
   void CopyDataFromTo(const void* from,
@@ -55,7 +53,6 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
                       TVMContext ctx_to,
                       TVMType type_hint,
                       TVMStreamHandle stream) final {
-    printf("called copydatafromto\n");
     uint8_t buffer[size];
     if (ctx_from.device_type == kDLOpenOCDDev && ctx_to.device_type == kDLOpenOCDDev) {
       std::shared_ptr<MicroDeviceAPI> from_md = GetMicroDev(ctx_from);
@@ -78,7 +75,6 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
   }
 
   void StreamSync(TVMContext ctx, TVMStreamHandle stream) final {
-    printf("called streamsync\n");
   }
 
   void* AllocWorkspace(TVMContext ctx, size_t size, TVMType type_hint) final;
@@ -91,15 +87,14 @@ class OpenOCDDeviceAPI final : public DeviceAPI {
   }
 
   private:
-  // TODO: make dynamic heap sizes, and multiple heap index
-  uint8_t* last_alloc_ = (uint8_t *)(40 * PAGE_SIZE);
+  uint8_t* last_alloc_ = (uint8_t *) SECTION_HEAP;
 
-  std::shared_ptr<MicroDeviceAPI> GetMicroDev(TVMContext ctx) {
+  std::shared_ptr<x86MicroDeviceAPI> GetMicroDev(TVMContext ctx) {
     int dev_type = ctx.device_type;
     CHECK_EQ(dev_type, kDLOpenOCDDev);
-    int tbl_index = 1;
-    // How to ensure the type of x86 vs OpenOCD?
-    return MicroDeviceAPI::Get(tbl_index);
+    int tbl_index = 0;
+    // TODO: How to ensure the type of x86 vs OpenOCD?
+    return x86MicroDeviceAPI::Get(tbl_index);
   }
 };
 

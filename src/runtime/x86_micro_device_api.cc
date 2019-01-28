@@ -10,6 +10,7 @@
 #include <tvm/runtime/c_runtime_api.h>
 #include "x86_micro_device_api.h"
 #include "allocator_stream.h"
+#include "device_memory_offsets.h"
 
 namespace tvm {
 namespace runtime {
@@ -17,15 +18,10 @@ namespace runtime {
     : size(num_bytes) {
     size = num_bytes;
     size_in_pages = (num_bytes + PAGE_SIZE - 1) / PAGE_SIZE;
-    printf("allocated size %d num pages %d\n", size, size_in_pages);
-    int prot = PROT_READ | PROT_WRITE | PROT_EXEC;
-    int flags = MAP_ANONYMOUS | MAP_PRIVATE;
-    base_addr = (uint8_t*) mmap(NULL, size_in_pages * PAGE_SIZE, prot, flags, -1, 0);
-    printf("errno %d\n", errno);
-    printf("base addr original %p\n", base_addr);
-    //int buf_size = 10 * PAGE_SIZE;
+    int mmap_prot = PROT_READ | PROT_WRITE | PROT_EXEC;
+    int mmap_flags = MAP_ANONYMOUS | MAP_PRIVATE;
+    base_addr = (uint8_t*) mmap(NULL, size_in_pages * PAGE_SIZE, mmap_prot, mmap_flags, -1, 0);
     stream = new AllocatorStream(&args_buf);
-    printf("initialized x86microdeviceapi %p\n", this);
   }
 
   x86MicroDeviceAPI::~x86MicroDeviceAPI() {
@@ -36,26 +32,8 @@ namespace runtime {
                      void* offset,
                      uint8_t* buf,
                      size_t num_bytes) {
-    //printf("writing x86 to memory\n");
-    fflush(stdout);
     uint8_t* real_addr = GetRealAddr(offset);
-    //printf("real addr %p\n", real_addr);
-    fflush(stdout);
-    //printf("num_bytes %d\n", num_bytes);
-    fflush(stdout);
-    int i = 0;
-    uint8_t x;
-    for (i = 0; i < num_bytes; i++)
-      x = buf[i];
-    //printf("forloop 1 done\n");
-    fflush(stdout);
-    for (i = 0; i < num_bytes; i++)
-      real_addr[i];
-    //printf("forloop 2 done\n");
-    fflush(stdout);
     std::memcpy(real_addr, buf, num_bytes);
-    //printf("memcpy done\n");
-    fflush(stdout);
   }
 
   void x86MicroDeviceAPI::ReadFromMemory(TVMContext ctx,
@@ -66,27 +44,15 @@ namespace runtime {
     std::memcpy(buf, real_addr, num_bytes);
   }
 
-  void x86MicroDeviceAPI::ChangeMemoryProtection(TVMContext ctx,
-                              void* offset,
-                              int prot,
-                              size_t num_bytes) {
-    // needs to be page aligned
-    // we assume all memory is executable for now, so this isn't called
-    uint8_t* real_addr = GetRealAddr(offset);
-    mprotect(real_addr, num_bytes, prot);
-  }
-
   void WriteTVMArgsToStream(TVMArgs args, AllocatorStream* stream, void* base_addr) {
     const TVMValue* values = args.values;
     const int* type_codes = args.type_codes;
     int num_args = args.num_args;
 		size_t args_offset = stream->Allocate(sizeof(TVMValue*) * num_args
 										 			+ sizeof(const int*) * num_args + sizeof(int));
-    printf("args offset %d\n", args_offset);
     stream->Seek(args_offset + sizeof(TVMValue*) * num_args);
     stream->Write(type_codes, sizeof(const int*) * num_args);
     stream->Write(&num_args, sizeof(int));
-    printf("type_codes and num_args written\n");
     for (int i = 0; i < num_args; i++) {
       switch(type_codes[i]) {
         case kDLInt:
@@ -153,18 +119,21 @@ namespace runtime {
               printf("wrote data arr\n");
             }
             if (tarr->dtype.code == kDLFloat) {
+              /*
               printf("values dtype 2\n");
               data_offset = stream->Allocate(sizeof(float) * shape_size);
-              printf("size %d\n", stream->GetBufferSize());
+              printf("size %d start %d\n", stream->GetBufferSize(), tarr->data);
+              fflush(stdout);
               stream->Seek(data_offset);
               stream->Write(tarr->data, sizeof(float) * shape_size);
               printf("wrote data arr\n");
+              fflush(stdout);
+              */
             }
             size_t shape_offset = stream->Allocate(sizeof(int64_t) * tarr->ndim);
             stream->Seek(shape_offset);
             stream->Write(tarr->shape, sizeof(int64_t) * tarr->ndim);
             printf("shape allocated\n");
-            fflush(stdout);
             size_t strides_offset = 0;
             if (tarr->strides != NULL) {
               strides_offset = stream->Allocate(sizeof(int64_t) * tarr->ndim);
@@ -172,10 +141,14 @@ namespace runtime {
               stream->Write(tarr->strides, sizeof(int64_t) * tarr->ndim);
             }
             printf("everything allocated\n");
-            fflush(stdout);
             stream->Seek(tarr_offset);
             stream->Write(tarr, sizeof(TVMArray)); 
-            void* data_addr = base_addr + data_offset;
+            //void* data_addr = base_addr + data_offset;
+            void* data_addr = base_addr + reinterpret_cast<std::uintptr_t>(tarr->data) - SECTION_ARGS;
+            //printf("tarr->data %p first elem %f\n", tarr->data, data_addr);
+            printf("base addr %p\n", base_addr);
+            printf("tarr->data %p %p  first elem %f\n", data_addr, tarr->data, (float*) data_addr);
+            fflush(stdout);
             void* shape_addr = base_addr + shape_offset;
             void* strides_addr = NULL;
             if (tarr->strides != NULL)
@@ -192,75 +165,27 @@ namespace runtime {
             stream->Seek(args_offset + sizeof(TVMValue*) * i);
             stream->Write(&tarr_addr, sizeof(void*));
             printf("values %d written\n", i);
-            fflush(stdout);
             break;
           }
         default:
-          {
             printf("couldn't process type code %d\n", type_codes[i]);
             break;
-          }
       }
     }
   }
 
-  void dum(void* args)
-  {
-    printf("dum %p %d\n", (int*)args, ((int*)args)[0]);
-  }
-
   void x86MicroDeviceAPI::Execute(TVMContext ctx, TVMArgs args, TVMRetValue *rv, void* offset) {
-    // TODO: should args section choice be at the micro level? likely no
-    printf("running execute in x86MicroDeviceAPI\n");
-    fflush(stdout);
-    void* args_section = (void *)(30 * PAGE_SIZE);
-    printf("Execute: writing to memory x86MicroDeviceAPI\n");
-    fflush(stdout);
-    printf("size of args_buf %d\n", sizeof(args_buf));
-    fflush(stdout);
-    WriteTVMArgsToStream(args, stream, base_addr + (30 * PAGE_SIZE));
-    printf("size of stream %d\n", stream->GetBufferSize());
+    // TODO: should args section choice be at the micro level? no
+    void* args_section = (void *) SECTION_ARGS;
+    WriteTVMArgsToStream(args, stream, base_addr + SECTION_ARGS);
     int buf_size = stream->GetBufferSize();
     WriteToMemory(ctx, args_section, (uint8_t*) args_buf.c_str(), (size_t) stream->GetBufferSize());
-    TVMValue* val0 = reinterpret_cast<TVMValue*>(base_addr + (30 * PAGE_SIZE));
-    //TVMValue val01 = reinterpret_cast<TVMValue>(base_addr + (30 * PAGE_SIZE));
-    int32_t* ids = reinterpret_cast<int32_t*>(base_addr + (30 * PAGE_SIZE) + sizeof(TVMValue*)*3);
-    void** ags = (void**)(base_addr + (20*PAGE_SIZE) + sizeof(void**));
-    dum(*ags);
-    printf("ids is %p %d %d %d\n", ids, ids[0], ids[1], ids[2]);
-    printf("ptr is %d\n", ((TVMArray*)(val0[1].v_handle))->shape[0]);
-    printf("ptr is %d\n", ((TVMArray*)(val0[1].v_handle))->strides);
-    printf("args ptr is %p\n", *(TVMValue*)(base_addr + (20 * PAGE_SIZE)));
-    printf("args ptr is %p\n", (base_addr + (30 * PAGE_SIZE)));
-    printf("func ptr is %p\n", (base_addr + (20 * PAGE_SIZE)+ 24) );
-    //for(int x = 0; x < 1024; x++)
-    //  printf("%lf ", ((float*)((TVMArray*)(val0[1].v_handle))->data)[x]);
-    //printf("ptr is %p\n", *(base_addr + (30 * PAGE_SIZE)));
-    //printf("ptr is %p\n", *(base_addr + (30 * PAGE_SIZE) + sizeof(TVMValue*)));
-    //printf("args val 0 ndim %d\n", ((TVMArray*)val0)->ndim);
-    //printf("args val 0 ndim %d\n", ((TVMArray*)&val)->ndim);
-    //printf("args val 0 ndim %d\n", ids[0]);
-    printf("Execute: wrote args to memory\n");
-    fflush(stdout);
     uint8_t* real_addr = GetRealAddr(offset);
-    // This should be the function signature if it's to know where things are
-    printf("Execute: calling function\n");
-    fflush(stdout);
-    //void (*func)(const void*, const void*, int) = (void (*)(const void*, const void*, int)) real_addr;
     void (*func)(void) = (void (*)(void)) real_addr;
     func();
-    // TODO: copy-back phase
-    printf("Execute: called function\n");
-    fflush(stdout);
-    const TVMValue* values = args.values;
-    //for(int x = 0; x < 1024; x++)
-      //printf("%lf ", ((float*)((TVMArray*)(val0[2].v_handle))->data)[x]);
-      //printf("%lf ", ((float*)((TVMArray*)(values[2].v_handle))->data)[x]);
-    //float dat[4099];
-    ReadFromMemory(ctx, (void*)((uint8_t*)((TVMArray*)(val0[2].v_handle))->data - base_addr), (uint8_t*) ((TVMArray*)(values[2].v_handle))->data, 1024 * 4);
-    fflush(stdout);
   }
 
+  // x86 device does not need a reset 
   void x86MicroDeviceAPI::Reset(TVMContext ctx) {
   }
 

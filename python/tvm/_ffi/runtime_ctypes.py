@@ -113,6 +113,7 @@ class TVMContext(ctypes.Structure):
         10: 'rocm',
         11: 'opengl',
         12: 'ext_dev',
+        13: 'openocd',
     }
     STR2MASK = {
         'llvm': 1,
@@ -133,6 +134,7 @@ class TVMContext(ctypes.Structure):
         'rocm': 10,
         'opengl': 11,
         'ext_dev': 12,
+        'openocd': 13,
     }
     def __init__(self, device_type, device_id):
         super(TVMContext, self).__init__()

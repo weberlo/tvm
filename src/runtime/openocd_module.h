@@ -15,11 +15,7 @@
 namespace tvm {
 namespace runtime {
 /*!
- * \brief create a opencl module for GPU devices from data.
- *
- * \param data The module data.
- * \param fmt The format of the data, can be "clbin", "cl"
- * \param fmap The map function information map of each function.
+ * \brief create a openocd module for micro devices 
  */
 Module OpenOCDModuleCreate(
     std::string data,

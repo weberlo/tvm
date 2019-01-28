@@ -35,13 +35,6 @@ class OpenOCDMicroDeviceAPI final : public MicroDeviceAPI {
       std::memcpy(buf, real_addr, num_bytes);
     }
 
-    void ChangeMemoryProtection(TVMContext ctx,
-                                void* offset,
-                                int prot,
-                                size_t num_bytes) final {
-      // no-op because openocd doesn't do this
-    }
-
     void Execute(TVMContext ctx, TVMArgs args, TVMRetValue *rv, void* offset) final {
       // TODO: need to maybe call init stub that calls the correct func
       // args need to be in binary/readable format in specific memory location
