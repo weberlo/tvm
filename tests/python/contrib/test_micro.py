@@ -22,18 +22,16 @@ def test_add():
         temp = util.tempdir()
         path_dso = temp.relpath("temp.so")
         mhost.export_library(path_dso)
-        #m = tvm.module.load(path_dso, "openocd")
-        m = tvm.module.load("test.obj", "openocd")
+        #m = tvm.module.load(path_dso, "micro_dev")
+        m = tvm.module.load("test.obj", "micro_dev")
         fadd = m['fadd']
-        ctx = tvm.openocd(0)
+        ctx = tvm.micro_dev(0)
         # launch the kernel.
         n = nn
         a = tvm.nd.array(np.random.uniform(size=n).astype(A.dtype), ctx)
         b = tvm.nd.array(np.random.uniform(size=n).astype(B.dtype), ctx)
         c = tvm.nd.array(np.zeros(n, dtype=C.dtype), ctx)
-        print("a")
         print(a)
-        print("b")
         print(b)
         #print(c)
         fadd(a, b, c)
@@ -42,9 +40,9 @@ def test_add():
             c.asnumpy(), a.asnumpy() + b.asnumpy())
     check_c()
 
-def test_openocd_array():
+def test_micro_array():
     pass
 
 if __name__ == "__main__":
     test_add()
-    test_openocd_array()
+    test_micro_array()

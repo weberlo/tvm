@@ -1,9 +1,9 @@
 /*!
 *  Copyright (c) 2018 by Contributors
-* \file openocd_module.cc
+* \file micro_module.cc
 */
 #include <tvm/runtime/registry.h>
-#include "x86_micro_device_api.h"
+#include "host_low_level_device_api.h"
 #include <tvm/runtime/module.h>
 #include <dmlc/memory_io.h>
 #include <vector>
@@ -16,32 +16,32 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <stdio.h>
-#include "pack_args.h"
-#include "meta_data.h"
-#include "file_util.h"
-#include "module_util.h"
 #include "device_memory_offsets.h"
+#include "../../runtime/meta_data.h"
+#include "../../runtime/pack_args.h"
+#include "../../runtime/file_util.h"
+#include "../../runtime/module_util.h"
 
 namespace tvm {
 namespace runtime {
-class OpenOCDModuleNode final : public ModuleNode {
+class MicroModuleNode final : public ModuleNode {
 public:
   /*
- explicit OpenOCDModuleNode(std::string data,
+ explicit MicroModuleNode(std::string data,
                          std::string fmt,
                          std::unordered_map<std::string, FunctionInfo> fmap,
                          std::string source)
      : data_(data), fmt_(fmt), fmap_(fmap), source_(source) {
-  printf("Called constructor of OpenOCDModuleNode\n");
+  printf("Called constructor of MicroModuleNode\n");
  }*/
 
  // destructor
- ~OpenOCDModuleNode() {
+ ~MicroModuleNode() {
     Unload();
  }
 
  const char* type_key() const final {
-   return "openocd";
+   return "micro";
  }
 
  PackedFunc GetFunction(
@@ -52,16 +52,14 @@ public:
 	 int num_args = args.num_args;
 	 void* base_addr = md_->base_addr + SECTION_ARGS;
    void* values_addr = base_addr;
-   void* type_codes_addr = values_addr + sizeof(TVMValue*) * num_args;
-   void* num_args_addr = type_codes_addr + sizeof(const int*) * num_args;
+   void* type_codes_addr = (char*) values_addr + sizeof(TVMValue*) * num_args;
+   void* num_args_addr = (char*) type_codes_addr + sizeof(const int*) * num_args;
 	 void* fadd_addr = GetSymbol("fadd");
-   void* func_addr = md_->base_addr + reinterpret_cast<std::uintptr_t>(fadd_addr);
-	 void* args_sym = GetSymbol("args");
-	 void* arg_types_sym = GetSymbol("arg_type_ids");
-   md_->WriteToMemory(ctx, GetSymbol("args"), (uint8_t*) &values_addr, (size_t) sizeof(void**));
-   md_->WriteToMemory(ctx, GetSymbol("arg_type_ids"), (uint8_t*)  &type_codes_addr, (size_t) sizeof(void**));
-   md_->WriteToMemory(ctx, GetSymbol("num_args"), (uint8_t*)  &num_args_addr, (size_t) sizeof(int32_t*));
-   md_->WriteToMemory(ctx, GetSymbol("func"), (uint8_t*)  &func_addr, (size_t) sizeof(void*));
+   void* func_addr = (char*) md_->base_addr + reinterpret_cast<std::uintptr_t>(fadd_addr);
+   md_->Write(ctx, GetSymbol("args"), (uint8_t*) &values_addr, (size_t) sizeof(void**));
+   md_->Write(ctx, GetSymbol("arg_type_ids"), (uint8_t*)  &type_codes_addr, (size_t) sizeof(void**));
+   md_->Write(ctx, GetSymbol("num_args"), (uint8_t*)  &num_args_addr, (size_t) sizeof(int32_t*));
+   md_->Write(ctx, GetSymbol("func"), (uint8_t*)  &func_addr, (size_t) sizeof(void*));
    md_->Execute(ctx, args, rv, addr);
  }
 
@@ -84,24 +82,22 @@ private:
   std::mutex mutex_;
   // some context variable - unneeded for now
   TVMContext ctx_;
-  // x86MicroDeviceAPI handle
-  std::shared_ptr<x86MicroDeviceAPI> md_;
+  // HostLowLevelDeviceAPI handle
+  std::shared_ptr<HostLowLevelDeviceAPI> md_;
 
-  // TODO: API? what is distinguishing factor btwn x86 / OpenOCD here?
-  std::shared_ptr<x86MicroDeviceAPI> x86MicroDeviceConnect(size_t num_bytes) {
-    printf("creating x86microdeviceapi in openocd module\n");
-    std::shared_ptr<x86MicroDeviceAPI> ret = x86MicroDeviceAPI::Create(num_bytes);
-    printf("created %p  %p\n", ret, ret.get());
+  // TODO: API? what is distinguishing factor btwn Host / OpenOCD here?
+  std::shared_ptr<HostLowLevelDeviceAPI> HostLowLevelDeviceConnect(size_t num_bytes) {
+    std::shared_ptr<HostLowLevelDeviceAPI> ret = HostLowLevelDeviceAPI::Create(num_bytes);
     return ret;
   }
 
-  void ExecuteCommand(std::string cmd, char* args[]) {
+  void ExecuteCommand(std::string cmd, const char* const args[]) {
     // TODO: this is linux specific code, make windows compatible eventually
     int pid = fork();
     if (pid) {
       wait(0);
     } else {
-      int ret = execvp(cmd.c_str(), args);
+      int ret = execvp(cmd.c_str(), const_cast<char* const*>(args));
       CHECK(ret == 0)
         << "error in execvp " + cmd + "\n";
     }
@@ -119,18 +115,18 @@ private:
 
   void DumpSection(std::string binary, std::string section) {
     std::string cmd = "objcopy";
-    char* args[] = {(char *) cmd.c_str(), 
-                    "--dump-section", 
-                    (char *)("." + section + "=" + section + ".bin").c_str(), 
-                    (char *) binary.c_str(), 
-                    NULL};
+    const char* const args[] = {(char *) cmd.c_str(), 
+                          "--dump-section", 
+                          (char *)("." + section + "=" + section + ".bin").c_str(),
+                          (char *) binary.c_str(), 
+                          nullptr};
     ExecuteCommand(cmd, args);
   }
 
   void LoadSection(std::string section, void* addr) {
     std::ifstream f(section+".bin", std::ios::in | std::ios::binary | std::ios::ate);
     if (!f) {
-      printf("Error loading section %s\n", section);
+      printf("Error loading section %s\n", section.c_str());
       return;
     }
     size_t size = f.tellg();
@@ -138,7 +134,7 @@ private:
     f.seekg(0, std::ios::beg);
     f.read(buf, size);
     f.close();
-    md_->WriteToMemory(ctx_, addr, (uint8_t *) buf, size);
+    md_->Write(ctx_, addr, (uint8_t *) buf, size);
   }
 
   void FindSectionSize(std::string binary, std::string section) {
@@ -165,19 +161,19 @@ private:
     if(bss == NULL)
       sprintf(bss_addr, "0x0");
 
-    char* args[] = {(char *) cmd.c_str(), 
+    const char* const args[] = {(char *) cmd.c_str(), 
                     (char *) object.c_str(),
                     "-Ttext", text_addr,
                     "-Tdata", data_addr,
                     "-Tbss", bss_addr,
                     "-o", (char *) binary.c_str(), 
-                    NULL};
+                    nullptr};
     ExecuteCommand(cmd, args);
   }
 
   void Load(const std::string& name) {
     size_t total_memory = MEMORY_SIZE;
-    md_ = x86MicroDeviceConnect(total_memory);
+    md_ = HostLowLevelDeviceConnect(total_memory);
     std::string binary = name + ".bin";
     binary_ = binary;
     CustomLink(name, binary,
@@ -208,10 +204,10 @@ private:
 };
 
 // a wrapped function class to get packed fucn.
-class OpenOCDWrappedFunc {
+class MicroWrappedFunc {
 public:
- // initialize the OpenOCD function.
- void Init(OpenOCDModuleNode* m,
+ // initialize the Micro function.
+ void Init(MicroModuleNode* m,
            std::shared_ptr<ModuleNode> sptr,
            const std::string& func_name,
            void* func_addr) {
@@ -230,18 +226,18 @@ public:
 
 private:
  // internal module
- OpenOCDModuleNode* m_;
+ MicroModuleNode* m_;
  // the resource holder
  std::shared_ptr<ModuleNode> sptr_;
  // The name of the function.
  std::string func_name_;
  // address of the function to be called
  void* func_addr_; 
- // dummy context variable, unneeded for OpenOCD
+ // dummy context variable, unneeded for Micro
  TVMContext ctx_; 
 };
 
-PackedFunc OpenOCDModuleNode::GetFunction(
+PackedFunc MicroModuleNode::GetFunction(
      const std::string& name,
      const std::shared_ptr<ModuleNode>& sptr_to_self) {
   BackendPackedCFunc faddr;
@@ -255,20 +251,20 @@ PackedFunc OpenOCDModuleNode::GetFunction(
   } else {
     faddr = reinterpret_cast<BackendPackedCFunc>(GetSymbol(name2.c_str()));
   }
-  OpenOCDWrappedFunc f;
+  MicroWrappedFunc f;
   f.Init(this, sptr_to_self, name, (void*) faddr);
   return PackFuncVoidAddr(f, std::vector<TVMType>());
 }
 
 
-Module OpenOCDModuleCreate() {
-  std::shared_ptr<OpenOCDModuleNode> n =
-     std::make_shared<OpenOCDModuleNode>();
+Module MicroModuleCreate() {
+  std::shared_ptr<MicroModuleNode> n =
+     std::make_shared<MicroModuleNode>();
   return Module(n);
 }
 
 // Load module from module.
-Module OpenOCDModuleLoadFile(const std::string& file_name,
+Module MicroModuleLoadFile(const std::string& file_name,
                          const std::string& format) {
   std::string data;
   std::unordered_map<std::string, FunctionInfo> fmap;
@@ -276,11 +272,11 @@ Module OpenOCDModuleLoadFile(const std::string& file_name,
   std::string meta_file = GetMetaFilePath(file_name);
   std::cout << file_name << "  " << meta_file << std::endl;
   LoadBinaryFromFile(file_name, &data);
-//  return OpenOCDModuleCreate(data, fmt, fmap, std::string());
+//  return MicroModuleCreate(data, fmt, fmap, std::string());
   return Module();
 }
 
-Module OpenOCDModuleLoadBinary(void* strm) {
+Module MicroModuleLoadBinary(void* strm) {
   dmlc::Stream* stream = static_cast<dmlc::Stream*>(strm);
   std::string data;
   std::unordered_map<std::string, FunctionInfo> fmap;
@@ -288,22 +284,22 @@ Module OpenOCDModuleLoadBinary(void* strm) {
   stream->Read(&fmt);
   stream->Read(&fmap);
   stream->Read(&data);
-//  return OpenOCDModuleCreate(data, fmt, fmap, std::string());
+//  return MicroModuleCreate(data, fmt, fmap, std::string());
   return Module();
 }
 
-TVM_REGISTER_GLOBAL("module.loadfile_openocd")
+TVM_REGISTER_GLOBAL("module.loadfile_micro_dev")
 .set_body([](TVMArgs args, TVMRetValue* rv) {
-  std::shared_ptr<OpenOCDModuleNode> n = std::make_shared<OpenOCDModuleNode>();
+  std::shared_ptr<MicroModuleNode> n = std::make_shared<MicroModuleNode>();
   n->Init(args[0]);
   *rv = runtime::Module(n);
-//  *rv = OpenOCDModuleLoadFile(args[0], args[1]);
+//  *rv = MicroModuleLoadFile(args[0], args[1]);
 //  TODO: this doesn't seem to do anything, so rethink this
  });
 
-TVM_REGISTER_GLOBAL("module.loadbinary_openocd")
+TVM_REGISTER_GLOBAL("module.loadbinary_micro_dev")
 .set_body([](TVMArgs args, TVMRetValue* rv) {
-   *rv = OpenOCDModuleLoadBinary(args[0]);
+   *rv = MicroModuleLoadBinary(args[0]);
  });
 }  // namespace runtime
 }  // namespace tvm

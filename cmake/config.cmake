@@ -128,3 +128,6 @@ set(USE_ROCBLAS OFF)
 
 # Whether use contrib sort
 set(USE_SORT OFF)
+
+# Whether use Micro
+set(USE_MICRO OFF)

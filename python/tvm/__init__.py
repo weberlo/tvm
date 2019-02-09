@@ -22,7 +22,7 @@ from . import testing
 
 from . import ndarray as nd
 from .ndarray import context, cpu, gpu, opencl, cl, vulkan, metal, mtl
-from .ndarray import vpi, rocm, opengl, ext_dev, openocd
+from .ndarray import vpi, rocm, opengl, ext_dev 
 
 from ._ffi.runtime_ctypes import TypeCode
 from ._ffi.function import Function
@@ -38,3 +38,4 @@ from .tag import tag_scope
 
 # Contrib initializers
 from .contrib import rocm as _rocm, nvcc as _nvcc, sdaccel as _sdaccel
+from .contrib.micro_dev import micro_dev

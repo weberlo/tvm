@@ -197,7 +197,7 @@ inline const char* DeviceName(int type) {
     case kDLROCM: return "rocm";
     case kOpenGL: return "opengl";
     case kDLExtDev: return "ext_dev";
-    case kDLOpenOCDDev: return "openocd";
+    case kDLMicroDev: return "micro_dev";
     default: LOG(FATAL) << "unknown type =" << type; return "Unknown";
   }
 }
