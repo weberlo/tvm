@@ -44,10 +44,9 @@ class HostLowLevelDeviceAPI final : public LowLevelDeviceAPI {
     static std::shared_ptr<HostLowLevelDeviceAPI> Get(int table_index);
 
     uint8_t* base_addr;
+
   private:
     size_t size;
-    size_t size_in_pages;
-    uint8_t* args_section;
     AllocatorStream* stream;
     std::string args_buf;
     int table_index_{0};

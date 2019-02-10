@@ -17,7 +17,7 @@ namespace runtime {
   HostLowLevelDeviceAPI::HostLowLevelDeviceAPI(size_t num_bytes) 
     : size(num_bytes) {
     size = num_bytes;
-    size_in_pages = (num_bytes + PAGE_SIZE - 1) / PAGE_SIZE;
+    size_t size_in_pages = (num_bytes + PAGE_SIZE - 1) / PAGE_SIZE;
     int mmap_prot = PROT_READ | PROT_WRITE | PROT_EXEC;
     int mmap_flags = MAP_ANONYMOUS | MAP_PRIVATE;
     base_addr = (uint8_t*) mmap(NULL, size_in_pages * PAGE_SIZE, mmap_prot, mmap_flags, -1, 0);
