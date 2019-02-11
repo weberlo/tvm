@@ -3,7 +3,6 @@
 * \file micro_module.cc
 */
 #include <tvm/runtime/registry.h>
-#include "host_low_level_device_api.h"
 #include <tvm/runtime/module.h>
 #include <dmlc/memory_io.h>
 #include <vector>
@@ -16,11 +15,12 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <stdio.h>
-#include "device_memory_offsets.h"
 #include "../../runtime/meta_data.h"
 #include "../../runtime/pack_args.h"
 #include "../../runtime/file_util.h"
 #include "../../runtime/module_util.h"
+#include "device_memory_offsets.h"
+#include "host_low_level_device_api.h"
 
 namespace tvm {
 namespace runtime {
@@ -76,7 +76,7 @@ private:
   std::unordered_map<std::string, FunctionInfo> fmap_;
   // The module source
   std::string source_;
-  // The module binary 
+  // The module binary
   std::string binary_;
   // internal mutex when updating the module
   std::mutex mutex_;
@@ -115,10 +115,10 @@ private:
 
   void DumpSection(std::string binary, std::string section) {
     std::string cmd = "objcopy";
-    const char* const args[] = {(char *) cmd.c_str(), 
-                          "--dump-section", 
+    const char* const args[] = {(char *) cmd.c_str(),
+                          "--dump-section",
                           (char *)("." + section + "=" + section + ".bin").c_str(),
-                          (char *) binary.c_str(), 
+                          (char *) binary.c_str(),
                           nullptr};
     ExecuteCommand(cmd, args);
   }
@@ -143,8 +143,8 @@ private:
 
   void CustomLink(std::string object,
                   std::string binary,
-                  void* text, 
-                  void* data, 
+                  void* text,
+                  void* data,
                   void* bss) {
     std::string cmd = "ld";
     char text_addr[20];
@@ -161,12 +161,12 @@ private:
     if(bss == NULL)
       sprintf(bss_addr, "0x0");
 
-    const char* const args[] = {(char *) cmd.c_str(), 
+    const char* const args[] = {(char *) cmd.c_str(),
                     (char *) object.c_str(),
                     "-Ttext", text_addr,
                     "-Tdata", data_addr,
                     "-Tbss", bss_addr,
-                    "-o", (char *) binary.c_str(), 
+                    "-o", (char *) binary.c_str(),
                     nullptr};
     ExecuteCommand(cmd, args);
   }
@@ -203,7 +203,7 @@ private:
   }
 };
 
-// a wrapped function class to get packed fucn.
+// a wrapped function class to get packed func.
 class MicroWrappedFunc {
 public:
  // initialize the Micro function.
@@ -232,9 +232,9 @@ private:
  // The name of the function.
  std::string func_name_;
  // address of the function to be called
- void* func_addr_; 
+ void* func_addr_;
  // dummy context variable, unneeded for Micro
- TVMContext ctx_; 
+ TVMContext ctx_;
 };
 
 PackedFunc MicroModuleNode::GetFunction(
@@ -265,7 +265,7 @@ Module MicroModuleCreate() {
 
 // Load module from module.
 Module MicroModuleLoadFile(const std::string& file_name,
-                         const std::string& format) {
+                           const std::string& format) {
   std::string data;
   std::unordered_map<std::string, FunctionInfo> fmap;
   std::string fmt = GetFileFormat(file_name, format);

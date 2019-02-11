@@ -14,7 +14,7 @@
 
 namespace tvm {
 namespace runtime {
-  HostLowLevelDeviceAPI::HostLowLevelDeviceAPI(size_t num_bytes) 
+  HostLowLevelDeviceAPI::HostLowLevelDeviceAPI(size_t num_bytes)
     : size(num_bytes) {
     size = num_bytes;
     size_t size_in_pages = (num_bytes + PAGE_SIZE - 1) / PAGE_SIZE;
@@ -64,7 +64,7 @@ namespace runtime {
         case kDLFloat:
           printf("was float\n");
           break;
-				case kStr: 
+				case kStr:
           printf("was str\n");
           break;
 				case kBytes:
@@ -111,7 +111,7 @@ namespace runtime {
               stream->Write(tarr->strides, sizeof(int64_t) * tarr->ndim);
             }
             stream->Seek(tarr_offset);
-            stream->Write(tarr, sizeof(TVMArray)); 
+            stream->Write(tarr, sizeof(TVMArray));
             void* data_addr = (uint8_t*) base_addr + reinterpret_cast<std::uintptr_t>(tarr->data) - SECTION_ARGS;
             void* shape_addr = (uint8_t*) base_addr + shape_offset;
             void* strides_addr = NULL;
@@ -119,7 +119,7 @@ namespace runtime {
               strides_addr = (uint8_t*) base_addr + strides_offset;
             stream->Seek(tarr_offset);
             stream->Write(&data_addr, sizeof(void*));
-            stream->Seek(tarr_offset + sizeof(void*) + sizeof(DLContext) 
+            stream->Seek(tarr_offset + sizeof(void*) + sizeof(DLContext)
                         + sizeof(int) + sizeof(DLDataType));
             stream->Write(&shape_addr, sizeof(void*));
             stream->Write(&strides_addr, sizeof(void*));
@@ -145,7 +145,7 @@ namespace runtime {
     func();
   }
 
-  // host does not need a reset 
+  // host does not need a reset
   void HostLowLevelDeviceAPI::Reset(TVMContext ctx) {
   }
 

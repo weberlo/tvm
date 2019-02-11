@@ -47,7 +47,7 @@ tvm_option(USE_ROCBLAS "Build with ROCM:RoCBLAS" OFF)
 tvm_option(USE_SORT "Build with sort support" OFF)
 tvm_option(USE_NNPACK "Build with nnpack support" OFF)
 tvm_option(USE_RANDOM "Build with random support" OFF)
-tvm_option(USE_MICRO "Build with Micro" OFF)
+tvm_option(USE_MICRO "Build with Micro" ON)
 
 # include directories
 include_directories("include")

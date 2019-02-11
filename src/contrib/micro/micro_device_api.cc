@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "host_low_level_device_api.h"
+//#include "openocd_low_level_device_api.h"
 #include "device_memory_offsets.h"
 #include "../../runtime/workspace_pool.h"
 
@@ -61,13 +62,13 @@ class MicroDeviceAPI final : public DeviceAPI {
       to_md->Write(ctx_to, (char*)(to) + to_offset, buffer, size);
     } else if (ctx_from.device_type == kDLMicroDev && ctx_to.device_type == kDLCPU) {
       std::shared_ptr<LowLevelDeviceAPI> from_md = GetMicroDev(ctx_from);
-      from_md->Read(ctx_from, (char*)(from) + from_offset, 
+      from_md->Read(ctx_from, (char*)(from) + from_offset,
                      buffer, size);
       memcpy(static_cast<char*>(to) + to_offset, buffer, size);
 
     } else if (ctx_from.device_type  == kDLCPU && ctx_to.device_type == kDLMicroDev) {
       std::shared_ptr<LowLevelDeviceAPI> to_md = GetMicroDev(ctx_to);
-      to_md->Write(ctx_to, (char*)(to) + to_offset, 
+      to_md->Write(ctx_to, (char*)(to) + to_offset,
                     (uint8_t*)(from) + from_offset, size);
     } else {
       LOG(FATAL) << "expect copy from/to Micro or between Micro\n";

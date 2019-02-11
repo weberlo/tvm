@@ -1,7 +1,7 @@
 /*!
  *  Copyright (c) 2018 by Contributors
  * \file micro_module.h
- * \brief MicroModule 
+ * \brief MicroModule
  */
 #ifndef TVM_RUNTIME_MICRO_MODULE_H_
 #define TVM_RUNTIME_MICRO_MODULE_H_
@@ -15,7 +15,7 @@
 namespace tvm {
 namespace runtime {
 /*!
- * \brief create a MicroModule for micro devices 
+ * \brief create a MicroModule for micro devices
  */
 Module MicroModuleCreate(
     std::string data,

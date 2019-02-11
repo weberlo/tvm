@@ -22,19 +22,19 @@ struct HostLowLevelDevTable;
 
 class HostLowLevelDeviceAPI final : public LowLevelDeviceAPI {
   public:
-    HostLowLevelDeviceAPI(size_t num_bytes); 
-    
+    HostLowLevelDeviceAPI(size_t num_bytes);
+
     ~HostLowLevelDeviceAPI();
 
     void Write(TVMContext ctx,
                void* offset,
                uint8_t* buf,
-               size_t num_bytes) final; 
+               size_t num_bytes) final;
 
     void Read(TVMContext ctx,
               void* offset,
               uint8_t* buf,
-              size_t num_bytes) final; 
+              size_t num_bytes) final;
 
     void Execute(TVMContext ctx, TVMArgs args, TVMRetValue *rv, void* offset) final;
 
@@ -97,16 +97,16 @@ struct HostLowLevelDevTable {
   std::array<std::weak_ptr<HostLowLevelDeviceAPI>, kMaxMicroDev> tbl_;
 };
 
-  inline std::shared_ptr<HostLowLevelDeviceAPI> HostLowLevelDeviceAPI::Create(size_t num_bytes) {
-    std::shared_ptr<HostLowLevelDeviceAPI> micro_dev = 
-      std::make_shared<HostLowLevelDeviceAPI>(num_bytes);
-    micro_dev->table_index_ = HostLowLevelDevTable::Global()->Insert(micro_dev);
-    return micro_dev;
-  }
+inline std::shared_ptr<HostLowLevelDeviceAPI> HostLowLevelDeviceAPI::Create(size_t num_bytes) {
+  std::shared_ptr<HostLowLevelDeviceAPI> micro_dev =
+    std::make_shared<HostLowLevelDeviceAPI>(num_bytes);
+  micro_dev->table_index_ = HostLowLevelDevTable::Global()->Insert(micro_dev);
+  return micro_dev;
+}
 
-  inline std::shared_ptr<HostLowLevelDeviceAPI> HostLowLevelDeviceAPI::Get(int table_index) {
-    return HostLowLevelDevTable::Global()->Get(table_index);
-  }
+inline std::shared_ptr<HostLowLevelDeviceAPI> HostLowLevelDeviceAPI::Get(int table_index) {
+  return HostLowLevelDevTable::Global()->Get(table_index);
+}
 
 }  // namespace runtime
 }  // namespace tvm
