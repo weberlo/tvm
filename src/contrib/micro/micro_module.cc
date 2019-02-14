@@ -175,18 +175,30 @@ private:
   void Load(const std::string& name) {
     size_t total_memory = MEMORY_SIZE;
     md_ = OpenOCDLowLevelDeviceConnect(total_memory);
+    /*
     std::string binary = name + ".bin";
     binary_ = binary;
     CustomLink(name, binary,
-               md_->base_addr + SECTION_TEXT,
-               md_->base_addr + SECTION_DATA,
-               md_->base_addr + SECTION_BSS);
+        md_->base_addr + SECTION_TEXT,
+        md_->base_addr + SECTION_DATA,
+        md_->base_addr + SECTION_BSS);
     DumpSection(binary, "text");
     DumpSection(binary, "data");
     DumpSection(binary, "bss");
     LoadSection("text", NULL);
     LoadSection("data", (void *) SECTION_DATA);
     LoadSection("bss", (void *) SECTION_BSS);
+    */
+
+    TVMContext ctx;
+    uint8_t write[] = {0, 1, 2, 3};
+    uint8_t read[] = {0, 0, 0, 0};
+    //std::cout << "Write: " << write[0] << ", " << write[1] << ", " << write[2] << ", "<< write[3] << ", " << std::endl;
+    std::cout << "Read: " << read[0] << ", " << read[1] << ", " << read[2] << ", "<< read[3] << ", " << std::endl;
+    //md_->Write(ctx, 0x0, (uint8_t*) &write, (size_t) 4);
+    md_->Read(ctx, (void*) 0x10010060, (uint8_t*) &read, (size_t) 4);
+    //std::cout << "Write: " << write[0] << ", " << write[1] << ", " << write[2] << ", "<< write[3] << ", " << std::endl;
+    std::cout << "Read: " << read[0] << ", " << read[1] << ", " << read[2] << ", "<< read[3] << ", " << std::endl;
   }
 
   void* GetSymbol(const char* name) {

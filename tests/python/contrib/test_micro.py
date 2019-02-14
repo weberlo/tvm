@@ -24,20 +24,20 @@ def test_add():
         mhost.export_library(path_dso)
         #m = tvm.module.load(path_dso, "micro_dev")
         m = tvm.module.load("test.obj", "micro_dev")
-        fadd = m['fadd']
-        ctx = tvm.micro_dev(dev_id=0)
-        # launch the kernel.
-        n = nn
-        a = tvm.nd.array(np.random.uniform(size=n).astype(A.dtype), ctx)
-        b = tvm.nd.array(np.random.uniform(size=n).astype(B.dtype), ctx)
-        c = tvm.nd.array(np.zeros(n, dtype=C.dtype), ctx)
-        print(a)
-        print(b)
+        #fadd = m['fadd']
+        #ctx = tvm.micro_dev(dev_id=0)
+        ## launch the kernel.
+        #n = nn
+        #a = tvm.nd.array(np.random.uniform(size=n).astype(A.dtype), ctx)
+        #b = tvm.nd.array(np.random.uniform(size=n).astype(B.dtype), ctx)
+        #c = tvm.nd.array(np.zeros(n, dtype=C.dtype), ctx)
+        #print(a)
+        #print(b)
         #print(c)
-        fadd(a, b, c)
-        #print(c)
-        tvm.testing.assert_allclose(
-            c.asnumpy(), a.asnumpy() + b.asnumpy())
+        #fadd(a, b, c)
+        ##print(c)
+        #tvm.testing.assert_allclose(
+        #    c.asnumpy(), a.asnumpy() + b.asnumpy())
     check_c()
 
 def test_micro_array():
