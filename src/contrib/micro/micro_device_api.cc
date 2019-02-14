@@ -10,8 +10,8 @@
 #include <tvm/runtime/low_level_device_api.h>
 #include <cstdlib>
 #include <cstring>
-#include "host_low_level_device_api.h"
-//#include "openocd_low_level_device_api.h"
+//#include "host_low_level_device_api.h"
+#include "openocd_low_level_device_api.h"
 #include "device_memory_offsets.h"
 #include "../../runtime/workspace_pool.h"
 
@@ -90,12 +90,12 @@ class MicroDeviceAPI final : public DeviceAPI {
   private:
   uint8_t* last_alloc_ = (uint8_t *) SECTION_HEAP;
 
-  std::shared_ptr<HostLowLevelDeviceAPI> GetMicroDev(TVMContext ctx) {
+  std::shared_ptr<OpenOCDLowLevelDeviceAPI> GetMicroDev(TVMContext ctx) {
     int dev_type = ctx.device_type;
     CHECK_EQ(dev_type, kDLMicroDev);
     int tbl_index = 0;
     // TODO: How to ensure the right type?
-    return HostLowLevelDeviceAPI::Get(tbl_index);
+    return OpenOCDLowLevelDeviceAPI::Get(tbl_index);
   }
 };
 

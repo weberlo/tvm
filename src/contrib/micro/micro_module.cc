@@ -20,7 +20,8 @@
 #include "../../runtime/file_util.h"
 #include "../../runtime/module_util.h"
 #include "device_memory_offsets.h"
-#include "host_low_level_device_api.h"
+//#include "host_low_level_device_api.h"
+#include "openocd_low_level_device_api.h"
 
 namespace tvm {
 namespace runtime {
@@ -82,12 +83,12 @@ private:
   std::mutex mutex_;
   // some context variable - unneeded for now
   TVMContext ctx_;
-  // HostLowLevelDeviceAPI handle
-  std::shared_ptr<HostLowLevelDeviceAPI> md_;
+  // OpenOCDLowLevelDeviceAPI handle
+  std::shared_ptr<OpenOCDLowLevelDeviceAPI> md_;
 
-  // TODO: API? what is distinguishing factor btwn Host / OpenOCD here?
-  std::shared_ptr<HostLowLevelDeviceAPI> HostLowLevelDeviceConnect(size_t num_bytes) {
-    std::shared_ptr<HostLowLevelDeviceAPI> ret = HostLowLevelDeviceAPI::Create(num_bytes);
+  // TODO: API? what is distinguishing factor btwn OpenOCD / OpenOCD here?
+  std::shared_ptr<OpenOCDLowLevelDeviceAPI> OpenOCDLowLevelDeviceConnect(size_t num_bytes) {
+    std::shared_ptr<OpenOCDLowLevelDeviceAPI> ret = OpenOCDLowLevelDeviceAPI::Create(num_bytes);
     return ret;
   }
 
@@ -173,7 +174,7 @@ private:
 
   void Load(const std::string& name) {
     size_t total_memory = MEMORY_SIZE;
-    md_ = HostLowLevelDeviceConnect(total_memory);
+    md_ = OpenOCDLowLevelDeviceConnect(total_memory);
     std::string binary = name + ".bin";
     binary_ = binary;
     CustomLink(name, binary,

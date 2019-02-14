@@ -44,7 +44,7 @@ namespace runtime {
     std::memcpy(buf, real_addr, num_bytes);
   }
 
-  void WriteTVMArgsToStream(TVMArgs args, AllocatorStream* stream, void* base_addr) {
+  static void WriteTVMArgsToStream(TVMArgs args, AllocatorStream* stream, void* base_addr) {
     const TVMValue* values = args.values;
     const int* type_codes = args.type_codes;
     int num_args = args.num_args;

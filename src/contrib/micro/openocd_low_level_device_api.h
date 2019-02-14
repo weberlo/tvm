@@ -3,8 +3,8 @@
  * \file OpenOCD_micro_device_api.h
  * \brief  kernels
  */
-#ifndef TVM_RUNTIME_OPENOCD_MICRO_DEVICE_API_H_
-#define TVM_RUNTIME_OPENOCD_MICRO_DEVICE_API_H_
+#ifndef TVM_RUNTIME_OPENOCD_LOW_LEVEL_DEVICE_API_H_
+#define TVM_RUNTIME_OPENOCD_LOW_LEVEL_DEVICE_API_H_
 
 #include <memory>
 #include <vector>
@@ -19,8 +19,6 @@
 namespace tvm {
 namespace runtime {
 
-struct OpenOCDLowLevelDevTable;
-
 class OpenOCDLowLevelDeviceAPI final : public LowLevelDeviceAPI {
   public:
     OpenOCDLowLevelDeviceAPI(size_t num_bytes);
@@ -28,14 +26,14 @@ class OpenOCDLowLevelDeviceAPI final : public LowLevelDeviceAPI {
     ~OpenOCDLowLevelDeviceAPI();
 
     void Write(TVMContext ctx,
-                       void* offset,
-                       uint8_t* buf,
-                       size_t num_bytes) final;
+               void* offset,
+               uint8_t* buf,
+               size_t num_bytes) final;
 
     void Read(TVMContext ctx,
-                        void* offset,
-                        uint8_t* buf,
-                        size_t num_bytes) final;
+              void* offset,
+              uint8_t* buf,
+              size_t num_bytes) final;
 
     void Execute(TVMContext ctx, TVMArgs args, TVMRetValue *rv, void* offset) final;
 
@@ -47,26 +45,20 @@ class OpenOCDLowLevelDeviceAPI final : public LowLevelDeviceAPI {
     uint8_t* base_addr;
 
   private:
-    tvm::common::TclSocket socket;
     size_t size;
-    uint8_t* args_section;
     AllocatorStream* stream;
     std::string args_buf;
     int table_index_{0};
 
-    static const constexpr char *kCommandToken = "\x1a";
+    tvm::common::TclSocket socket;
 
-    inline void* GetOffset(uint8_t* real_addr) {
-      return (void*) (real_addr - base_addr);
-    }
+    // TODO: Just make this a `char`.
+    static const constexpr char *kCommandTerminateToken = "\x1a";
+    static const constexpr size_t kSendBufSize = 4096;
+    static const constexpr size_t kReplyBufSize = 4096;
 
-    inline uint8_t* GetRealAddr(void* offset) {
-      return base_addr + reinterpret_cast<std::uintptr_t>(offset);
-    }
-
-    inline void Shutdown() {
-      munmap(base_addr, size);
-    }
+    // Returns the reply.
+    std::string SendCommand(std::string cmd);
 };
 
 struct OpenOCDLowLevelDevTable {
@@ -102,6 +94,17 @@ struct OpenOCDLowLevelDevTable {
   std::array<std::weak_ptr<OpenOCDLowLevelDeviceAPI>, kMaxLowLevelDevice> tbl_;
 };
 
+inline std::shared_ptr<OpenOCDLowLevelDeviceAPI> OpenOCDLowLevelDeviceAPI::Create(size_t num_bytes) {
+  std::shared_ptr<OpenOCDLowLevelDeviceAPI> micro_dev =
+    std::make_shared<OpenOCDLowLevelDeviceAPI>(num_bytes);
+  micro_dev->table_index_ = OpenOCDLowLevelDevTable::Global()->Insert(micro_dev);
+  return micro_dev;
+}
+
+inline std::shared_ptr<OpenOCDLowLevelDeviceAPI> OpenOCDLowLevelDeviceAPI::Get(int table_index) {
+  return OpenOCDLowLevelDevTable::Global()->Get(table_index);
+}
+
 }  // namespace runtime
 }  // namespace tvm
-#endif  // TVM_RUNTIME_OPENOCD_MICRO_DEVICE_API_H_
+#endif  // TVM_RUNTIME_OPENOCD_LOW_LEVEL_DEVICE_API_H_
