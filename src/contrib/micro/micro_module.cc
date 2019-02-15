@@ -189,7 +189,6 @@ private:
     size_t total_memory = MEMORY_SIZE;
     md_ = OpenOCDLowLevelDeviceConnect(total_memory);
 
-    /*
     std::string binary = name + ".bin";
     binary_ = binary;
     CustomLink(name, binary,
@@ -202,7 +201,6 @@ private:
     LoadSection("text", NULL);
     LoadSection("data", (void *) SECTION_DATA);
     LoadSection("bss", (void *) SECTION_BSS);
-    */
 
     /*
     TVMContext ctx;
@@ -225,11 +223,14 @@ private:
     std::cout << "Read: ";
     PrintArray(read, arr_len);
     */
+
+    /*
     md_->SendCommand("reset run");
     for (int i = 0; i < 15; i++) {
       usleep(5000000 / 15);
     }
     md_->SendCommand("reset halt");
+    */
   }
 
   void* GetSymbol(const char* name) {

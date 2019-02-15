@@ -25,28 +25,35 @@ def test_add():
         mhost.export_library(path_dso)
         #m = tvm.module.load(path_dso, "micro_dev")
         m = tvm.module.load("test.obj", "micro_dev")
-        #fadd = m['fadd']
-        #ctx = tvm.micro_dev(dev_id=0)
-        ## launch the kernel.
-        #n = nn
-        #print('[CREATING A]')
-        #a = tvm.nd.array(np.random.uniform(size=n).astype(A.dtype), ctx)
-        #print('[CREATING B]')
-        #b = tvm.nd.array(np.random.uniform(size=n).astype(B.dtype), ctx)
-        #print('[CREATING C]')
-        #c = tvm.nd.array(np.zeros(n, dtype=C.dtype), ctx)
-        #print('[PRINTING A]')
+        fadd = m['fadd']
+        ctx = tvm.micro_dev(dev_id=0)
+        # launch the kernel.
+        n = nn
+        print('[CREATING A]')
+        a = tvm.nd.array(np.random.uniform(size=n).astype(A.dtype), ctx)
+        print('[CREATING B]')
+        b = tvm.nd.array(np.random.uniform(size=n).astype(B.dtype), ctx)
+        print('[CREATING C]')
+        c = tvm.nd.array(np.zeros(n, dtype=C.dtype), ctx)
+        print('[PRINTING A]')
+        #d = tvm.nd.array(np.random.uniform(size=n).astype(A.dtype), ctx)
+        #e = tvm.nd.array(np.random.uniform(size=n).astype(A.dtype), ctx)
         #print(a)
-        #print('[PRINTING B]')
-        #print(b)
-        #print('[PRINTING C]')
-        #print(c)
-        #print('[ADDING]')
-        #fadd(a, b, c)
-        #print('[PRINTING C]')
-        #print(c)
-        #tvm.testing.assert_allclose(
-        #    c.asnumpy(), a.asnumpy() + b.asnumpy())
+        #a.copyto(d)
+        #print(d)
+        #d.copyto(e)
+        #print(e)
+        print(a)
+        print('[PRINTING B]')
+        print(b)
+        print('[PRINTING C]')
+        print(c)
+        print('[ADDING]')
+        fadd(a, b, c)
+        print('[PRINTING C]')
+        print(c)
+        tvm.testing.assert_allclose(
+            c.asnumpy(), a.asnumpy() + b.asnumpy())
     check_c()
 
 def test_micro_array():

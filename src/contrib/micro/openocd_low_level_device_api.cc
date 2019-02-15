@@ -123,7 +123,7 @@ OpenOCDLowLevelDeviceAPI::OpenOCDLowLevelDeviceAPI(size_t num_bytes)
     socket.SetKeepAlive(true);
     socket.Connect(tvm::common::SockAddr("127.0.0.1", 6666));
     // TODO: NO HARDCODE.
-    base_addr = (uint8_t*) 0x10010060;
+    base_addr = (uint8_t*) 0x10010000;
     stream = new AllocatorStream(&args_buf);
 }
 
@@ -179,22 +179,21 @@ void OpenOCDLowLevelDeviceAPI::Read(TVMContext ctx,
   {
     std::string reply = SendCommand("ocd_echo $output");
     std::stringstream values(reply);
-    uint8_t *buf_iter = buf;
     ssize_t req_bytes_remaining = num_bytes;
     // TODO: Don't assume the stream has enough values.
     //bool stream_has_values = true;
     while (req_bytes_remaining > 0) {
       // TODO: Figure out why the below is true.
-      // The response from this command intersperses unrelated values with the
-      // contents of the memory that was read, so we grab every other value.
-      uint32_t curr_val;
-      values >> curr_val;
+      // The response from this command pairs indices with the contents of the
+      // memory at that index.
+      uint32_t index;
+      uint32_t val;
+      values >> index;
       // Read the value into `curr_val`, instead of reading directly into
       // `buf_iter`, because otherwise it's interpreted as the ASCII value and
       // not the integral value.
-      values >> curr_val;
-      *buf_iter = static_cast<uint8_t>(curr_val);
-      buf_iter++;
+      values >> val;
+      buf[index] = static_cast<uint8_t>(val);
       req_bytes_remaining--;
     }
     /*
@@ -238,7 +237,10 @@ void OpenOCDLowLevelDeviceAPI::Execute(TVMContext ctx,
   //void (*func)(void) = (void (*)(void)) real_addr;
   //func();
   // TODO: Figure out how to begin execution at an arbitrary address.
-  SendCommand("reset run");
+  SendCommand("reset halt");
+  std::stringstream resume_cmd;
+  resume_cmd << "resume " << reinterpret_cast<uint64_t>(real_addr);
+  SendCommand(resume_cmd.str());
   for (int i = 0; i < 15; i++) {
     usleep(5000000 / 15);
   }
@@ -254,7 +256,7 @@ std::string OpenOCDLowLevelDeviceAPI::SendCommand(std::string cmd) {
   cmd_builder << cmd;
   cmd_builder << kCommandTerminateToken;
   std::string full_cmd = cmd_builder.str();
-  std::cout << "SEND: " << full_cmd << std::endl;
+  //std::cout << "SEND: " << full_cmd << std::endl;
   socket.Send(full_cmd.data(), full_cmd.length());
 
   std::stringstream reply_builder;
@@ -275,7 +277,7 @@ std::string OpenOCDLowLevelDeviceAPI::SendCommand(std::string cmd) {
   if (reply[reply.length()-1] != kCommandTerminateToken[0]) {
     std::cerr << "missing command terminator in OpenOCD response" << std::endl;
   }
-  std::cout << "RECV: " << reply << std::endl;
+  //std::cout << "RECV: " << reply << std::endl;
 
   //std::cout << "WAITING..." << std::endl;
   //std::string temp;
