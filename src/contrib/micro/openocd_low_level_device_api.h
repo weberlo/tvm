@@ -42,6 +42,10 @@ class OpenOCDLowLevelDeviceAPI final : public LowLevelDeviceAPI {
     static std::shared_ptr<OpenOCDLowLevelDeviceAPI> Create(size_t num_bytes);
     static std::shared_ptr<OpenOCDLowLevelDeviceAPI> Get(int table_index);
 
+    // TODO: Make this private.
+    // Returns the reply.
+    std::string SendCommand(std::string cmd);
+
     uint8_t* base_addr;
 
   private:
@@ -56,9 +60,18 @@ class OpenOCDLowLevelDeviceAPI final : public LowLevelDeviceAPI {
     static const constexpr char *kCommandTerminateToken = "\x1a";
     static const constexpr size_t kSendBufSize = 4096;
     static const constexpr size_t kReplyBufSize = 4096;
+    static const constexpr ssize_t kWordLen = 8;
+
+    inline void* GetOffset(uint8_t* real_addr) {
+      return (void*) (real_addr - base_addr);
+    }
+
+    inline uint8_t* GetRealAddr(void* offset) {
+      return base_addr + reinterpret_cast<std::uintptr_t>(offset);
+    }
 
     // Returns the reply.
-    std::string SendCommand(std::string cmd);
+    //std::string SendCommand(std::string cmd);
 };
 
 struct OpenOCDLowLevelDevTable {

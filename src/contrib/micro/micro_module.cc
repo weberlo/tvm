@@ -22,6 +22,8 @@
 #include "device_memory_offsets.h"
 //#include "host_low_level_device_api.h"
 #include "openocd_low_level_device_api.h"
+// Thread Sleeping
+#include <unistd.h>
 
 namespace tvm {
 namespace runtime {
@@ -172,9 +174,21 @@ private:
     ExecuteCommand(cmd, args);
   }
 
+  void PrintArray(uint8_t *arr, size_t len) {
+    std::cout << "[";
+    if (len > 0) {
+      std::cout << static_cast<uint32_t>(arr[0]);
+    }
+    for (size_t i = 1; i < len; i++) {
+      std::cout << ", " << static_cast<uint32_t>(arr[i]);
+    }
+    std::cout << "]" << std::endl;
+  }
+
   void Load(const std::string& name) {
     size_t total_memory = MEMORY_SIZE;
     md_ = OpenOCDLowLevelDeviceConnect(total_memory);
+
     /*
     std::string binary = name + ".bin";
     binary_ = binary;
@@ -190,15 +204,32 @@ private:
     LoadSection("bss", (void *) SECTION_BSS);
     */
 
+    /*
     TVMContext ctx;
-    uint8_t write[] = {0, 1, 2, 3};
-    uint8_t read[] = {0, 0, 0, 0};
-    //std::cout << "Write: " << write[0] << ", " << write[1] << ", " << write[2] << ", "<< write[3] << ", " << std::endl;
-    std::cout << "Read: " << read[0] << ", " << read[1] << ", " << read[2] << ", "<< read[3] << ", " << std::endl;
-    //md_->Write(ctx, 0x0, (uint8_t*) &write, (size_t) 4);
-    md_->Read(ctx, (void*) 0x10010060, (uint8_t*) &read, (size_t) 4);
-    //std::cout << "Write: " << write[0] << ", " << write[1] << ", " << write[2] << ", "<< write[3] << ", " << std::endl;
-    std::cout << "Read: " << read[0] << ", " << read[1] << ", " << read[2] << ", "<< read[3] << ", " << std::endl;
+    void *addr = (void*) 0x0;
+    size_t arr_len = 5;
+    uint8_t write[] = "Farts";
+    //uint8_t write[] = {2, 4, 6, 8, 10};
+    uint8_t read[] = {0, 0, 0, 0, 0};
+
+    std::cout << "Write: ";
+    PrintArray(write, arr_len);
+    std::cout << "Read: ";
+    PrintArray(read, arr_len);
+
+    md_->Write(ctx, addr, write, arr_len);
+    md_->Read(ctx, addr, read, arr_len);
+
+    std::cout << "Write: ";
+    PrintArray(write, arr_len);
+    std::cout << "Read: ";
+    PrintArray(read, arr_len);
+    */
+    md_->SendCommand("reset run");
+    for (int i = 0; i < 15; i++) {
+      usleep(5000000 / 15);
+    }
+    md_->SendCommand("reset halt");
   }
 
   void* GetSymbol(const char* name) {

@@ -7,7 +7,8 @@ import numpy as np
 from tvm.contrib import util
 
 def test_add():
-    nn = 1024
+    #nn = 1024
+    nn = 4
     n = tvm.convert(nn)
     A = tvm.placeholder((n,), name='A')
     B = tvm.placeholder((n,), name='B')
@@ -28,14 +29,22 @@ def test_add():
         #ctx = tvm.micro_dev(dev_id=0)
         ## launch the kernel.
         #n = nn
+        #print('[CREATING A]')
         #a = tvm.nd.array(np.random.uniform(size=n).astype(A.dtype), ctx)
+        #print('[CREATING B]')
         #b = tvm.nd.array(np.random.uniform(size=n).astype(B.dtype), ctx)
+        #print('[CREATING C]')
         #c = tvm.nd.array(np.zeros(n, dtype=C.dtype), ctx)
+        #print('[PRINTING A]')
         #print(a)
+        #print('[PRINTING B]')
         #print(b)
+        #print('[PRINTING C]')
         #print(c)
+        #print('[ADDING]')
         #fadd(a, b, c)
-        ##print(c)
+        #print('[PRINTING C]')
+        #print(c)
         #tvm.testing.assert_allclose(
         #    c.asnumpy(), a.asnumpy() + b.asnumpy())
     check_c()
