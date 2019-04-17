@@ -25,6 +25,8 @@
 // Thread Sleeping
 #include <unistd.h>
 
+#include <iomanip>
+
 namespace tvm {
 namespace runtime {
 class MicroModuleNode final : public ModuleNode {
@@ -52,17 +54,35 @@ public:
      const std::shared_ptr<ModuleNode>& sptr_to_self) final;
 
  void Run(TVMContext ctx, TVMArgs args, TVMRetValue *rv, void* addr) {
-	 int num_args = args.num_args;
-	 void* base_addr = md_->base_addr + SECTION_ARGS;
-   void* values_addr = base_addr;
-   void* type_codes_addr = (char*) values_addr + sizeof(TVMValue*) * num_args;
-   void* num_args_addr = (char*) type_codes_addr + sizeof(const int*) * num_args;
-	 void* fadd_addr = GetSymbol("fadd");
-   void* func_addr = (char*) md_->base_addr + reinterpret_cast<std::uintptr_t>(fadd_addr);
-   md_->Write(ctx, GetSymbol("args"), (uint8_t*) &values_addr, (size_t) sizeof(void**));
-   md_->Write(ctx, GetSymbol("arg_type_ids"), (uint8_t*)  &type_codes_addr, (size_t) sizeof(void**));
-   md_->Write(ctx, GetSymbol("num_args"), (uint8_t*)  &num_args_addr, (size_t) sizeof(int32_t*));
-   md_->Write(ctx, GetSymbol("func"), (uint8_t*)  &func_addr, (size_t) sizeof(void*));
+   int num_args = args.num_args;
+   uintptr_t args_section_addr = reinterpret_cast<uintptr_t>(md_->base_addr) +
+     md_->args_offs;
+
+   uintptr_t args_addr = args_section_addr;
+   md_->Write(ctx,
+              GetSymbol("args"),
+              (uint8_t*) &args_addr,
+              (size_t) sizeof(uint8_t*));
+
+   uintptr_t arg_type_ids_addr = args_addr + sizeof(TVMValue*) * num_args;
+   md_->Write(ctx,
+              GetSymbol("arg_type_ids"),
+              (uint8_t*) &arg_type_ids_addr,
+              (size_t) sizeof(uint8_t*));
+
+   uintptr_t num_args_addr = arg_type_ids_addr + sizeof(const int*) * num_args;
+   md_->Write(ctx,
+              GetSymbol("num_args"),
+              (uint8_t*) &num_args_addr,
+              (size_t) sizeof(uint8_t*));
+
+   uintptr_t fadd_addr = reinterpret_cast<uintptr_t>(md_->base_addr) +
+     reinterpret_cast<uintptr_t>(GetSymbol("fadd"));
+   md_->Write(ctx,
+              GetSymbol("func"),
+              (uint8_t*) &fadd_addr,
+              (size_t) sizeof(void*));
+
    md_->Execute(ctx, args, rv, addr);
  }
 
@@ -95,6 +115,12 @@ private:
   }
 
   void ExecuteCommand(std::string cmd, const char* const args[]) {
+    // std::cout << "Executing command: \"";
+    // for (char** args_iter = const_cast<char**>(args); *args_iter; args_iter++) {
+    //   std::cout << *args_iter << " ";
+    // }
+    // std::cout << std::endl;
+
     // TODO: this is linux specific code, make windows compatible eventually
     int pid = fork();
     if (pid) {
@@ -117,19 +143,20 @@ private:
   }
 
   void DumpSection(std::string binary, std::string section) {
-    std::string cmd = "objcopy";
+    //std::string cmd = "objcopy";
+    std::string cmd = "riscv64-unknown-elf-objcopy";
     const char* const args[] = {(char *) cmd.c_str(),
-                          "--dump-section",
-                          (char *)("." + section + "=" + section + ".bin").c_str(),
-                          (char *) binary.c_str(),
-                          nullptr};
+                                "--dump-section",
+                                (char *)("." + section + "=" + section + ".bin").c_str(),
+                                (char *) binary.c_str(),
+                                nullptr};
     ExecuteCommand(cmd, args);
   }
 
   void LoadSection(std::string section, void* addr) {
     std::ifstream f(section+".bin", std::ios::in | std::ios::binary | std::ios::ate);
     if (!f) {
-      printf("Error loading section %s\n", section.c_str());
+      // printf("Error loading section %s\n", section.c_str());
       return;
     }
     size_t size = f.tellg();
@@ -149,28 +176,61 @@ private:
                   void* text,
                   void* data,
                   void* bss) {
-    std::string cmd = "ld";
-    char text_addr[20];
-    char data_addr[20];
-    char bss_addr[20];
-    sprintf(text_addr, "%p", text);
-    sprintf(data_addr, "%p", data);
-    sprintf(bss_addr, "%p", bss);
-    printf("%p %p %p\n", text, data, bss);
-    if(text == NULL)
-      sprintf(text_addr, "0x0");
-    if(data == NULL)
-      sprintf(data_addr, "0x0");
-    if(bss == NULL)
-      sprintf(bss_addr, "0x0");
+    {
+      std::stringstream ld_script;
+      ld_script << "OUTPUT_ARCH( \"riscv\" )" << std::endl;
+      ld_script << "SECTIONS" << std::endl;
+      ld_script << "{" << std::endl;
+      ld_script << "  . = " << std::hex << text << ";" << std::endl;
+      ld_script << "  .text : { *(.text) }"<< std::endl;
+      ld_script << "  . = " << std::hex << data << ";" << std::endl;
+      ld_script << "  .data : { *(.data) }"<< std::endl;
+      ld_script << "  . = " << std::hex << bss << ";" << std::endl;
+      ld_script << "  .bss : { *(.bss) }"<< std::endl;
+      ld_script << "  .sbss : { *(.sbss) }"<< std::endl;
+      ld_script << "}" << std::endl;
+      std::ofstream ld_script_file("fadd.lds");
+      ld_script_file << ld_script.str();
+      ld_script_file.close();
+    }
+
+    //std::string cmd = "ld";
+    //std::string cmd = "riscv64-unknown-elf-ld";
+    // char text_addr[20];
+    // char data_addr[20];
+    // char bss_addr[20];
+    // sprintf(text_addr, "%p", text);
+    // sprintf(data_addr, "%p", data);
+    // sprintf(bss_addr, "%p", bss);
+    // if(text == NULL)
+    //   sprintf(text_addr, "0x0");
+    // if(data == NULL)
+    //   sprintf(data_addr, "0x0");
+    // if(bss == NULL)
+    //   sprintf(bss_addr, "0x0");
+
+    // const char* const args[] = {(char *) cmd.c_str(),
+    //                             (char *) object.c_str(),
+    //                             "-Ttext", text_addr,
+    //                             "-Tdata", data_addr,
+    //                             "-Tbss", bss_addr,
+    //                             "-o", (char *) binary.c_str(),
+    //                             nullptr};
+
+    std::string cmd = "riscv64-unknown-elf-g++";
+
+    // riscv64-unknown-elf-g++ -c -g -Og -o "${OBJ_NAME}" "${SRC_NAME}" -I "$HOME/tvm-riscv/include" -I "$HOME/tvm-riscv/3rdparty/dlpack/include" 
+    // riscv64-unknown-elf-g++ -g -Og -T "$HOME/utvm-conf/spike.lds" -nostartfiles -o "${BIN_NAME}" "${OBJ_NAME}"
 
     const char* const args[] = {(char *) cmd.c_str(),
-                    (char *) object.c_str(),
-                    "-Ttext", text_addr,
-                    "-Tdata", data_addr,
-                    "-Tbss", bss_addr,
-                    "-o", (char *) binary.c_str(),
-                    nullptr};
+                                "-g",
+                                "-Og",
+                                "-T", "fadd.lds",
+                                "-nostartfiles",
+                                "-o", (char *) binary.c_str(),
+                                (char *) object.c_str(),
+                                nullptr};
+
     ExecuteCommand(cmd, args);
   }
 
@@ -198,47 +258,22 @@ private:
     DumpSection(binary, "text");
     DumpSection(binary, "data");
     DumpSection(binary, "bss");
-    LoadSection("text", NULL);
+    LoadSection("text", (void *) SECTION_TEXT);
     LoadSection("data", (void *) SECTION_DATA);
     LoadSection("bss", (void *) SECTION_BSS);
-
-    /*
-    TVMContext ctx;
-    void *addr = (void*) 0x0;
-    size_t arr_len = 5;
-    uint8_t write[] = "Farts";
-    //uint8_t write[] = {2, 4, 6, 8, 10};
-    uint8_t read[] = {0, 0, 0, 0, 0};
-
-    std::cout << "Write: ";
-    PrintArray(write, arr_len);
-    std::cout << "Read: ";
-    PrintArray(read, arr_len);
-
-    md_->Write(ctx, addr, write, arr_len);
-    md_->Read(ctx, addr, read, arr_len);
-
-    std::cout << "Write: ";
-    PrintArray(write, arr_len);
-    std::cout << "Read: ";
-    PrintArray(read, arr_len);
-    */
-
-    /*
-    md_->SendCommand("reset run");
-    for (int i = 0; i < 15; i++) {
-      usleep(5000000 / 15);
-    }
-    md_->SendCommand("reset halt");
-    */
   }
 
+  /*
+   * Returns the offset from the base address to the symbol with name `name`.
+   */
   void* GetSymbol(const char* name) {
     uint8_t* addr;
-    std::string cmd = "nm -C " + binary_ + " | grep -w " + name;
+    // Use `nm` with the `-C` option to demangle symbols before grepping.
+    std::string cmd = "riscv64-unknown-elf-nm -C " + binary_ + " | grep -w " + name;
     FILE* f = ExecuteCommandWithOutput(cmd);
     if (!fscanf(f, "%p", &addr)) {
       addr = nullptr;
+      std::cerr << "Could not find address for symbol \"" << name << "\"" << std::endl;
     }
     return (void*)(addr - md_->base_addr);
   }
@@ -285,19 +320,25 @@ private:
 PackedFunc MicroModuleNode::GetFunction(
      const std::string& name,
      const std::shared_ptr<ModuleNode>& sptr_to_self) {
+
+  /*
   BackendPackedCFunc faddr;
-	std::string name2 = "main";
   if (name2 == runtime::symbol::tvm_module_main) {
     const char* entry_name = reinterpret_cast<const char*>(
         GetSymbol(runtime::symbol::tvm_module_main));
-    CHECK(entry_name!= nullptr)
+    CHECK(entry_name != nullptr)
         << "Symbol " << runtime::symbol::tvm_module_main << " is not presented";
     faddr = reinterpret_cast<BackendPackedCFunc>(GetSymbol(entry_name));
   } else {
-    faddr = reinterpret_cast<BackendPackedCFunc>(GetSymbol(name2.c_str()));
   }
+  */
+
+  // We don't use `name`, because we always want to call `main`.  The actual
+  // function routing is done at execution time, by patching a function pointer
+  // that `main` calls.
+  void* faddr = GetSymbol("main");
   MicroWrappedFunc f;
-  f.Init(this, sptr_to_self, name, (void*) faddr);
+  f.Init(this, sptr_to_self, name, faddr);
   return PackFuncVoidAddr(f, std::vector<TVMType>());
 }
 
@@ -344,6 +385,7 @@ TVM_REGISTER_GLOBAL("module.loadfile_micro_dev")
 
 TVM_REGISTER_GLOBAL("module.loadbinary_micro_dev")
 .set_body([](TVMArgs args, TVMRetValue* rv) {
+    assert(false);
    *rv = MicroModuleLoadBinary(args[0]);
  });
 }  // namespace runtime

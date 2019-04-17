@@ -15,6 +15,7 @@
 
 namespace tvm {
 namespace runtime {
+
 struct AllocatorStream : public dmlc::SeekStream {
  public:
   /*!
@@ -50,7 +51,11 @@ struct AllocatorStream : public dmlc::SeekStream {
     return curr_ptr_;
   }
 	size_t Allocate(size_t size) {
-		size_t ret = max_ptr_;
+    // Round up `max_ptr_` to be aligned to 8 bytes for every allocation.
+    if (max_ptr_ % 8 != 0) {
+      max_ptr_ = (max_ptr_ & ~7) + 8;
+    }
+    size_t ret = max_ptr_;
 		max_ptr_ += size;
 		return ret;
 	}
@@ -67,14 +72,12 @@ struct AllocatorStream : public dmlc::SeekStream {
   size_t max_ptr_;
 };
 
-// TODO: Should this be here?
-/*
-void WriteTVMArgsToStream(TVMArgs args, AllocatorStream* stream, void* base_addr) {
+static void WriteTVMArgsToStream(TVMArgs args, AllocatorStream* stream, void* base_addr, uintptr_t args_offs) {
   const TVMValue* values = args.values;
   const int* type_codes = args.type_codes;
   int num_args = args.num_args;
   size_t args_offset = stream->Allocate(sizeof(TVMValue*) * num_args
-                        + sizeof(const int*) * num_args + sizeof(int));
+      + sizeof(const int*) * num_args + sizeof(int));
   stream->Seek(args_offset + sizeof(TVMValue*) * num_args);
   stream->Write(type_codes, sizeof(const int*) * num_args);
   stream->Write(&num_args, sizeof(int));
@@ -137,30 +140,30 @@ void WriteTVMArgsToStream(TVMArgs args, AllocatorStream* stream, void* base_addr
           }
           stream->Seek(tarr_offset);
           stream->Write(tarr, sizeof(TVMArray));
-          void* data_addr = (uint8_t*) base_addr + reinterpret_cast<std::uintptr_t>(tarr->data) - SECTION_ARGS;
-          void* shape_addr = (uint8_t*) base_addr + shape_offset;
+          void* data_addr = (uint8_t*) base_addr + reinterpret_cast<std::uintptr_t>(tarr->data);
+          void* shape_addr = (uint8_t*) base_addr + args_offs + shape_offset;
           void* strides_addr = NULL;
           if (tarr->strides != NULL)
-            strides_addr = (uint8_t*) base_addr + strides_offset;
+            strides_addr = (uint8_t*) base_addr + args_offs + strides_offset;
           stream->Seek(tarr_offset);
           stream->Write(&data_addr, sizeof(void*));
           stream->Seek(tarr_offset + sizeof(void*) + sizeof(DLContext)
-                      + sizeof(int) + sizeof(DLDataType));
+              + sizeof(int) + sizeof(DLDataType));
           stream->Write(&shape_addr, sizeof(void*));
           stream->Write(&strides_addr, sizeof(void*));
-          void* tarr_addr = (uint8_t*) base_addr + tarr_offset;
+          void* tarr_addr = (uint8_t*) base_addr + args_offs + tarr_offset;
           stream->Seek(args_offset + sizeof(TVMValue*) * i);
           stream->Write(&tarr_addr, sizeof(void*));
           break;
         }
       default:
-          printf("couldn't process type code %d\n", type_codes[i]);
-          break;
+        printf("couldn't process type code %d\n", type_codes[i]);
+        break;
     }
   }
 }
-*/
 
 }  // namespace runtime
 }  // namespace tvm
+
 #endif  // TVM_RUNTIME_ALLOCATOR_STREAM_H_

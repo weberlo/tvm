@@ -7,54 +7,46 @@ import numpy as np
 from tvm.contrib import util
 
 def test_add():
-    #nn = 1024
-    nn = 4
-    n = tvm.convert(nn)
-    A = tvm.placeholder((n,), name='A')
-    B = tvm.placeholder((n,), name='B')
-    C = tvm.compute(A.shape, lambda *i: A(*i) + B(*i), name='C')
-    s = tvm.create_schedule(C.op)
+    size = 1024
+    n = tvm.convert(size)
+    A_dummy = tvm.placeholder((n,), name='A')
+    B_dummy = tvm.placeholder((n,), name='B')
+    C_dummy = tvm.compute(A_dummy.shape, lambda *i: A_dummy(*i) + B_dummy(*i), name='C')
 
-    def check_c():
-        f1 = tvm.lower(s, [A, B, C], name="fadd")
-        fsplits = [x for x in tvm.ir_pass.SplitHostDevice(f1)]
-        fsplits[0] = tvm.ir_pass.LowerTVMBuiltin(fsplits[0])
-        mhost = tvm.codegen.build_module(fsplits[0], "c")
-        temp = util.tempdir()
-        path_dso = temp.relpath("temp.so")
-        mhost.export_library(path_dso)
-        #m = tvm.module.load(path_dso, "micro_dev")
-        m = tvm.module.load("test.obj", "micro_dev")
-        fadd = m['fadd']
-        ctx = tvm.micro_dev(dev_id=0)
-        # launch the kernel.
-        n = nn
-        print('[CREATING A]')
-        a = tvm.nd.array(np.random.uniform(size=n).astype(A.dtype), ctx)
-        print('[CREATING B]')
-        b = tvm.nd.array(np.random.uniform(size=n).astype(B.dtype), ctx)
-        print('[CREATING C]')
-        c = tvm.nd.array(np.zeros(n, dtype=C.dtype), ctx)
-        print('[PRINTING A]')
-        #d = tvm.nd.array(np.random.uniform(size=n).astype(A.dtype), ctx)
-        #e = tvm.nd.array(np.random.uniform(size=n).astype(A.dtype), ctx)
-        #print(a)
-        #a.copyto(d)
-        #print(d)
-        #d.copyto(e)
-        #print(e)
-        print(a)
-        print('[PRINTING B]')
-        print(b)
-        print('[PRINTING C]')
-        print(c)
-        print('[ADDING]')
-        fadd(a, b, c)
-        print('[PRINTING C]')
-        print(c)
-        tvm.testing.assert_allclose(
-            c.asnumpy(), a.asnumpy() + b.asnumpy())
-    check_c()
+    m = tvm.module.load("fadd.obj", "micro_dev")
+    fadd = m['fadd']
+    ctx = tvm.micro_dev(dev_id=0)
+
+    A = tvm.nd.array(np.random.uniform(size=size).astype(A_dummy.dtype), ctx)
+    B = tvm.nd.array(np.random.uniform(size=size).astype(B_dummy.dtype), ctx)
+    C = tvm.nd.array(np.zeros(size, dtype=C_dummy.dtype), ctx)
+
+    print(f'A = {A}')
+    print(f'B = {B}')
+    print(f'C = {C}')
+    print()
+    input('[enter to continue]')
+    print()
+    print('Computing `C = A + B`...', end='')
+    fadd(A, B, C)
+    print('done')
+    print()
+    input('[enter to continue]')
+    print()
+    print(f'A = {A}')
+    print(f'B = {B}')
+    print(f'C = {C}')
+    print()
+    input('[enter to continue]')
+    print()
+
+    print('Asserting `C = A + B`...', end='')
+    tvm.testing.assert_allclose(
+        C.asnumpy(), A.asnumpy() + B.asnumpy())
+    print('done')
+    print()
+    print('Test Passed')
+
 
 def test_micro_array():
     pass

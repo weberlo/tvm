@@ -44,9 +44,10 @@ class OpenOCDLowLevelDeviceAPI final : public LowLevelDeviceAPI {
 
     // TODO: Make this private.
     // Returns the reply.
-    std::string SendCommand(std::string cmd);
+    std::string SendCommand(std::string cmd, bool verbose=false);
 
     uint8_t* base_addr;
+    uintptr_t args_offs;
 
   private:
     size_t size;
@@ -61,6 +62,8 @@ class OpenOCDLowLevelDeviceAPI final : public LowLevelDeviceAPI {
     static const constexpr size_t kSendBufSize = 4096;
     static const constexpr size_t kReplyBufSize = 4096;
     static const constexpr ssize_t kWordLen = 8;
+
+    void* GetSymbol(const char* name);
 
     inline void* GetOffset(uint8_t* real_addr) {
       return (void*) (real_addr - base_addr);
