@@ -516,7 +516,6 @@ class LoopVectorizer : public IRMutator {
 };
 
 Stmt VectorizeLoop(Stmt stmt) {
-  std::cout << "VECTORIZING LOOP" << std::endl;
   return LoopVectorizer().Mutate(stmt);
 }
 
