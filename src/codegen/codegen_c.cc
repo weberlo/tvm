@@ -752,9 +752,8 @@ void CodeGenC::VisitStmt_(const LetStmt* op) {
       stream << "*)"  << value << ";\n";
     } else {
       PrintType(op->var.type(), this->stream);
-      std::string var_id = AllocVarID(op->var.get());
       this->stream << ' '
-                   << var_id
+                   << AllocVarID(op->var.get())
                    << " = " << value << ";\n";
     }
   }
