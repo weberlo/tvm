@@ -31,9 +31,9 @@ extern "C" {
 #include <stdint.h>
 
 void *(*TVMBackendAllocWorkspace_)(int, int, uint64_t, int, int) =
-    (void *(*)(int, int, uint64_t, int, int)) 1;
-int (*TVMBackendFreeWorkspace_)(int, int, void*) = (int (*)(int, int, void*)) 1;
-void (*TVMAPISetLastError_)(const char*) = (void (*)(const char*)) 1;
+    (void *(*)(int, int, uint64_t, int, int)) 420;
+int (*TVMBackendFreeWorkspace_)(int, int, void*) = (int (*)(int, int, void*)) 420;
+void (*TVMAPISetLastError_)(const char*) = (void (*)(const char*)) 420;
 
 void* TVMBackendAllocWorkspace(int device_type, int device_id, uint64_t size,
     int dtype_code_hint, int dtype_bits_hint) {

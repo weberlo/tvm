@@ -23,54 +23,175 @@
  * \brief openocd low-level device to interface with micro devices over JTAG
  */
 
-#include "low_level_device.h"
+#include "openocd_low_level_device.h"
+
+// IO
+#include<iostream>
+#include<iomanip>
+// Thread Sleeping
+#include <unistd.h>
+
+#include "micro_common.h"
 
 namespace tvm {
 namespace runtime {
 
-// TODO(weberlo): Add implementation for this device.
+// TODO(weberlo): Can we query the device for how much memory it has?
 
-/*!
- * \brief openocd low-level device for uTVM micro devices connected over JTAG
- */
-class OpenOCDLowLevelDevice final : public LowLevelDevice {
- public:
-  /*!
-   * \brief constructor to initialize connection to openocd device
-   * \param port port of the OpenOCD server to connect to
-   */
-  explicit OpenOCDLowLevelDevice(int port);
+OpenOCDLowLevelDevice::OpenOCDLowLevelDevice(int port)
+    : socket_() {
+  socket_.Connect(tvm::common::SockAddr("127.0.0.1", port));
+  socket_.SendCommand("reset halt");
+  // TODO: NO HARDCODE.
+  base_addr_ = DevBaseAddr(0x10010000);
+}
 
-  /*!
-   * \brief destructor to close openocd device connection
-   */
-  ~OpenOCDLowLevelDevice();
+OpenOCDLowLevelDevice::~OpenOCDLowLevelDevice() {
+  // socket_.Close();
+}
 
-  void Write(DevBaseOffset offset,
-             void* buf,
-             size_t num_bytes) final;
+void OpenOCDLowLevelDevice::Write(DevBaseOffset offset, void* buf, size_t num_bytes) {
+  if (num_bytes == 0) {
+    return;
+  }
+  // Clear `input` array.
+  socket_.SendCommand("array unset input");
+  // Build a command to set the value of `input`.
+  {
+    std::stringstream input_set_cmd;
+    input_set_cmd << "array set input { ";
+    char* char_buf = reinterpret_cast<char*>(buf);
+    for (size_t i = 0; i < num_bytes; i++) {
+      // In a Tcl `array set` commmand, we need to pair the array indices with
+      // their values.
+      input_set_cmd << i << " ";
+      // Need to cast to uint, so the number representation of `buf[i]` is
+      // printed, and not the ASCII representation.
+      input_set_cmd << static_cast<uint32_t>(char_buf[i]) << " ";
+    }
+    input_set_cmd << "}";
+    socket_.SendCommand(input_set_cmd.str());
+  }
+  {
+    DevAddr addr = base_addr_ + offset;
+    std::stringstream write_cmd;
+    write_cmd << "array2mem input";
+    write_cmd << " " << std::dec << kWordLen;
+    write_cmd << " 0x" << std::hex << addr.cast_to<uintptr_t>();
+    write_cmd << " " << std::dec << num_bytes;
+    socket_.SendCommand(write_cmd.str());
+  }
+}
 
-  void Read(DevBaseOffset offset,
-            void* buf,
-            size_t num_bytes) final;
-
-  void Execute(DevBaseOffset func_addr, DevBaseOffset breakpoint) final;
-
-  DevBaseAddr base_addr() const final;
-
-  const char* device_type() const final {
-    return "openocd";
+void OpenOCDLowLevelDevice::Read(DevBaseOffset offset, void* buf, size_t num_bytes) {
+  if (num_bytes == 0) {
+    return;
+  }
+  {
+    DevAddr addr = base_addr_ + offset;
+    std::stringstream read_cmd;
+    read_cmd << "mem2array output";
+    read_cmd << " " << std::dec << kWordLen;
+    read_cmd << " 0x" << std::hex << addr.cast_to<uintptr_t>();
+    read_cmd << " " << std::dec << num_bytes;
+    socket_.SendCommand(read_cmd.str());
   }
 
- private:
-  /*! \brief base address of the micro device memory region */
-  DevBaseAddr base_addr_;
-  /*! \brief size of memory region */
-  size_t size_;
-};
+  {
+    std::string reply = socket_.SendCommand("ocd_echo $output");
+    std::stringstream values(reply);
+    char* char_buf = reinterpret_cast<char*>(buf);
+    ssize_t req_bytes_remaining = num_bytes;
+    // TODO: Don't assume the stream has enough values.
+    //bool stream_has_values = true;
+    while (req_bytes_remaining > 0) {
+      // The response from this command pairs indices with the contents of the
+      // memory at that index.
+      uint32_t index;
+      uint32_t val;
+      values >> index;
+      // Read the value into `curr_val`, instead of reading directly into
+      // `buf_iter`, because otherwise it's interpreted as the ASCII value and
+      // not the integral value.
+      values >> val;
+      char_buf[index] = static_cast<uint8_t>(val);
+      req_bytes_remaining--;
+    }
+  }
+    /*
+    ssize_t extra_recv_bytes = 0;
+    while (stream_has_values) {
+      int garbage;
+      values >> garbage;
+      stream_has_values = (values >> garbage);
+      extra_recv_bytes++;
+    }
+    */
+    /*
+    if (extra_recv_bytes > 0) {
+      std::cerr << std::dec << extra_recv_bytes << " more bytes received in "
+        "response than were requested" << std::endl;
+      //std::cerr << "`buf`: ";
+      //for (uint8_t *buf_iter = buf; buf_iter < buf + num_bytes; buf_iter++) {
+      //  std::cerr << " " << std::hex << static_cast<unsigned int>(*buf_iter);
+      //}
+      //std::cerr << std::endl;
+      //std::cerr << "`reply`: " << reply << std::endl;
+    } else if (req_bytes_remaining > 0) {
+      std::cerr << std::dec << req_bytes_remaining << " fewer bytes received in "
+        "response than were requested" << std::endl;
+    }
+    */
+}
+
+void OpenOCDLowLevelDevice::Execute(DevBaseOffset func_offset, DevBaseOffset useless) {
+  // void* args_section = (void *) args_offs;
+  // WriteTVMArgsToStream(args, stream, base_addr, args_offs);
+  // Write(ctx, args_section, (uint8_t*) args_buf.c_str(), (size_t) stream->GetBufferSize());
+
+  // socket_.SendCommand("reset halt", true);
+  socket_.SendCommand("halt 0", true);
+
+  // Set up the stack pointer.  We need to do this every time, because `reset
+  // halt` wipes it out.
+  DevAddr stack_end = stack_top() - 8;
+  std::stringstream sp_set_cmd;
+  sp_set_cmd << "reg sp 0x" << std::hex << stack_end.cast_to<uintptr_t>();
+  socket_.SendCommand(sp_set_cmd.str(), true);
+
+  // Set a breakpoint at the beginning of `UTVMDone`.
+  std::stringstream bp_set_cmd;
+  bp_set_cmd << "bp 0x" << std::hex << breakpoint().cast_to<uintptr_t>() << " 2";
+  socket_.SendCommand(bp_set_cmd.str(), true);
+
+  char tmp;
+  std::cout << "[PRESS ENTER TO CONTINUE]";
+  std::cin >> tmp;
+
+  // DevAddr func_addr = base_addr_ + func_offset;
+  // std::stringstream resume_cmd;
+  // resume_cmd << "resume 0x" << std::hex << func_addr.cast_to<uintptr_t>();
+  // socket_.SendCommand(resume_cmd.str(), true);
+
+  // // size_t millis_to_wait = 10 * 1000;
+  // // std::stringstream wait_halt_cmd;
+  // // resume_cmd << "wait_halt " << std::dec << millis_to_wait;
+  // // socket_.SendCommand(wait_halt_cmd.str(), true);
+  // socket_.SendCommand("wait_halt 10000", true);
+
+  // socket_.SendCommand("halt 0", true);
+
+  // Remove the breakpoint.
+  std::stringstream bp_rm_cmd;
+  bp_rm_cmd << "rbp 0x" << std::hex << breakpoint().cast_to<uintptr_t>();
+  socket_.SendCommand(bp_rm_cmd.str(), true);
+}
 
 const std::shared_ptr<LowLevelDevice> OpenOCDLowLevelDeviceCreate(int port) {
-  return nullptr;
+  std::shared_ptr<LowLevelDevice> lld =
+      std::make_shared<OpenOCDLowLevelDevice>(port);
+  return lld;
 }
+
 }  // namespace runtime
 }  // namespace tvm

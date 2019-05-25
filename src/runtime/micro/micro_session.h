@@ -25,6 +25,7 @@
 #define TVM_RUNTIME_MICRO_MICRO_SESSION_H_
 
 #include "micro_common.h"
+#include "micro_section.h"
 
 #include <tvm/runtime/registry.h>
 #include <tvm/runtime/c_runtime_api.h>
@@ -39,74 +40,6 @@
 
 namespace tvm {
 namespace runtime {
-/*!
- * \brief allocator for a on-device memory section
- */
-class MicroSectionAllocator {
- public:
-  /*!
-   * \brief constructor that specifies section boundaries
-   * \param section_start start address of the section
-   * \param section_end end address of the section (non inclusive)
-   */
-  MicroSectionAllocator(DevBaseOffset section_start, DevBaseOffset section_end)
-    : section_start_(section_start), section_end_(section_end),
-      section_max_(section_start) {
-  }
-
-  /*!
-   * \brief destructor
-   */
-  ~MicroSectionAllocator() {
-  }
-
-  /*!
-   * \brief memory allocator
-   * \param size size of allocated memory in bytes
-   * \return pointer to allocated memory region in section, nullptr if out of space
-   */
-  DevBaseOffset Allocate(size_t size) {
-    CHECK(section_max_.value() + size < section_end_.value())
-        << "out of space in section with start_addr=" << section_start_.value();
-    DevBaseOffset alloc_ptr = section_max_;
-    section_max_ = section_max_ + size;
-    alloc_map_[alloc_ptr.value()] = size;
-    return alloc_ptr;
-  }
-
-  /*!
-   * \brief free prior allocation from section
-   * \param type type of section to allocate in
-   * \param ptr pointer to allocated memory
-   * \note simple allocator scheme, more complex versions will be implemented later
-   */
-  void Free(DevBaseOffset offs) {
-    std::uintptr_t ptr = offs.value();
-    CHECK(alloc_map_.find(ptr) != alloc_map_.end()) << "freed pointer was never allocated";
-    alloc_map_.erase(ptr);
-    if (alloc_map_.empty()) {
-      section_max_ = section_start_;
-    }
-  }
-
-  /*!
-   * \brief obtain the end address of the last allocation
-   * \return pointer immediately following the last allocation
-   */
-  DevBaseOffset section_max() {
-    return section_max_;
-  }
-
- private:
-  /*! \brief start address of the section */
-  DevBaseOffset section_start_;
-  /*! \brief end address of the section */
-  DevBaseOffset section_end_;
-  /*! \brief end address of last allocation */
-  DevBaseOffset section_max_;
-  /*! \brief allocation map for allocation sizes */
-  std::unordered_map<std::uintptr_t, size_t> alloc_map_;
-};
 
 /*!
  * \brief session for facilitating micro device interaction
@@ -181,6 +114,18 @@ class MicroSession {
   BinaryInfo LoadBinary(std::string binary_path);
 
   /*!
+  * \brief TODO
+  */
+  template <typename T>
+  T DevSymbolRead(SymbolMap& symbol_map, const std::string& symbol);
+
+  /*!
+  * \brief TODO
+  */
+  template <typename T>
+  void PrintSymbol(SymbolMap& symbol_map, const std::string& symbol);
+
+  /*!
    * \brief returns low-level device pointer
    * \note assumes low-level device has been initialized
    */
@@ -196,28 +141,20 @@ class MicroSession {
  private:
   /*! \brief low-level device pointer */
   std::shared_ptr<LowLevelDevice> low_level_device_;
-  /*! \brief text section allocator */
-  std::unique_ptr<MicroSectionAllocator> text_allocator_;
-  /*! \brief rodata section allocator */
-  std::unique_ptr<MicroSectionAllocator> rodata_allocator_;
-  /*! \brief data section allocator */
-  std::unique_ptr<MicroSectionAllocator> data_allocator_;
-  /*! \brief bss section allocator */
-  std::unique_ptr<MicroSectionAllocator> bss_allocator_;
-  /*! \brief args section allocator */
-  std::unique_ptr<MicroSectionAllocator> args_allocator_;
-  /*! \brief stack section allocator */
-  std::unique_ptr<MicroSectionAllocator> stack_allocator_;
-  /*! \brief heap section allocator */
-  std::unique_ptr<MicroSectionAllocator> heap_allocator_;
+  /*! \brief TODO */
+  std::string binutil_prefix_;
+  /*! \brief TODO */
+  std::shared_ptr<MicroSection> sections_[static_cast<size_t>(SectionKind::kNumKinds)];
+  /*! \brief TODO */
+  size_t memory_size_;
   /*! \brief init stub binary info */
   BinaryInfo init_stub_info_;
   /*! \brief path to init stub source code */
   std::string init_binary_path_;
   /*! \brief offset of the init stub entry function */
-  DevBaseOffset utvm_main_symbol_addr_;
+  DevBaseOffset utvm_main_symbol_;
   /*! \brief offset of the init stub exit breakpoint */
-  DevBaseOffset utvm_done_symbol_addr_;
+  DevBaseOffset utvm_done_symbol_;
 
   /*!
    * \brief sets up and loads init stub into the low-level device memory
@@ -251,6 +188,10 @@ class MicroSession {
    * \brief checks and logs if there was an error during the device's most recent execution
    */
   void CheckDeviceError();
+
+  std::shared_ptr<MicroSection> GetSection(SectionKind kind) {
+    return sections_[static_cast<size_t>(kind)];
+  };
 };
 }  // namespace runtime
 }  // namespace tvm

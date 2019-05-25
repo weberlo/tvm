@@ -31,6 +31,7 @@ from .._ffi.libinfo import find_include_path
 from .cross_compile import create_lib
 
 SUPPORTED_DEVICE_TYPES = ["host", "openocd"]
+TEMPDIR_REFS = []
 
 class Session:
     """MicroTVM Session
@@ -102,6 +103,9 @@ class Session:
         temp_dir = util.tempdir()
         # Save module source to temp file.
         lib_src_path = temp_dir.relpath("dev_lib.c")
+        global TEMPDIR_REFS
+        TEMPDIR_REFS.append(temp_dir)
+        print("src path is \"{}\"".format(lib_src_path))
         mod_src = c_mod.get_source()
         with open(lib_src_path, "w") as f:
             f.write(mod_src)

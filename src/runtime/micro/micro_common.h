@@ -34,19 +34,27 @@
 
 namespace tvm {
 namespace runtime {
+
 /*!
  * \brief enum of device memory region sections
+ *
+ * The order in which the enum variants are defined also defines the order of
+ * the sections in device memory.
  */
-enum class SectionKind : int {
+enum class SectionKind : size_t {
   kText = 0,
-  kRodata = 1,
-  kData = 2,
-  kBss = 3,
-  kArgs = 4,
-  kStack = 5,
-  kHeap = 6,
-  kWorkspace = 7,
+  kRodata,
+  kData,
+  kBss,
+  kArgs,
+  kStack,
+  kHeap,
+  kWorkspace,
+  kNumKinds,
 };
+
+/*! \brief default size alignment */
+constexpr int kDefaultSizeAlignment = 8;
 
 // TODO(weberlo): Do we only need a device location class? Think about pros/cons.
 // It seems that offsets don't semantically fit in the class of device pointers.
@@ -84,6 +92,7 @@ class DeviceLocation {
 
   /*! \brief check if location is null */
   bool operator==(std::nullptr_t) const { return value_ == 0; }
+
   /*! \brief check if location is not null */
   bool operator!=(std::nullptr_t) const { return value_ != 0; }
 
@@ -109,10 +118,19 @@ class DevAddr : public DeviceLocation {
   explicit DevAddr(std::nullptr_t val) : DeviceLocation(val) {}
 
   /*! \brief subtract a base address from an absolute address to get a base offset */
-  DevBaseOffset operator-(DevBaseAddr base);
+  DevBaseOffset operator-(DevBaseAddr base) const;
 
   /*! \brief add an integer to an absolute address to get an absolute address */
-  DevAddr operator+(size_t n);
+  DevAddr operator+(size_t n) const;
+
+  /*! \brief TODO */
+  DevAddr& operator+=(size_t n);
+
+  /*! \brief TODO */
+  DevAddr operator-(size_t n) const;
+
+  /*! \brief TODO */
+  DevAddr& operator-=(size_t n);
 };
 
 /*! \brief base address of the device */
@@ -128,7 +146,7 @@ class DevBaseAddr : public DeviceLocation {
   explicit DevBaseAddr(std::nullptr_t value) : DeviceLocation(value) {}
 
   /*! \brief add a base address with a base offset to get an absolute address */
-  DevAddr operator+(DevBaseOffset offset);
+  DevAddr operator+(DevBaseOffset offset) const;
 };
 
 /*! \brief offset from device base address */
@@ -144,10 +162,19 @@ class DevBaseOffset : public DeviceLocation {
   explicit DevBaseOffset(std::nullptr_t value) : DeviceLocation(value) {}
 
   /*! \brief add a base offset to a base address to get an absolute address */
-  DevAddr operator+(DevBaseAddr base);
+  DevAddr operator+(DevBaseAddr base) const;
 
   /*! \brief add an integer to a base offset to increase the offset */
-  DevBaseOffset operator+(size_t n);
+  DevBaseOffset operator+(size_t n) const;
+
+  /*! \brief TODO */
+  DevBaseOffset& operator+=(size_t n);
+
+  /*! \brief TODO */
+  DevBaseOffset operator-(size_t n) const;
+
+  /*! \brief TODO */
+  DevBaseOffset& operator-=(size_t n);
 };
 
 /*!
@@ -165,13 +192,13 @@ class SymbolMap {
    * \param binary contents of binary object file
    * \param base_addr base address of the target device
    */
-  SymbolMap(const std::string& binary, DevBaseAddr base_addr) {
+  SymbolMap(const std::string& binary, DevBaseAddr base_addr, const std::string& binutil_prefix) {
     const auto* f = Registry::Get("tvm_callback_get_symbol_map");
     CHECK(f != nullptr) << "require tvm_callback_get_symbol_map to exist in registry";
     TVMByteArray arr;
     arr.data = &binary[0];
     arr.size = binary.length();
-    std::string map_str = (*f)(arr);
+    std::string map_str = (*f)(arr, binutil_prefix);
     // Parse symbols and addresses from returned string.
     std::stringstream stream;
     stream << map_str;
@@ -228,38 +255,12 @@ struct BinaryInfo {
 /*! \brief number of bytes in each page */
 constexpr int kPageSize = 4096;
 
-// TODO(weberlo): We need to allow configurable memory layouts by the user, and
-// the constants below should be made into defaults.
+const DevBaseOffset kDeviceStart = DevBaseOffset(64);
 
-/*! \brief memory offset at which text section starts  */
-const DevBaseOffset kTextStart = DevBaseOffset(64);
-
-/*! \brief memory offset at which rodata section starts  */
-const DevBaseOffset kRodataStart = DevBaseOffset(500000000);
-
-/*! \brief memory offset at which data section starts  */
-const DevBaseOffset kDataStart = DevBaseOffset(1000000000);
-
-/*! \brief memory offset at which bss section starts  */
-const DevBaseOffset kBssStart = DevBaseOffset(1500000000);
-
-/*! \brief memory offset at which args section starts  */
-const DevBaseOffset kArgsStart = DevBaseOffset(2000000000);
-
-/*! \brief memory offset at which stack section starts  */
-const DevBaseOffset kStackStart = DevBaseOffset(3000000000);
-
-/*! \brief memory offset at which heap section starts  */
-const DevBaseOffset kHeapStart = DevBaseOffset(3500000000);
-
-/*! \brief memory offset at which workspace section starts  */
-const DevBaseOffset kWorkspaceStart = DevBaseOffset(4000000000);
-
-/*! \brief total memory size */
-constexpr uint64_t kMemorySize = 45000000000;
-
-/*! \brief default size alignment */
-constexpr int kDefaultSizeAlignment = 8;
+/*!
+ * \brief return default size of given section kind in bytes
+ */
+size_t GetDefaultSectionSize(SectionKind kind);
 
 /*!
  * \brief upper-aligns value according to specified alignment
@@ -285,32 +286,40 @@ const char* SectionToString(SectionKind section);
  * \param rodata new rodata section address
  * \param data new data section address
  * \param bss new bss section address
+ * \param binutil_prefix TODO
  * \return relocated binary file contents
  */
 std::string RelocateBinarySections(const std::string& binary_name,
                                    DevAddr text,
                                    DevAddr rodata,
                                    DevAddr data,
-                                   DevAddr bss);
+                                   DevAddr bss,
+                                   const std::string& binutil_prefix);
 
 /*!
  * \brief reads section from binary
  * \param binary input binary contents
  * \param section section type to be read
+ * \param binutil_prefix TODO
  * \return contents of the section
  */
-std::string ReadSection(const std::string& binary, SectionKind section);
+std::string ReadSection(const std::string& binary,
+                        SectionKind section,
+                        const std::string& binutil_prefix);
 
 /*!
  * \brief finds size of the section in the binary
  * \param binary input binary contents
  * \param section section type
  * \param align alignment of the returned size (default: 8)
+ * \param binutil_prefix TODO
  * \return size of the section if it exists, 0 otherwise
  */
 size_t GetSectionSize(const std::string& binary_name,
                       SectionKind section,
+                      const std::string& binutil_prefix,
                       size_t align = kDefaultSizeAlignment);
+
 }  // namespace runtime
 }  // namespace tvm
 #endif  // TVM_RUNTIME_MICRO_MICRO_COMMON_H_

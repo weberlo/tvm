@@ -186,8 +186,113 @@ def test_resnet_pretrained():
         assert prediction == "tiger cat"
 
 
+def test_openocd_add():
+    """Test a program which performs addition."""
+    shape = (4,)
+    dtype = "float32"
+
+    # Construct TVM expression.
+    tvm_shape = tvm.convert(shape)
+    A = tvm.placeholder(tvm_shape, name="A", dtype=dtype)
+    B = tvm.placeholder(tvm_shape, name="B", dtype=dtype)
+    C = tvm.compute(A.shape, lambda *i: A(*i) + B(*i), name="C")
+    s = tvm.create_schedule(C.op)
+
+    func_name = "fadd"
+    c_mod = tvm.build(s, [A, B, C], target="c", name=func_name)
+
+    print("-----------------------------[INITIALIZING]------------------------------------")
+    with micro.Session("openocd", "riscv64-unknown-elf-", port=6666) as sess:
+        micro_mod = sess.create_micro_mod(c_mod)
+        micro_func = micro_mod[func_name]
+        ctx = tvm.micro_dev(0)
+        # print("-----------------------------[SETTING TENSORS]--------------------------------------")
+        # print("[Tensor A]")
+        a = tvm.nd.array(np.random.uniform(size=shape).astype(dtype), ctx)
+        # input("[press enter to continue]")
+        # print("[Tensor B]")
+        b = tvm.nd.array(np.random.uniform(size=shape).astype(dtype), ctx)
+        # input("[press enter to continue]")
+        # print("[Tensor C]")
+        c = tvm.nd.array(np.zeros(shape, dtype=dtype), ctx)
+        # input("[press enter to continue]")
+        print("-----------------------------[PRINTING TENSORS (PRE-RUN)]--------------------------------------")
+        print("[Tensor A]")
+        print(a)
+        # input("[press enter to continue]")
+        print("[Tensor B]")
+        print(b)
+        # input("[press enter to continue]")
+        print("[Tensor C]")
+        print(c)
+        # input("[press enter to continue]")
+        print("-----------------------------[RUNNING]--------------------------------------")
+        micro_func(a, b, c)
+        print("-----------------------------[PRINTING TENSORS (POST-RUN)]--------------------------------------")
+        print("[Tensor A]")
+        print(a)
+        print("[Tensor B]")
+        print(b)
+        print("[Tensor C]")
+        print(c)
+        # NOTE: segfault occurring during garbage collection? must be a C++ destructor
+
+        tvm.testing.assert_allclose(
+            c.asnumpy(), a.asnumpy() + b.asnumpy())
+
+
+def test_openocd_workspace_add():
+    """Test a program which uses a workspace."""
+    # shape = (4,)
+    # shape = (255,)
+    shape = (256,)
+    dtype = "float32"
+
+    # Construct TVM expression.
+    tvm_shape = tvm.convert(shape)
+    A = tvm.placeholder(tvm_shape, name="A", dtype=dtype)
+    B = tvm.placeholder(tvm_shape, name="B", dtype=dtype)
+    B = tvm.compute(A.shape, lambda *i: A(*i) + 1, name="B")
+    C = tvm.compute(A.shape, lambda *i: B(*i) + 1, name="C")
+    s = tvm.create_schedule(C.op)
+
+    func_name = "fadd_two_workspace"
+    c_mod = tvm.build(s, [A, C], target="c", name=func_name)
+
+    with micro.Session("openocd", "riscv64-unknown-elf-", port=6666) as sess:
+        micro_mod = sess.create_micro_mod(c_mod)
+        micro_func = micro_mod[func_name]
+        ctx = tvm.micro_dev(0)
+        a = tvm.nd.array(np.random.uniform(size=shape).astype(dtype), ctx)
+        c = tvm.nd.array(np.zeros(shape, dtype=dtype), ctx)
+
+        print("-----------------------------[PRINTING TENSORS (PRE-RUN)]--------------------------------------")
+        print("[Tensor A]")
+        print(a)
+        # input("[press enter to continue]")
+        print("[Tensor C]")
+        print(c)
+        # input("[press enter to continue]")
+        print("-----------------------------[RUNNING]--------------------------------------")
+        micro_func(a, c)
+        print("-----------------------------[PRINTING TENSORS (POST-RUN)]--------------------------------------")
+        print("[Tensor A]")
+        print(a)
+        print("[Tensor C]")
+        print(c)
+
+        tvm.testing.assert_allclose(
+                c.asnumpy(), a.asnumpy() + 2.0)
+
+
+
 if __name__ == "__main__":
-    test_add()
-    test_workspace_add()
-    test_graph_runtime()
-    test_resnet_random()
+    # test_add()
+    # test_workspace_add()
+    # test_graph_runtime()
+    # test_resnet_random()
+    # TODO(weberlo): Uncomment this test (or add it as a tutorial?)
+    # test_resnet_pretrained()
+
+    test_openocd_add()
+    # test_openocd_workspace_add()
