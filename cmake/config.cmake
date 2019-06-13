@@ -63,7 +63,7 @@ set(USE_VULKAN OFF)
 set(USE_OPENGL OFF)
 
 # Whether enable Micro runtime
-set(USE_MICRO OFF)
+set(USE_MICRO ON)
 
 # Whether to enable SGX runtime
 #
