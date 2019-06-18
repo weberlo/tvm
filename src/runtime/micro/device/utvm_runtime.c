@@ -32,6 +32,7 @@ UTVMTask task;
 
 // These pointers are patched at load time to point to the workspace section.
 char *utvm_workspace_begin = (char*) 420;  // NOLINT(*)
+char *utvm_workspace_end = (char*) 420;  // NOLINT(*)
 char *utvm_workspace_curr = (char*) 420;  // NOLINT(*)
 // Keep track of how many active allocations there are on the workspace.
 size_t num_active_allocs = 420;
@@ -46,6 +47,7 @@ void UTVMDone() {
 }
 
 void UTVMMain() {
+  utvm_workspace_curr = utvm_workspace_begin;
   num_active_allocs = 0;
   last_error = (char*) 0;
   return_code = 0;

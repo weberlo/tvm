@@ -91,14 +91,18 @@ void MicroSession::InitSession(const TVMArgs& args) {
     ocd_device->SetStackTop(stack_section->max_end_offset());
   }
 
+  // TODO(weberlo): Make `DevSymbolWrite` func?
   // Patch workspace pointers to the start of the workspace section.
   DevBaseOffset workspace_start_hole_offset = init_symbol_map()["utvm_workspace_begin"];
-  DevBaseOffset workspace_curr_hole_offset = init_symbol_map()["utvm_workspace_curr"];
-  DevBaseOffset workspace_start = GetSection(SectionKind::kWorkspace)->start_offset();
-  void* workspace_hole_fill =
-      (workspace_start + low_level_device_->base_addr().value()).cast_to<void*>();
-  low_level_device()->Write(workspace_start_hole_offset, &workspace_hole_fill, sizeof(void*));
-  low_level_device()->Write(workspace_curr_hole_offset, &workspace_hole_fill, sizeof(void*));
+  DevBaseOffset workspace_end_hole_offset = init_symbol_map()["utvm_workspace_end"];
+  DevBaseOffset workspace_start_offset = GetSection(SectionKind::kWorkspace)->start_offset();
+  DevBaseOffset workspace_end_offset = GetSection(SectionKind::kWorkspace)->max_end_offset();
+  void* workspace_start_addr =
+      (workspace_start_offset + low_level_device_->base_addr()).cast_to<void*>();
+  void* workspace_end_addr =
+      (workspace_end_offset + low_level_device_->base_addr()).cast_to<void*>();
+  low_level_device()->Write(workspace_start_hole_offset, &workspace_start_addr, sizeof(void*));
+  low_level_device()->Write(workspace_end_hole_offset, &workspace_end_addr, sizeof(void*));
 }
 
 void MicroSession::EndSession() {

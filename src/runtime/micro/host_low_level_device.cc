@@ -46,14 +46,14 @@ HostLowLevelDevice::~HostLowLevelDevice() {
   munmap(base_addr_.cast_to<void*>(), size_);
 }
 
-void HostLowLevelDevice::Write(DevBaseOffset offset, void* buf, size_t num_bytes) {
-  void* addr = (offset + base_addr_).cast_to<void*>();
-  std::memcpy(addr, buf, num_bytes);
-}
-
 void HostLowLevelDevice::Read(DevBaseOffset offset, void* buf, size_t num_bytes) {
   void* addr = (offset + base_addr_).cast_to<void*>();
   std::memcpy(buf, addr, num_bytes);
+}
+
+void HostLowLevelDevice::Write(DevBaseOffset offset, void* buf, size_t num_bytes) {
+  void* addr = (offset + base_addr_).cast_to<void*>();
+  std::memcpy(addr, buf, num_bytes);
 }
 
 void HostLowLevelDevice::Execute(DevBaseOffset func_offset, DevBaseOffset breakpoint) {

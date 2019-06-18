@@ -50,39 +50,6 @@ OpenOCDLowLevelDevice::~OpenOCDLowLevelDevice() {
   // socket_.Close();
 }
 
-void OpenOCDLowLevelDevice::Write(DevBaseOffset offset, void* buf, size_t num_bytes) {
-  if (num_bytes == 0) {
-    return;
-  }
-  // Clear `input` array.
-  socket_.SendCommand("array unset input");
-  // Build a command to set the value of `input`.
-  {
-    std::stringstream input_set_cmd;
-    input_set_cmd << "array set input { ";
-    char* char_buf = reinterpret_cast<char*>(buf);
-    for (size_t i = 0; i < num_bytes; i++) {
-      // In a Tcl `array set` commmand, we need to pair the array indices with
-      // their values.
-      input_set_cmd << i << " ";
-      // Need to cast to uint, so the number representation of `buf[i]` is
-      // printed, and not the ASCII representation.
-      input_set_cmd << static_cast<uint32_t>(char_buf[i]) << " ";
-    }
-    input_set_cmd << "}";
-    socket_.SendCommand(input_set_cmd.str());
-  }
-  {
-    DevAddr addr = base_addr_ + offset;
-    std::stringstream write_cmd;
-    write_cmd << "array2mem input";
-    write_cmd << " " << std::dec << kWordLen;
-    write_cmd << " 0x" << std::hex << addr.cast_to<uintptr_t>();
-    write_cmd << " " << std::dec << num_bytes;
-    socket_.SendCommand(write_cmd.str());
-  }
-}
-
 void OpenOCDLowLevelDevice::Read(DevBaseOffset offset, void* buf, size_t num_bytes) {
   if (num_bytes == 0) {
     return;
@@ -118,38 +85,42 @@ void OpenOCDLowLevelDevice::Read(DevBaseOffset offset, void* buf, size_t num_byt
       req_bytes_remaining--;
     }
   }
-    /*
-    ssize_t extra_recv_bytes = 0;
-    while (stream_has_values) {
-      int garbage;
-      values >> garbage;
-      stream_has_values = (values >> garbage);
-      extra_recv_bytes++;
+}
+
+void OpenOCDLowLevelDevice::Write(DevBaseOffset offset, void* buf, size_t num_bytes) {
+  if (num_bytes == 0) {
+    return;
+  }
+  // Clear `input` array.
+  socket_.SendCommand("array unset input");
+  // Build a command to set the value of `input`.
+  {
+    std::stringstream input_set_cmd;
+    input_set_cmd << "array set input { ";
+    char* char_buf = reinterpret_cast<char*>(buf);
+    for (size_t i = 0; i < num_bytes; i++) {
+      // In a Tcl `array set` commmand, we need to pair the array indices with
+      // their values.
+      input_set_cmd << i << " ";
+      // Need to cast to uint, so the number representation of `buf[i]` is
+      // printed, and not the ASCII representation.
+      input_set_cmd << static_cast<uint32_t>(char_buf[i]) << " ";
     }
-    */
-    /*
-    if (extra_recv_bytes > 0) {
-      std::cerr << std::dec << extra_recv_bytes << " more bytes received in "
-        "response than were requested" << std::endl;
-      //std::cerr << "`buf`: ";
-      //for (uint8_t *buf_iter = buf; buf_iter < buf + num_bytes; buf_iter++) {
-      //  std::cerr << " " << std::hex << static_cast<unsigned int>(*buf_iter);
-      //}
-      //std::cerr << std::endl;
-      //std::cerr << "`reply`: " << reply << std::endl;
-    } else if (req_bytes_remaining > 0) {
-      std::cerr << std::dec << req_bytes_remaining << " fewer bytes received in "
-        "response than were requested" << std::endl;
-    }
-    */
+    input_set_cmd << "}";
+    socket_.SendCommand(input_set_cmd.str());
+  }
+  {
+    DevAddr addr = base_addr_ + offset;
+    std::stringstream write_cmd;
+    write_cmd << "array2mem input";
+    write_cmd << " " << std::dec << kWordLen;
+    write_cmd << " 0x" << std::hex << addr.cast_to<uintptr_t>();
+    write_cmd << " " << std::dec << num_bytes;
+    socket_.SendCommand(write_cmd.str());
+  }
 }
 
 void OpenOCDLowLevelDevice::Execute(DevBaseOffset func_offset, DevBaseOffset useless) {
-  // void* args_section = (void *) args_offs;
-  // WriteTVMArgsToStream(args, stream, base_addr, args_offs);
-  // Write(ctx, args_section, (uint8_t*) args_buf.c_str(), (size_t) stream->GetBufferSize());
-
-  // socket_.SendCommand("reset halt", true);
   socket_.SendCommand("halt 0", true);
 
   // Set up the stack pointer.  We need to do this every time, because `reset
