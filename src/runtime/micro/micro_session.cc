@@ -35,11 +35,13 @@
 namespace tvm {
 namespace runtime {
 
-MicroSession::MicroSession() { }
+MicroSession::MicroSession() : valid_(false) { }
 
 MicroSession::~MicroSession() { }
 
 void MicroSession::InitSession(const TVMArgs& args) {
+  valid_ = true;
+
   DevBaseOffset curr_start_offset = kDeviceStart;
   for (size_t i = 0; i < static_cast<size_t>(SectionKind::kNumKinds); i++) {
     size_t section_size = GetDefaultSectionSize(static_cast<SectionKind>(i));
@@ -51,8 +53,8 @@ void MicroSession::InitSession(const TVMArgs& args) {
   }
   memory_size_ = curr_start_offset.cast_to<size_t>();
 
-  std::string device_type = args[0];
-  std::string binary_path = args[1];
+  const std::string& device_type = args[0];
+  const std::string& binary_path = args[1];
   // TODO(weberlo): make device type enum
   if (device_type == "host") {
     low_level_device_ = HostLowLevelDeviceCreate(memory_size_);
@@ -106,13 +108,15 @@ void MicroSession::InitSession(const TVMArgs& args) {
 }
 
 void MicroSession::EndSession() {
-  // text_allocator_ = nullptr;
-  // rodata_allocator_ = nullptr;
-  // data_allocator_ = nullptr;
-  // bss_allocator_ = nullptr;
-  // args_allocator_ = nullptr;
-  // stack_allocator_ = nullptr;
-  // heap_allocator_ = nullptr;
+  valid_ = false;
+
+  text_allocator_ = nullptr;
+  rodata_allocator_ = nullptr;
+  data_allocator_ = nullptr;
+  bss_allocator_ = nullptr;
+  args_allocator_ = nullptr;
+  stack_allocator_ = nullptr;
+  heap_allocator_ = nullptr;
 
   low_level_device_ = nullptr;
 }
@@ -199,10 +203,14 @@ BinaryInfo MicroSession::LoadBinary(std::string binary_path) {
         bss.start != nullptr) << "not enough space to load module on device";
   const DevBaseAddr base_addr = low_level_device_->base_addr();
   std::cout << "[LoadBinary]" << std::endl;
-  std::cout << "  text: start=" << text.start.cast_to<void*>() << ", size=" << std::dec << text.size << std::endl;
-  std::cout << "  rodata: start=" << rodata.start.cast_to<void*>() << ", size=" << std::dec << rodata.size << std::endl;
-  std::cout << "  data: start=" << data.start.cast_to<void*>() << ", size=" << std::dec << data.size << std::endl;
-  std::cout << "  bss: start=" << bss.start.cast_to<void*>() << ", size=" << std::dec << bss.size << std::endl;
+  std::cout << "  text: start=" << text.start.cast_to<void*>() << ", size=" << std::dec << text.size
+            << std::endl;
+  std::cout << "  rodata: start=" << rodata.start.cast_to<void*>() << ", size=" << std::dec
+            << rodata.size << std::endl;
+  std::cout << "  data: start=" << data.start.cast_to<void*>() << ", size=" << std::dec << data.size
+            << std::endl;
+  std::cout << "  bss: start=" << bss.start.cast_to<void*>() << ", size=" << std::dec << bss.size
+            << std::endl;
 
   std::string relocated_bin = RelocateBinarySections(
       binary_path,
@@ -246,8 +254,18 @@ DevAddr MicroSession::EncoderAppend(TargetDataLayoutEncoder* encoder, const TVMA
     switch (type_codes[i]) {
       case kNDArrayContainer:
       case kArrayHandle: {
-        TVMArray* arr_handle = args[i];
-        void* arr_ptr = EncoderAppend(encoder, *arr_handle).cast_to<void*>();
+        TVMArray* base_arr_handle = args[i];
+        // All uTVM arrays store a `DeviceSpace` struct in their `data` field,
+        // which wraps the actual data and stores a reference to the session, in
+        // order to prevent premature session destruction.
+        void* old_data = base_arr_handle->data;
+        // Mutate the array to unwrap the `data` field.
+        base_arr_handle->data = reinterpret_cast<DeviceSpace*>(old_data)->data;
+        // Now, encode the unwrapped version.
+        void* arr_ptr = EncoderAppend(encoder, *base_arr_handle).cast_to<void*>();
+        // And restore the original wrapped version.
+        base_arr_handle->data = old_data;
+
         TVMValue val;
         val.v_handle = arr_ptr;
         tvm_vals_slot.WriteValue(val);
@@ -349,7 +367,7 @@ void MicroSession::PrintSymbol(SymbolMap& symbol_map, const std::string& symbol)
 // initializes micro session and low-level device from Python frontend
 TVM_REGISTER_GLOBAL("micro._InitSession")
 .set_body([](TVMArgs args, TVMRetValue* rv) {
-    std::shared_ptr<MicroSession> session = MicroSession::Global();
+    std::shared_ptr<MicroSession> session = MicroSession::Global(true);
     session->InitSession(args);
     });
 
