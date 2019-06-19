@@ -44,6 +44,7 @@ OpenOCDLowLevelDevice::OpenOCDLowLevelDevice(int port)
   socket_.SendCommand("reset halt");
   // TODO: NO HARDCODE.
   base_addr_ = DevBaseAddr(0x10010000);
+  CHECK(base_addr_.value() % 8 == 0) << "base address not aligned to 8 bytes";
 }
 
 OpenOCDLowLevelDevice::~OpenOCDLowLevelDevice() {
@@ -69,20 +70,30 @@ void OpenOCDLowLevelDevice::Read(DevBaseOffset offset, void* buf, size_t num_byt
     std::stringstream values(reply);
     char* char_buf = reinterpret_cast<char*>(buf);
     ssize_t req_bytes_remaining = num_bytes;
-    // TODO: Don't assume the stream has enough values.
-    //bool stream_has_values = true;
+    // TODO(weberlo): Don't assume the stream has enough values.
+    // bool stream_has_values = true;
+    uint32_t index;
+    uint32_t val;
     while (req_bytes_remaining > 0) {
+      if (num_bytes == 4) {
+        std::cout << index << ", ";
+      }
       // The response from this command pairs indices with the contents of the
       // memory at that index.
-      uint32_t index;
-      uint32_t val;
       values >> index;
+      CHECK(index < num_bytes) << "index " << index << " out of bounds (length " << num_bytes << ")";
       // Read the value into `curr_val`, instead of reading directly into
       // `buf_iter`, because otherwise it's interpreted as the ASCII value and
       // not the integral value.
       values >> val;
       char_buf[index] = static_cast<uint8_t>(val);
       req_bytes_remaining--;
+    }
+    uint32_t check_index;
+    values >> check_index;
+    CHECK(check_index != index) << "more data in response than requested";
+    if (num_bytes == 4) {
+      std::cout << index << std::endl;
     }
   }
 }
@@ -135,22 +146,17 @@ void OpenOCDLowLevelDevice::Execute(DevBaseOffset func_offset, DevBaseOffset use
   bp_set_cmd << "bp 0x" << std::hex << breakpoint().cast_to<uintptr_t>() << " 2";
   socket_.SendCommand(bp_set_cmd.str(), true);
 
-  char tmp;
-  std::cout << "[PRESS ENTER TO CONTINUE]";
-  std::cin >> tmp;
+  // char tmp;
+  // std::cout << "[PRESS ENTER TO CONTINUE]";
+  // std::cin >> tmp;
 
-  // DevAddr func_addr = base_addr_ + func_offset;
-  // std::stringstream resume_cmd;
-  // resume_cmd << "resume 0x" << std::hex << func_addr.cast_to<uintptr_t>();
-  // socket_.SendCommand(resume_cmd.str(), true);
+  DevAddr func_addr = base_addr_ + func_offset;
+  std::stringstream resume_cmd;
+  resume_cmd << "resume 0x" << std::hex << func_addr.cast_to<uintptr_t>();
+  socket_.SendCommand(resume_cmd.str(), true);
 
-  // // size_t millis_to_wait = 10 * 1000;
-  // // std::stringstream wait_halt_cmd;
-  // // resume_cmd << "wait_halt " << std::dec << millis_to_wait;
-  // // socket_.SendCommand(wait_halt_cmd.str(), true);
-  // socket_.SendCommand("wait_halt 10000", true);
-
-  // socket_.SendCommand("halt 0", true);
+  socket_.SendCommand("wait_halt 10000", true);
+  socket_.SendCommand("halt 0", true);
 
   // Remove the breakpoint.
   std::stringstream bp_rm_cmd;

@@ -124,6 +124,12 @@ class MicroSession {
   T DevSymbolRead(SymbolMap& symbol_map, const std::string& symbol);
 
   /*!
+   * \brief TODO
+   */
+  template <typename T>
+  void DevSymbolWrite(SymbolMap& symbol_map, const std::string& symbol, T& value);
+
+  /*!
   * \brief TODO
   */
   template <typename T>

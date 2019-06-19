@@ -42,7 +42,9 @@ class MicroSection {
   MicroSection(SectionLocation location)
     : start_offset_(location.start),
       size_(0),
-      capacity_(location.size) { }
+      capacity_(location.size) {
+      CHECK(start_offset_.value() % 8 == 0) << "micro section not aligned to 8 bytes";
+    }
 
   /*!
    * \brief destructor
@@ -55,6 +57,7 @@ class MicroSection {
    * \return pointer to allocated memory region in section, nullptr if out of space
    */
   DevBaseOffset Allocate(size_t size) {
+    size_ = UpperAlignValue(size_, 8);
     CHECK(size_ + size < capacity_)
         << "cannot alloc " << size << " bytes in section with start_addr " <<
         start_offset_.value();

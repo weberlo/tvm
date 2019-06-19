@@ -93,7 +93,8 @@ def tvm_callback_get_section_size(binary_path, section_name, binutil_prefix):
         #     section_size += entry_size
         if entry_name in sections_to_sum:
             section_size += entry_size
-    return section_size + 16
+    # return section_size + 16
+    return section_size + 32
 
 
 AYY = False

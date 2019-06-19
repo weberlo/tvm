@@ -49,7 +49,7 @@ void UTVMDone() {
 void UTVMMain() {
   utvm_workspace_curr = utvm_workspace_begin;
   num_active_allocs = 0;
-  last_error = (char*) 0;
+  last_error = (char*) 0;  // NOLINT(*)
   return_code = 0;
   return_code = task.func((void*) task.args->values, (void*) task.args->type_codes,  // NOLINT(*)
                           task.args->num_args);
@@ -61,6 +61,10 @@ void* TVMBackendAllocWorkspace(int device_type, int device_id, uint64_t size,
   // TODO(weberlo): check that allocation is within bounds.
   // Align up to 8 bytes.
   utvm_workspace_curr += (8 - ((uintptr_t) utvm_workspace_curr % 8)) % 8;  // NOLINT(*)
+  if (utvm_workspace_curr + size > utvm_workspace_end) {
+    // Out of space in workspace.
+    return NULL;
+  }
   void* ret_ptr = (void*) utvm_workspace_curr;  // NOLINT(*)
   utvm_workspace_curr += size;
   num_active_allocs++;
