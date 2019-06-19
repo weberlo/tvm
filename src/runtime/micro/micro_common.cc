@@ -87,9 +87,9 @@ DevBaseOffset DevBaseOffset::operator-(size_t n) const {
 size_t GetDefaultSectionSize(SectionKind kind) {
   switch (kind) {
     case SectionKind::kText:
-      return 0xF000;
+      return 0xF0000;
     case SectionKind::kRodata:
-      return 0xF00;
+      return 0xF000;
     case SectionKind::kData:
       return 0xF00;
     case SectionKind::kBss:
@@ -99,7 +99,7 @@ size_t GetDefaultSectionSize(SectionKind kind) {
     case SectionKind::kStack:
       return 0xF000;
     case SectionKind::kHeap:
-      return 0xF00000;
+      return 0xF000000;
     case SectionKind::kWorkspace:
       return 0xF00000;
     default:

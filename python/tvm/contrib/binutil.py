@@ -74,7 +74,6 @@ def tvm_callback_get_section_size(binary_path, section_name, binutil_prefix):
         ".bss": [".bss", ".sbss", ".sdata"],
     }
     sections_to_sum = SECTION_MAPPING["." + section_name]
-    print(size_output)
     section_size = 0
     # Skip the first two header lines in the `size` output.
     for line in size_output.split("\n")[2:]:
@@ -93,6 +92,7 @@ def tvm_callback_get_section_size(binary_path, section_name, binutil_prefix):
         #     section_size += entry_size
         if entry_name in sections_to_sum:
             section_size += entry_size
+    # TODO(weberlo): remove any constant multiplier and calculate it correctly.
     # return section_size + 16
     return section_size + 32
 

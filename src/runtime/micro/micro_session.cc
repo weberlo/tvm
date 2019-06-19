@@ -40,11 +40,13 @@ MicroSession::MicroSession() : valid_(false) { }
 MicroSession::~MicroSession() { }
 
 void MicroSession::InitSession(const TVMArgs& args) {
+  std::cout << "[InitSession]" << std::endl;
   valid_ = true;
 
   DevBaseOffset curr_start_offset = kDeviceStart;
   for (size_t i = 0; i < static_cast<size_t>(SectionKind::kNumKinds); i++) {
     size_t section_size = GetDefaultSectionSize(static_cast<SectionKind>(i));
+    std::cout << "  mapping section " << i << " at " << curr_start_offset.value() << std::endl;
     sections_[i] = std::make_shared<MicroSection>(SectionLocation {
       .start = curr_start_offset,
       .size = section_size,
@@ -72,7 +74,6 @@ void MicroSession::InitSession(const TVMArgs& args) {
   utvm_main_symbol_ = init_symbol_map()["UTVMMain"];
   utvm_done_symbol_ = init_symbol_map()["UTVMDone"];
 
-  std::cout << "[InitSession]" << std::endl;
   PrintSymbol<void*>(init_symbol_map(), "task");
   PrintSymbol<void*>(init_symbol_map(), "utvm_workspace_begin");
   PrintSymbol<void*>(init_symbol_map(), "utvm_workspace_curr");

@@ -73,7 +73,7 @@ class Session:
         self.binutil_prefix = binutil_prefix
         self.port = port
 
-    def micro_build(self, func: relay.Function, params={}):
+    def build(self, func: relay.Function, params={}):
         """Create a graph runtime module with a micro device context."""
         with tvm.build_config(disable_vectorize=True):
             with relay.build_config(opt_level=3):
@@ -82,7 +82,8 @@ class Session:
         micro_mod = self.create_micro_mod(c_mod)
         ctx = tvm.micro_dev(0)
         mod = graph_runtime.create(graph, micro_mod, ctx)
-        return mod, params
+        mod.set_input(**params)
+        return mod
 
     def create_micro_mod(self, c_mod):
         """Produces a micro module from a given module.

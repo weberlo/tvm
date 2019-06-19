@@ -115,9 +115,8 @@ def test_graph_runtime():
     func = relay.Function([x], z)
 
     with HOST_SESSION as sess:
-        mod, params = sess.micro_build(func)
+        mod = sess.build(func)
 
-        mod.set_input(**params)
         x_in = np.random.uniform(size=shape[0]).astype(dtype)
         mod.run(x=x_in)
         result = mod.get_output(0).asnumpy()
@@ -138,8 +137,7 @@ def test_resnet_random():
 
     with HOST_SESSION as sess:
         # TODO(weberlo): Use `resnet_func` once we have libc support.
-        mod, params = sess.micro_build(resnet_func_no_sm, params=params)
-        mod.set_input(**params)
+        mod = sess.build(resnet_func_no_sm, params=params)
         # Generate random input.
         data = np.random.uniform(size=mod.get_input(0).shape)
         mod.run(data=data)
@@ -188,9 +186,7 @@ def test_resnet_pretrained():
                                              shape={"data": image.shape})
 
     with HOST_SESSION as sess:
-        mod, params = sess.micro_build(func, params=params)
-        # Set model weights.
-        mod.set_input(**params)
+        mod = sess.build(func, params=params)
         # Execute with `image` as the input.
         mod.run(data=image)
         # Get outputs.
@@ -303,6 +299,49 @@ def test_openocd_workspace_add():
         assert_all_close(c.asnumpy(), a.asnumpy() + 2.0)
 
 
+def test_openocd_graph_runtime():
+    """Test a program which uses the graph runtime."""
+    shape = (1024,)
+    dtype = "float32"
+
+    # Construct Relay program.
+    x = relay.var("x", relay.TensorType(shape=shape, dtype=dtype))
+    xx = relay.multiply(x, x)
+    z = relay.add(xx, relay.const(1.0))
+    func = relay.Function([x], z)
+
+    with micro.Session("openocd", "riscv64-unknown-elf-", port=6666) as sess:
+        mod = sess.build(func)
+
+        x_in = np.random.uniform(size=shape[0]).astype(dtype)
+        mod.run(x=x_in)
+        result = mod.get_output(0).asnumpy()
+
+        tvm.testing.assert_allclose(
+                result, x_in * x_in + 1.0)
+
+
+def test_openocd_resnet_random():
+    """Test ResNet18 inference with random weights and inputs."""
+    resnet_func, params = resnet.get_workload(num_classes=10,
+                                              num_layers=18,
+                                              image_shape=(3, 32, 32))
+    # Remove the final softmax layer, because uTVM does not currently support it.
+    resnet_func_no_sm = relay.Function(resnet_func.params,
+                                       resnet_func.body.args[0],
+                                       resnet_func.ret_type)
+
+    with micro.Session("openocd", "riscv64-unknown-elf-", port=6666) as sess:
+        # TODO(weberlo): Use `resnet_func` once we have libc support.
+        mod = sess.build(resnet_func_no_sm, params=params)
+        # Generate random input.
+        data = np.random.uniform(size=mod.get_input(0).shape)
+        mod.run(data=data)
+        result = mod.get_output(0).asnumpy()
+        # We gave a random input, so all we want is a result with some nonzero
+        # entries.
+        assert result.sum() != 0.0
+
 
 if __name__ == "__main__":
     # test_add()
@@ -312,5 +351,7 @@ if __name__ == "__main__":
     # TODO(weberlo): Uncomment this test (or add it as a tutorial?)
     # test_resnet_pretrained()
 
-    test_openocd_add()
-    test_openocd_workspace_add()
+    # test_openocd_add()
+    # test_openocd_workspace_add()
+    # test_openocd_graph_runtime()
+    test_openocd_resnet_random()
