@@ -100,7 +100,7 @@ def test_graph_runtime():
     func = relay.Function([x], z)
 
     with HOST_SESSION as sess:
-        mod, params = sess.micro_build(func)
+        mod, params = sess.build(func)
 
         mod.set_input(**params)
         x_in = np.random.uniform(size=shape[0]).astype(dtype)
@@ -123,7 +123,7 @@ def test_resnet_random():
 
     with HOST_SESSION as sess:
         # TODO(weberlo): Use `resnet_func` once we have libc support.
-        mod, params = sess.micro_build(resnet_func_no_sm, params=params)
+        mod, params = sess.build(resnet_func_no_sm, params=params)
         mod.set_input(**params)
         # Generate random input.
         data = np.random.uniform(size=mod.get_input(0).shape)
@@ -173,7 +173,7 @@ def test_resnet_pretrained():
                                              shape={"data": image.shape})
 
     with HOST_SESSION as sess:
-        mod, params = sess.micro_build(func, params=params)
+        mod, params = sess.build(func, params=params)
         # Set model weights.
         mod.set_input(**params)
         # Execute with `image` as the input.

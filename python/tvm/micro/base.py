@@ -72,7 +72,7 @@ class Session:
         self.binutil_prefix = binutil_prefix
         self.port = port
 
-    def micro_build(self, func: relay.Function, params={}):
+    def build(self, func: relay.Function, params={}):
         """Create a graph runtime module with a micro device context."""
         with tvm.build_config(disable_vectorize=True):
             with relay.build_config(opt_level=3):
