@@ -343,6 +343,56 @@ def test_openocd_resnet_random():
         assert result.sum() != 0.0
 
 
+def test_openocd_resnet_pretrained():
+    """Test classification with a pretrained ResNet18 model."""
+    import mxnet as mx
+    from mxnet.gluon.model_zoo.vision import get_model
+    from mxnet.gluon.utils import download
+    from PIL import Image
+
+    # TODO(weberlo) there's a significant amount of overlap between here and
+    # `tutorials/frontend/from_mxnet.py`.  Should refactor.
+    dtype = "float32"
+
+    # Fetch a mapping from class IDs to human-readable labels.
+    synset_url = "".join(["https://gist.githubusercontent.com/zhreshold/",
+                          "4d0b62f3d01426887599d4f7ede23ee5/raw/",
+                          "596b27d23537e5a1b5751d2b0481ef172f58b539/",
+                          "imagenet1000_clsid_to_human.txt"])
+    synset_name = "synset.txt"
+    download(synset_url, synset_name)
+    with open(synset_name) as f:
+        synset = eval(f.read())
+
+    # Read raw image and preprocess into the format ResNet can work on.
+    img_name = "cat.png"
+    download("https://github.com/dmlc/mxnet.js/blob/master/data/cat.png?raw=true",
+             img_name)
+    image = Image.open(img_name).resize((224, 224))
+    image = np.array(image) - np.array([123., 117., 104.])
+    image /= np.array([58.395, 57.12, 57.375])
+    image = image.transpose((2, 0, 1))
+    image = image[np.newaxis, :]
+    image = tvm.nd.array(image.astype(dtype))
+
+    block = get_model("resnet18_v1", pretrained=True)
+    func, params = relay.frontend.from_mxnet(block,
+                                             shape={"data": image.shape})
+
+    with micro.Session("openocd", "riscv64-unknown-elf-", port=6666) as sess:
+        mod = sess.build(func, params=params)
+        # Execute with `image` as the input.
+        mod.run(data=image)
+        # Get outputs.
+        tvm_output = mod.get_output(0)
+
+        prediction_idx = np.argmax(tvm_output.asnumpy()[0])
+        prediction = synset[prediction_idx]
+        print(prediction)
+        assert prediction == "tiger cat"
+        print("FINISHED")
+
+
 if __name__ == "__main__":
     # test_add()
     # test_workspace_add()
@@ -354,4 +404,5 @@ if __name__ == "__main__":
     # test_openocd_add()
     # test_openocd_workspace_add()
     # test_openocd_graph_runtime()
-    test_openocd_resnet_random()
+    # test_openocd_resnet_random()
+    test_openocd_resnet_pretrained()

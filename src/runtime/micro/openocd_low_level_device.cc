@@ -107,6 +107,33 @@ void OpenOCDLowLevelDevice::Write(DevBaseOffset offset, void* buf, size_t num_by
   if (num_bytes == 0) {
     return;
   }
+
+  // Check if we need to chunk this write request.
+  size_t absurd_limit = 64000;
+  if (num_bytes > absurd_limit) {
+    std::cout << "CHUNKING REQUEST FOR " << std::dec << num_bytes << " BYTES" << std::endl;
+    DevBaseOffset curr_offset = offset;
+    char* curr_buf_ptr = reinterpret_cast<char*>(buf);
+    while (num_bytes != 0) {
+      size_t amount_to_write;
+      if (num_bytes > absurd_limit) {
+        amount_to_write = absurd_limit;
+      } else {
+        amount_to_write = num_bytes;
+      }
+      std::cout << "WRITING " << std::dec << amount_to_write << " BYTES (" << std::dec << num_bytes
+                << " BYTES LEFT)" << std::endl;
+      Write(offset, reinterpret_cast<void*>(curr_buf_ptr), amount_to_write);
+      offset += amount_to_write;
+      curr_buf_ptr += amount_to_write;
+      num_bytes -= amount_to_write;
+    }
+    // char tmp;
+    // std::cout << "[TRYING TO WRITE " << num_bytes << " BYTES]";
+    // std::cin >> tmp;
+    return;
+  }
+
   // Clear `input` array.
   socket_.SendCommand("array unset input");
   // Build a command to set the value of `input`.
