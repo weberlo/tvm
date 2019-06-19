@@ -47,7 +47,7 @@ def test_add():
     func_name = "fadd"
     c_mod = tvm.build(s, [A, B, C], target="c", name=func_name)
 
-    with HOST_SESSION as sess:
+    with micro.Session(DEVICE_TYPE, BINUTIL_PREFIX) as sess:
         micro_mod = sess.create_micro_mod(c_mod)
         micro_func = micro_mod[func_name]
         ctx = tvm.micro_dev(0)
@@ -76,7 +76,7 @@ def test_workspace_add():
     func_name = "fadd_two_workspace"
     c_mod = tvm.build(s, [A, C], target="c", name=func_name)
 
-    with HOST_SESSION as sess:
+    with micro.Session(DEVICE_TYPE, BINUTIL_PREFIX) as sess:
         micro_mod = sess.create_micro_mod(c_mod)
         micro_func = micro_mod[func_name]
         ctx = tvm.micro_dev(0)
@@ -99,10 +99,9 @@ def test_graph_runtime():
     z = relay.add(xx, relay.const(1.0))
     func = relay.Function([x], z)
 
-    with HOST_SESSION as sess:
-        mod, params = sess.build(func)
+    with micro.Session(DEVICE_TYPE, BINUTIL_PREFIX) as sess:
+        mod = sess.build(func)
 
-        mod.set_input(**params)
         x_in = np.random.uniform(size=shape[0]).astype(dtype)
         mod.run(x=x_in)
         result = mod.get_output(0).asnumpy()
@@ -121,10 +120,9 @@ def test_resnet_random():
                                        resnet_func.body.args[0],
                                        resnet_func.ret_type)
 
-    with HOST_SESSION as sess:
+    with micro.Session(DEVICE_TYPE, BINUTIL_PREFIX) as sess:
         # TODO(weberlo): Use `resnet_func` once we have libc support.
-        mod, params = sess.build(resnet_func_no_sm, params=params)
-        mod.set_input(**params)
+        mod = sess.build(resnet_func_no_sm, params=params)
         # Generate random input.
         data = np.random.uniform(size=mod.get_input(0).shape)
         mod.run(data=data)
@@ -172,10 +170,8 @@ def test_resnet_pretrained():
     func, params = relay.frontend.from_mxnet(block,
                                              shape={"data": image.shape})
 
-    with HOST_SESSION as sess:
-        mod, params = sess.build(func, params=params)
-        # Set model weights.
-        mod.set_input(**params)
+    with micro.Session(DEVICE_TYPE, BINUTIL_PREFIX) as sess:
+        mod = sess.build(func, params=params)
         # Execute with `image` as the input.
         mod.run(data=image)
         # Get outputs.

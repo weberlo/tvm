@@ -81,7 +81,8 @@ class Session:
         micro_mod = self.create_micro_mod(c_mod)
         ctx = tvm.micro_dev(0)
         mod = graph_runtime.create(graph, micro_mod, ctx)
-        return mod, params
+        mod.set_input(**params)
+        return mod
 
     def create_micro_mod(self, c_mod):
         """Produces a micro module from a given module.
