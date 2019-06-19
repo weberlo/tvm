@@ -313,4 +313,4 @@ if __name__ == "__main__":
     # test_resnet_pretrained()
 
     test_openocd_add()
-    # test_openocd_workspace_add()
+    test_openocd_workspace_add()

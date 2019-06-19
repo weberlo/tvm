@@ -60,7 +60,7 @@ void TclSocket::Connect(tvm::common::SockAddr addr) {
 }
 
 std::string TclSocket::SendCommand(std::string cmd, bool verbose) {
-  verbose = true;
+  verbose = false;
   std::stringstream cmd_builder;
   cmd_builder << cmd;
   cmd_builder << kCommandTerminateToken;

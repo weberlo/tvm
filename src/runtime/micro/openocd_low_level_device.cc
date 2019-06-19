@@ -56,17 +56,23 @@ void OpenOCDLowLevelDevice::Read(DevBaseOffset offset, void* buf, size_t num_byt
     return;
   }
   {
+    socket_.SendCommand("array unset output");
     DevAddr addr = base_addr_ + offset;
     std::stringstream read_cmd;
     read_cmd << "mem2array output";
     read_cmd << " " << std::dec << kWordLen;
     read_cmd << " 0x" << std::hex << addr.cast_to<uintptr_t>();
-    read_cmd << " " << std::dec << num_bytes;
+    read_cmd << " " << std::dec << (num_bytes < 8 ? 8 : num_bytes);
     socket_.SendCommand(read_cmd.str());
   }
 
   {
     std::string reply = socket_.SendCommand("ocd_echo $output");
+
+    // char tmp;
+    // std::cout << "[PRESS ENTER TO CONTINUE]";
+    // std::cin >> tmp;
+
     std::stringstream values(reply);
     char* char_buf = reinterpret_cast<char*>(buf);
     ssize_t req_bytes_remaining = num_bytes;
@@ -89,11 +95,10 @@ void OpenOCDLowLevelDevice::Read(DevBaseOffset offset, void* buf, size_t num_byt
       char_buf[index] = static_cast<uint8_t>(val);
       req_bytes_remaining--;
     }
-    uint32_t check_index;
-    values >> check_index;
-    CHECK(check_index != index) << "more data in response than requested";
-    if (num_bytes == 4) {
-      std::cout << index << std::endl;
+    if (num_bytes >= 8) {
+      uint32_t check_index;
+      values >> check_index;
+      CHECK(check_index != index) << "more data in response than requested";
     }
   }
 }
