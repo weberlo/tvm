@@ -50,12 +50,12 @@ class OpenOCDLowLevelDevice final : public LowLevelDevice {
 
   void SetBreakpoint(DevBaseOffset breakpoint) {
     breakpoint_ = base_addr_ + breakpoint;
-    std::cout << "setting breakpoint to 0x" << std::hex << breakpoint_.value() << std::endl;
+    // std::cout << "setting breakpoint to 0x" << std::hex << breakpoint_.value() << std::endl;
   }
 
   void SetStackTop(DevBaseOffset stack_top) {
     stack_top_ = base_addr_ + stack_top;
-    std::cout << "setting stack top to 0x" << std::hex << stack_top_.value() << std::endl;
+    // std::cout << "setting stack top to 0x" << std::hex << stack_top_.value() << std::endl;
   }
 
   DevBaseAddr base_addr() const final {

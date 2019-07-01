@@ -25,11 +25,6 @@ from tvm import relay
 import tvm.micro as micro
 from tvm.relay.testing import resnet
 
-# Use the host emulated micro device, because it's simpler and faster to test.
-DEVICE_TYPE = "host"
-BINUTIL_PREFIX = ""
-HOST_SESSION = micro.Session(DEVICE_TYPE, BINUTIL_PREFIX)
-
 # TODO(weberlo): Add example program to test scalar double/int TVMValue serialization.
 def assert_all_close(a, b):
     import pprint
@@ -62,7 +57,7 @@ def test_add():
     func_name = "fadd"
     c_mod = tvm.build(s, [A, B, C], target="c", name=func_name)
 
-    with HOST_SESSION as sess:
+    with micro.Session("host", "") as sess:
         micro_mod = sess.create_micro_mod(c_mod)
         micro_func = micro_mod[func_name]
         ctx = tvm.micro_dev(0)
@@ -91,7 +86,7 @@ def test_workspace_add():
     func_name = "fadd_two_workspace"
     c_mod = tvm.build(s, [A, C], target="c", name=func_name)
 
-    with HOST_SESSION as sess:
+    with micro.Session("host", "") as sess:
         micro_mod = sess.create_micro_mod(c_mod)
         micro_func = micro_mod[func_name]
         ctx = tvm.micro_dev(0)
@@ -114,7 +109,7 @@ def test_graph_runtime():
     z = relay.add(xx, relay.const(1.0))
     func = relay.Function([x], z)
 
-    with HOST_SESSION as sess:
+    with micro.Session("host", "") as sess:
         mod = sess.build(func)
 
         x_in = np.random.uniform(size=shape[0]).astype(dtype)
@@ -135,7 +130,7 @@ def test_resnet_random():
                                        resnet_func.body.args[0],
                                        resnet_func.ret_type)
 
-    with HOST_SESSION as sess:
+    with micro.Session("host", "") as sess:
         # TODO(weberlo): Use `resnet_func` once we have libc support.
         mod = sess.build(resnet_func_no_sm, params=params)
         # Generate random input.
@@ -185,7 +180,7 @@ def test_resnet_pretrained():
     func, params = relay.frontend.from_mxnet(block,
                                              shape={"data": image.shape})
 
-    with HOST_SESSION as sess:
+    with micro.Session("host", "") as sess:
         mod = sess.build(func, params=params)
         # Execute with `image` as the input.
         mod.run(data=image)
@@ -195,6 +190,66 @@ def test_resnet_pretrained():
         prediction_idx = np.argmax(tvm_output.asnumpy()[0])
         prediction = synset[prediction_idx]
         assert prediction == "tiger cat"
+
+
+# TODO(weberlo): Enable this test or move the code somewhere else.
+@nottest
+def test_mobilenet_pretrained():
+    """Test classification with a pretrained ResNet18 model."""
+    import json
+    import mxnet as mx
+    from mxnet.gluon.model_zoo.vision import get_model
+    from mxnet.gluon.utils import download
+    from PIL import Image
+    import scipy
+
+    # TODO(weberlo) there's a significant amount of overlap between here and
+    # `tutorials/frontend/from_mxnet.py`.  Should refactor.
+    dtype = "float32"
+
+    mx.test_utils.download('https://raw.githubusercontent.com/dmlc/web-data/master/mxnet/doc/tutorials/onnx/image_net_labels.json')
+    categories = np.array(json.load(open('image_net_labels.json', 'r')))
+
+    # Read raw image and preprocess into the format ResNet can work on.
+    img_name = "dog.jpg"
+    download("https://github.com/dmlc/web-data/blob/master/mxnet/doc/tutorials/onnx/images/dog.jpg?raw=true",
+             img_name)
+    image = Image.open(img_name).resize((224, 224))
+
+    def transform(image):
+        image -= np.array([128.0, 128.0, 128.0])
+        image /= np.array([128.0, 128.0, 128.0])
+        image = image.transpose((2, 0, 1))
+        image = image[np.newaxis, :]
+        image = tvm.nd.array(image.astype(dtype))
+        return image
+    image = transform(image)
+    print(image.shape)
+
+    block = get_model("mobilenet0.25", pretrained=True)
+    func, params = relay.frontend.from_mxnet(block,
+                                             shape={"data": image.shape})
+
+    # with micro.Session("host", "") as sess:
+    import time
+    start_time = time.time()
+    with micro.Session("openocd", "riscv64-unknown-elf-", port=6666) as sess:
+        mod = sess.build(func, params=params)
+        # Execute with `image` as the input.
+        mod.run(data=image)
+        end_time = time.time()
+        print(f'model execution took {end_time - start_time} seconds')
+        # Get outputs.
+        output = mod.get_output(0).asnumpy()[0]
+
+        K = 3
+        scipy.special.softmax(output)
+        top_k = output.argsort()[-K:][::-1]
+        # prediction_idx = np.argmax(tvm_output.asnumpy()[0])
+        # prediction = categories[prediction_idx]
+        # print(f"prediction is {prediction}")
+        for i, idx in enumerate(top_k):
+            print(f'prediction {i} is {categories[idx]} with confidence {output[idx]}%')
 
 
 def test_openocd_add():
@@ -217,48 +272,17 @@ def test_openocd_add():
         micro_mod = sess.create_micro_mod(c_mod)
         micro_func = micro_mod[func_name]
         ctx = tvm.micro_dev(0)
-        # print("-----------------------------[SETTING TENSORS]--------------------------------------")
-        # print("[Tensor A]")
         a = tvm.nd.array(np.random.uniform(size=shape).astype(dtype), ctx)
-        # input("[press enter to continue]")
-        # print("[Tensor B]")
         b = tvm.nd.array(np.random.uniform(size=shape).astype(dtype), ctx)
-        # input("[press enter to continue]")
-        # print("[Tensor C]")
         c = tvm.nd.array(np.zeros(shape, dtype=dtype), ctx)
-        # input("[press enter to continue]")
-        print("-----------------------------[PRINTING TENSORS (PRE-RUN)]--------------------------------------")
-        print("[Tensor A]")
-        print(a)
-        # input("[press enter to continue]")
-        print("[Tensor B]")
-        print(b)
-        # input("[press enter to continue]")
-        print("[Tensor C]")
-        print(c)
-        # input("[press enter to continue]")
-        print("-----------------------------[RUNNING]--------------------------------------")
         micro_func(a, b, c)
-        print("-----------------------------[PRINTING TENSORS (POST-RUN)]--------------------------------------")
-        print("[Tensor A]")
-        print(a)
-        print("[Tensor B]")
-        print(b)
-        print("[Tensor C]")
-        print(c)
-        # tvm.testing.assert_allclose(
-        #     c.asnumpy(), a.asnumpy() + b.asnumpy())
-
-        # assert_all_close(c.asnumpy(), a.asnumpy() + b.asnumpy())
+        tvm.testing.assert_allclose(
+            c.asnumpy(), a.asnumpy() + b.asnumpy())
 
 
 def test_openocd_workspace_add():
     """Test a program which uses a workspace."""
-    # shape = (4,)
-    shape = (100,)
-    # shape = (255,)
-    # shape = (256,)
-    # shape = (512,)
+    shape = (1024,)
     dtype = "float32"
 
     # Construct TVM expression.
@@ -278,25 +302,10 @@ def test_openocd_workspace_add():
         ctx = tvm.micro_dev(0)
         a = tvm.nd.array(np.random.uniform(size=shape).astype(dtype), ctx)
         c = tvm.nd.array(np.zeros(shape, dtype=dtype), ctx)
-
-        print("-----------------------------[PRINTING TENSORS (PRE-RUN)]--------------------------------------")
-        print("[Tensor A]")
-        print(a)
-        # input("[press enter to continue]")
-        print("[Tensor C]")
-        print(c)
-        # input("[press enter to continue]")
-        print("-----------------------------[RUNNING]--------------------------------------")
         micro_func(a, c)
-        print("-----------------------------[PRINTING TENSORS (POST-RUN)]--------------------------------------")
-        print("[Tensor A]")
-        print(a)
-        print("[Tensor C]")
-        print(c)
 
-        # tvm.testing.assert_allclose(
-        #         c.asnumpy(), a.asnumpy() + 2.0)
-        assert_all_close(c.asnumpy(), a.asnumpy() + 2.0)
+        tvm.testing.assert_allclose(
+                c.asnumpy(), a.asnumpy() + 2.0)
 
 
 def test_openocd_graph_runtime():
@@ -393,16 +402,49 @@ def test_openocd_resnet_pretrained():
         print("FINISHED")
 
 
+def test_openocd_memory_transfer():
+    """Test a program which performs addition."""
+    import time
+    import pprint
+
+    dtype = "float32"
+
+    TEST_SHAPES = map(lambda x: (2**x,), range(20))
+    read_times = []
+    write_times = []
+    with micro.Session("openocd", "riscv64-unknown-elf-", port=6666) as sess:
+        ctx = tvm.micro_dev(0)
+        print("--------------------------------------------------------------------------------")
+        for i, shape in enumerate(TEST_SHAPES):
+            print()
+            print(f"idx = {i}, shape = {shape}")
+            start_time = time.time()
+            tensor = tvm.nd.array(np.random.uniform(size=shape).astype(dtype), ctx)
+            end_time = time.time()
+            write_times.append(end_time - start_time)
+
+            start_time = time.time()
+            str(tensor)
+            end_time = time.time()
+            read_times.append(end_time - start_time)
+    print()
+    print("read_times:")
+    pprint.pprint(read_times)
+    print("write_times:")
+    pprint.pprint(write_times)
+
+
 if __name__ == "__main__":
     # test_add()
     # test_workspace_add()
     # test_graph_runtime()
     # test_resnet_random()
-    # TODO(weberlo): Uncomment this test (or add it as a tutorial?)
     # test_resnet_pretrained()
+    # test_mobilenet_pretrained()
 
-    # test_openocd_add()
-    # test_openocd_workspace_add()
-    # test_openocd_graph_runtime()
+    test_openocd_add()
+    test_openocd_workspace_add()
+    test_openocd_graph_runtime()
     # test_openocd_resnet_random()
-    test_openocd_resnet_pretrained()
+    # test_openocd_resnet_pretrained()
+    # test_openocd_memory_transfer()

@@ -106,7 +106,6 @@ class Session:
         lib_src_path = temp_dir.relpath("dev_lib.c")
         global TEMPDIR_REFS
         TEMPDIR_REFS.append(temp_dir)
-        print("src path is \"{}\"".format(lib_src_path))
         mod_src = c_mod.get_source()
         with open(lib_src_path, "w") as f:
             f.write(mod_src)

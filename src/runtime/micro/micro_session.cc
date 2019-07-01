@@ -40,13 +40,11 @@ MicroSession::MicroSession() : valid_(false) { }
 MicroSession::~MicroSession() { }
 
 void MicroSession::InitSession(const TVMArgs& args) {
-  std::cout << "[InitSession]" << std::endl;
   valid_ = true;
 
   DevBaseOffset curr_start_offset = kDeviceStart;
   for (size_t i = 0; i < static_cast<size_t>(SectionKind::kNumKinds); i++) {
     size_t section_size = GetDefaultSectionSize(static_cast<SectionKind>(i));
-    std::cout << "  mapping section " << i << " at " << curr_start_offset.value() << std::endl;
     sections_[i] = std::make_shared<MicroSection>(SectionLocation {
       .start = curr_start_offset,
       .size = section_size,
@@ -73,18 +71,6 @@ void MicroSession::InitSession(const TVMArgs& args) {
   init_stub_info_ = LoadBinary(init_binary_path_);
   utvm_main_symbol_ = init_symbol_map()["UTVMMain"];
   utvm_done_symbol_ = init_symbol_map()["UTVMDone"];
-
-  PrintSymbol<void*>(init_symbol_map(), "task");
-  PrintSymbol<void*>(init_symbol_map(), "utvm_workspace_begin");
-  PrintSymbol<void*>(init_symbol_map(), "utvm_workspace_curr");
-  // PrintSymbol<size_t>(init_symbol_map(), "num_active_allocs");
-  PrintSymbol<void*>(init_symbol_map(), "last_error");
-  PrintSymbol<void*>(init_symbol_map(), "return_code");
-  PrintSymbol<void*>(init_symbol_map(), "UTVMDone");
-  PrintSymbol<void*>(init_symbol_map(), "UTVMMain");
-  PrintSymbol<void*>(init_symbol_map(), "TVMBackendAllocWorkspace");
-  PrintSymbol<void*>(init_symbol_map(), "TVMBackendFreeWorkspace");
-  PrintSymbol<void*>(init_symbol_map(), "TVMAPISetLastError");
 
   if (device_type == "openocd") {
     // Set OpenOCD device's breakpoint and stack pointer.
@@ -165,13 +151,8 @@ void MicroSession::PushToExecQueue(DevBaseOffset func, const TVMArgs& args) {
       .func = func_dev_addr,
       .args = args_addr.cast_to<UTVMArgs*>(),
   };
-  // TODO(mutinifni): handle bits / endianness
   // Write the task.
   low_level_device()->Write(init_symbol_map()["task"], &task, sizeof(UTVMTask));
-
-  // // Zero out the last error.
-  // int32_t last_error = 0;
-  // low_level_device()->Write(init_symbol_map()["last_error"], &last_error, sizeof(int32_t));
 
   low_level_device()->Execute(utvm_main_symbol_, utvm_done_symbol_);
 
@@ -181,10 +162,6 @@ void MicroSession::PushToExecQueue(DevBaseOffset func, const TVMArgs& args) {
   CheckDeviceError();
 
   GetSection(SectionKind::kArgs)->Free(stream_dev_offset);
-
-  // char tmp;
-  // std::cout << "[PRESS ENTER TO CONTINUE]";
-  // std::cin >> tmp;
 }
 
 BinaryInfo MicroSession::LoadBinary(std::string binary_path) {
@@ -204,17 +181,8 @@ BinaryInfo MicroSession::LoadBinary(std::string binary_path) {
   bss.start = AllocateInSection(SectionKind::kBss, bss.size);
   CHECK(text.start != nullptr && rodata.start != nullptr && data.start != nullptr &&
         bss.start != nullptr) << "not enough space to load module on device";
-  const DevBaseAddr base_addr = low_level_device_->base_addr();
-  std::cout << "[LoadBinary]" << std::endl;
-  std::cout << "  text: start=" << text.start.cast_to<void*>() << ", size=" << std::dec << text.size
-            << std::endl;
-  std::cout << "  rodata: start=" << rodata.start.cast_to<void*>() << ", size=" << std::dec
-            << rodata.size << std::endl;
-  std::cout << "  data: start=" << data.start.cast_to<void*>() << ", size=" << std::dec << data.size
-            << std::endl;
-  std::cout << "  bss: start=" << bss.start.cast_to<void*>() << ", size=" << std::dec << bss.size
-            << std::endl;
 
+  const DevBaseAddr base_addr = low_level_device_->base_addr();
   std::string relocated_bin = RelocateBinarySections(
       binary_path,
       text.start + base_addr,
@@ -329,46 +297,35 @@ DevAddr MicroSession::EncoderAppend(TargetDataLayoutEncoder* encoder, const TVMA
 }
 
 void MicroSession::CheckDeviceError() {
-  // std::cout << "return code loc: "
-  //           << (init_symbol_map()["return_code"] + low_level_device_->base_addr()).cast_to<void*>()
-  //           << std::endl;
-  // int32_t return_code = DevSymbolRead<int32_t>(init_symbol_map(), "return_code");
-  // std::cout << "return code val: " << return_code << std::endl;
-  PrintSymbol<int32_t>(init_symbol_map(), "return_code");
+  int32_t return_code = DevSymbolRead<int32_t>(init_symbol_map(), "return_code");
 
-  // if (return_code) {
-  //   std::uintptr_t last_error = DevSymbolRead<std::uintptr_t>(init_symbol_map(), "last_error");
-  //   std::string last_error_str;
-  //   if (last_error) {
-  //     DevBaseOffset last_err_offset =
-  //         DevAddr(last_error) - low_level_device()->base_addr();
-  //     // Then read the string from device to host and log it.
-  //     last_error_str = ReadString(last_err_offset);
-  //   }
-  //   // LOG(FATAL) << "error during micro function execution:\n"
-  //   std::cerr << "error during micro function execution:\n"
-  //              << "  return code: " << std::dec << return_code << "\n"
-  //              << "  dev str addr: 0x" << std::hex << last_error << "\n"
-  //              << "  dev str data: " << last_error_str << std::endl;
-  // }
+  if (return_code) {
+    std::uintptr_t last_error = DevSymbolRead<std::uintptr_t>(init_symbol_map(), "last_error");
+    std::string last_error_str;
+    if (last_error) {
+      DevBaseOffset last_err_offset =
+          DevAddr(last_error) - low_level_device()->base_addr();
+      last_error_str = ReadString(last_err_offset);
+    }
+    LOG(FATAL) << "error during micro function execution:\n"
+               << "  return code: " << std::dec << return_code << "\n"
+               << "  dev str addr: 0x" << std::hex << last_error << "\n"
+               << "  dev str data: " << last_error_str << std::endl;
+  }
 }
 
 template <typename T>
 T MicroSession::DevSymbolRead(SymbolMap& symbol_map, const std::string& symbol) {
-  // std::cout << "DevSymbolRead" << std::endl;
   DevBaseOffset sym_offset = symbol_map[symbol];
   T result;
   low_level_device()->Read(sym_offset, &result, sizeof(T));
-  // std::cout << "  " << symbol << ": " << result << std::endl;
   return result;
 }
 
 template <typename T>
 void MicroSession::DevSymbolWrite(SymbolMap& symbol_map, const std::string& symbol, T& value) {
-  // std::cout << "DevSymbolRead" << std::endl;
   DevBaseOffset sym_offset = symbol_map[symbol];
   low_level_device()->Write(sym_offset, &value, sizeof(T));
-  // std::cout << "  " << symbol << ": " << result << std::endl;
 }
 
 template <typename T>

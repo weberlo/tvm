@@ -31,20 +31,18 @@ UTVMTask task;
 // `NULL`.  Why?
 
 // These pointers are patched at load time to point to the workspace section.
-char *utvm_workspace_begin = (char*) 420;  // NOLINT(*)
-char *utvm_workspace_end = (char*) 420;  // NOLINT(*)
-char *utvm_workspace_curr = (char*) 420;  // NOLINT(*)
+char *utvm_workspace_begin = (char*) 1;  // NOLINT(*)
+char *utvm_workspace_end = (char*) 1;  // NOLINT(*)
+char *utvm_workspace_curr = (char*) 1;  // NOLINT(*)
 // Keep track of how many active allocations there are on the workspace.
-size_t num_active_allocs = 420;
+size_t num_active_allocs = 0;
 
-const char *last_error = (char*) 420;  // NOLINT(*)
-int32_t return_code = 420;  // NOLINT(*)
+const char *last_error = (char*) 1;  // NOLINT(*)
+int32_t return_code = 1;  // NOLINT(*)
 
 // We use a dummy function to signal execution is finished for device
 // backends which require breakpoints.
-void UTVMDone() {
-  while (1) {}
-}
+void UTVMDone() { }
 
 void UTVMMain() {
   utvm_workspace_curr = utvm_workspace_begin;

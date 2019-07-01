@@ -60,14 +60,6 @@ class MicroModuleNode final : public ModuleNode {
     binary_path_ = binary_path;
     binary_info_ = session_->LoadBinary(binary_path_);
 
-    std::cout << "[InitMicroModule]" << std::endl;
-    session_->PrintSymbol<void*>(symbol_map(), "TVMBackendAllocWorkspace");
-    session_->PrintSymbol<void*>(symbol_map(), "TVMBackendAllocWorkspace_");
-    session_->PrintSymbol<void*>(symbol_map(), "TVMBackendFreeWorkspace");
-    session_->PrintSymbol<void*>(symbol_map(), "TVMBackendFreeWorkspace_");
-    session_->PrintSymbol<void*>(symbol_map(), "TVMAPISetLastError");
-    session_->PrintSymbol<void*>(symbol_map(), "TVMAPISetLastError_");
-
     // Patch device lib pointers.
     PatchImplHole("TVMBackendAllocWorkspace");
     PatchImplHole("TVMBackendFreeWorkspace");
@@ -82,7 +74,6 @@ class MicroModuleNode final : public ModuleNode {
    */
   void RunFunction(const std::string& func_name, DevBaseOffset func_offset, const TVMArgs& args) {
     if (!session_->valid()) return;
-
     session_->PushToExecQueue(func_offset, args);
   }
 
@@ -110,9 +101,6 @@ class MicroModuleNode final : public ModuleNode {
     std::stringstream func_name_underscore;
     func_name_underscore << func_name << "_";
     const DevBaseOffset lib_hole_offset = symbol_map()[func_name_underscore.str()];
-    std::cout << "patching " << func_name_underscore.str() << "("
-              << (low_level_device_->base_addr() + lib_hole_offset).cast_to<void*>() << ") to "
-              << init_impl_addr << std::endl;
     session_->low_level_device()->Write(lib_hole_offset, &init_impl_addr, sizeof(void*));
   }
 };

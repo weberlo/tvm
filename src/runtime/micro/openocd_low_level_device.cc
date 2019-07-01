@@ -28,8 +28,8 @@
 // IO
 #include<iostream>
 #include<iomanip>
-// Thread Sleeping
-#include <unistd.h>
+
+#include <chrono>
 
 #include "micro_common.h"
 
@@ -42,7 +42,7 @@ OpenOCDLowLevelDevice::OpenOCDLowLevelDevice(int port)
     : socket_() {
   socket_.Connect(tvm::common::SockAddr("127.0.0.1", port));
   socket_.SendCommand("reset halt");
-  // TODO: NO HARDCODE.
+  // TODO(weberlo): NO HARDCODE.
   base_addr_ = DevBaseAddr(0x10010000);
   CHECK(base_addr_.value() % 8 == 0) << "base address not aligned to 8 bytes";
 }
@@ -51,8 +51,33 @@ OpenOCDLowLevelDevice::~OpenOCDLowLevelDevice() {
   // socket_.Close();
 }
 
+bool in_chunk = false;
 void OpenOCDLowLevelDevice::Read(DevBaseOffset offset, void* buf, size_t num_bytes) {
+  // std::cout << "[Read]" << std::endl;
+  // std::cout << "  num bytes: " << std::dec << num_bytes << std::endl;
   if (num_bytes == 0) {
+    return;
+  }
+
+  // TODO(weberlo): Refactor between read and write.
+  // Check if we need to chunk this write request (OpenOCD doesn't support reads
+  // larger than `absurd_limit`).
+  size_t absurd_limit = 64000;
+  if (num_bytes > absurd_limit) {
+    DevBaseOffset curr_offset = offset;
+    char* curr_buf_ptr = reinterpret_cast<char*>(buf);
+    while (num_bytes != 0) {
+      size_t amount_to_read;
+      if (num_bytes > absurd_limit) {
+        amount_to_read = absurd_limit;
+      } else {
+        amount_to_read = num_bytes;
+      }
+      Read(offset, reinterpret_cast<void*>(curr_buf_ptr), amount_to_read);
+      offset += amount_to_read;
+      curr_buf_ptr += amount_to_read;
+      num_bytes -= amount_to_read;
+    }
     return;
   }
   {
@@ -81,9 +106,6 @@ void OpenOCDLowLevelDevice::Read(DevBaseOffset offset, void* buf, size_t num_byt
     uint32_t index;
     uint32_t val;
     while (req_bytes_remaining > 0) {
-      if (num_bytes == 4) {
-        std::cout << index << ", ";
-      }
       // The response from this command pairs indices with the contents of the
       // memory at that index.
       values >> index;
@@ -104,14 +126,16 @@ void OpenOCDLowLevelDevice::Read(DevBaseOffset offset, void* buf, size_t num_byt
 }
 
 void OpenOCDLowLevelDevice::Write(DevBaseOffset offset, void* buf, size_t num_bytes) {
+  // std::cout << "[Write]" << std::endl;
+  // std::cout << "  num bytes: " << std::dec << num_bytes << std::endl;
   if (num_bytes == 0) {
     return;
   }
 
-  // Check if we need to chunk this write request.
+  // Check if we need to chunk this write request (OpenOCD doesn't support reads
+  // larger than `absurd_limit`).
   size_t absurd_limit = 64000;
   if (num_bytes > absurd_limit) {
-    std::cout << "CHUNKING REQUEST FOR " << std::dec << num_bytes << " BYTES" << std::endl;
     DevBaseOffset curr_offset = offset;
     char* curr_buf_ptr = reinterpret_cast<char*>(buf);
     while (num_bytes != 0) {
@@ -121,16 +145,11 @@ void OpenOCDLowLevelDevice::Write(DevBaseOffset offset, void* buf, size_t num_by
       } else {
         amount_to_write = num_bytes;
       }
-      std::cout << "WRITING " << std::dec << amount_to_write << " BYTES (" << std::dec << num_bytes
-                << " BYTES LEFT)" << std::endl;
       Write(offset, reinterpret_cast<void*>(curr_buf_ptr), amount_to_write);
       offset += amount_to_write;
       curr_buf_ptr += amount_to_write;
       num_bytes -= amount_to_write;
     }
-    // char tmp;
-    // std::cout << "[TRYING TO WRITE " << num_bytes << " BYTES]";
-    // std::cin >> tmp;
     return;
   }
 

@@ -56,15 +56,6 @@ def tvm_callback_get_section_size(binary_path, section_name, binutil_prefix):
         msg += py_str(out)
         raise RuntimeError(msg)
 
-    # nm_proc = subprocess.Popen(["{}nm".format(binutil_prefix), "-S", binary_path], stdout=subprocess.PIPE)
-    # (nm_output, _) = nm_proc.communicate()
-    # nm_output = nm_output.decode("utf-8")
-    # if nm_proc.returncode != 0:
-    #     msg = "error in finding section nm:\n"
-    #     msg += py_str(out)
-    #     raise RuntimeError(msg)
-    # print(nm_output)
-
     # TODO(weberlo): Refactor this method and `*relocate_binary` so they are
     # both aware of [".bss", ".sbss", ".sdata"] being relocated to ".bss".
     SECTION_MAPPING = {
@@ -134,7 +125,6 @@ def tvm_callback_relocate_binary(binary_path, text_addr, rodata_addr, data_addr,
     ld_script_contents = ""
     # TODO(weberlo): this is a fukn hack
     if binutil_prefix == "riscv64-unknown-elf-":
-        print("relocating RISC-V binary...")
         ld_script_contents += "OUTPUT_ARCH( \"riscv\" )\n\n"
         pass
     # TODO(weberlo): Should ".sdata" and ".sbss" be linked into the ".bss"
@@ -194,7 +184,6 @@ SECTIONS
         msg = "linking error using ld:\n"
         msg += py_str(out)
         raise RuntimeError(msg)
-    print("reloc'ed obj path is \"{}\"".format(rel_obj_path))
 
     global AYY
     if not AYY:
