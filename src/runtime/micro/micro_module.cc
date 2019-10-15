@@ -34,104 +34,92 @@
 
 namespace tvm {
 namespace runtime {
-///*!
-// * \brief module for uTVM micro devices
-// */
-//class MicroModuleNode final : public ModuleNode {
-// public:
-//  // TODO(weberlo): enqueue each loaded module into a vector of bin contents.
-//  // then concatenate the contents, build it, and flush it once a function call
-//  // is attempted.
-//  //
-//  // We might not be able to flush *all* sections.  Depends how st-flash works.
-//  // it only asks to specify the start of the flash section, so does it also
-//  // flash the RAM sections? It's also weird that it asks for the start of the
-//  // flash section, because that should already be encoded in the binary. check
-//  // the .bin files to see if symbol addrs are assigned. also, check the
-//  // st-flash docs, because the arg could just be for the address of `main`.
-//
-//  MicroModuleNode() {}
-//
-//  ~MicroModuleNode() {}
-//
-//  const char* type_key() const final {
-//    return "micro";
-//  }
-//
-//  PackedFunc GetFunction(const std::string& name,
-//                         const std::shared_ptr<ModuleNode>& sptr_to_self) final;
-//
-//  /*!
-//   * \brief initializes module by establishing device connection and loads binary
-//   * \param binary_path path of the binary to be loaded
-//   */
-//  void InitMicroModule(const std::string& binary_path) {
-//    //session_ = MicroSession::Current();
-//    //binary_path_ = binary_path;
-//    //std::cout << "AYY" << std::endl;
-//    //binary_info_ = session_->EnqueueBinary(binary_path_);
-//    //std::cout << "LMAO" << std::endl;
-//  }
-//
-//  /*!
-//   * \brief runs selected function on the micro device
-//   * \param func_name name of the function to be run
-//   * \param func_ptr offset of the function to be run
-//   * \param args type-erased arguments passed to the function
-//   */
-//  void RunFunction(DevPtr func_ptr, const TVMArgs& args) {
-//    session_->PushToExecQueue(func_ptr, args);
-//  }
-//
-// private:
-//  //BinaryContents binary_contents_;
-//  ///*! \brief module binary info */
-//  //BinaryInfo binary_info_;
-//  ///*! \brief path to module binary */
-//  //std::string binary_path_;
-//  /*! \brief global session pointer */
-//  std::shared_ptr<MicroSession> session_;
-//};
-//
-//class MicroWrappedFunc {
-// public:
-//  MicroWrappedFunc(//MicroModuleNode* m,
-//                   std::shared_ptr<MicroSession> session,
-//                   DevPtr func_ptr) {
-//    //m_ = m;
-//    session_ = session;
-//    func_ptr_ = func_ptr;
-//  }
-//
-//  void operator()(TVMArgs args, TVMRetValue* rv) const {
-//    //m_->RunFunction(func_ptr_, args);
-//    session_->PushToExecQueue(func_ptr_, args);
-//  }
-//
-// private:
-//  /*! \brief internal module */
-//  //MicroModuleNode* m_;
-//  /*! \brief reference to the session for this function (to keep the session alive) */
-//  std::shared_ptr<MicroSession> session_;
-//  /*! \brief offset of the function to be called */
-//  DevPtr func_ptr_;
-//};
-//
-//PackedFunc MicroModuleNode::GetFunction(
-//    const std::string& name,
-//    const std::shared_ptr<ModuleNode>& sptr_to_self) {
-//  DevPtr func_ptr = session_->GetSymbolLoc(name);
-//  //MicroWrappedFunc f(this, session_, func_ptr);
-//  MicroWrappedFunc f(session_, func_ptr);
-//  return PackedFunc(f);
-//}
-//
-//// register loadfile function to load module from Python frontend
-//TVM_REGISTER_GLOBAL("module.loadfile_micro_dev")
-//.set_body([](TVMArgs args, TVMRetValue* rv) {
-//    std::shared_ptr<MicroModuleNode> n = std::make_shared<MicroModuleNode>();
-//    n->InitMicroModule(args[0]);
-//    *rv = runtime::Module(n);
-//    });
+/*!
+ * \brief module for uTVM micro devices
+ */
+class MicroModuleNode final : public ModuleNode {
+ public:
+  // TODO(weberlo): enqueue each loaded module into a vector of bin contents.
+  // then concatenate the contents, build it, and flush it once a function call
+  // is attempted.
+  //
+  // We might not be able to flush *all* sections.  Depends how st-flash works.
+  // it only asks to specify the start of the flash section, so does it also
+  // flash the RAM sections? It's also weird that it asks for the start of the
+  // flash section, because that should already be encoded in the binary. check
+  // the .bin files to see if symbol addrs are assigned. also, check the
+  // st-flash docs, because the arg could just be for the address of `main`.
+
+  MicroModuleNode() {}
+
+  ~MicroModuleNode() {}
+
+  const char* type_key() const final {
+    return "micro";
+  }
+
+  PackedFunc GetFunction(const std::string& name,
+                         const std::shared_ptr<ModuleNode>& sptr_to_self) final;
+
+  /*!
+   * \brief initializes module by establishing device connection and loads binary
+   * \param binary_path path of the binary to be loaded
+   */
+  void InitMicroModule(const std::string& binary_path) {
+    session_ = MicroSession::Current();
+    symbol_map_ = session_->LoadBinary(binary_path, true).symbol_map;
+  }
+
+  /*!
+   * \brief runs selected function on the micro device
+   * \param func_name name of the function to be run
+   * \param func_ptr offset of the function to be run
+   * \param args type-erased arguments passed to the function
+   */
+  void RunFunction(DevPtr func_ptr, const TVMArgs& args) {
+    session_->PushToExecQueue(func_ptr, args);
+  }
+
+ private:
+  //std::string binary_path_;
+  SymbolMap symbol_map_;
+  /*! \brief global session pointer */
+  std::shared_ptr<MicroSession> session_;
+};
+
+class MicroWrappedFunc {
+ public:
+  MicroWrappedFunc(std::shared_ptr<MicroSession> session,
+                   DevPtr func_ptr) {
+    session_ = session;
+    func_ptr_ = func_ptr;
+  }
+
+  void operator()(TVMArgs args, TVMRetValue* rv) const {
+    session_->PushToExecQueue(func_ptr_, args);
+  }
+
+ private:
+  /*! \brief reference to the session for this function (to keep the session alive) */
+  std::shared_ptr<MicroSession> session_;
+  /*! \brief offset of the function to be called */
+  DevPtr func_ptr_;
+};
+
+PackedFunc MicroModuleNode::GetFunction(
+    const std::string& name,
+    const std::shared_ptr<ModuleNode>& sptr_to_self) {
+  DevPtr func_ptr = symbol_map_[name];
+  MicroWrappedFunc f(session_, func_ptr);
+  return PackedFunc(f);
+}
+
+// register loadfile function to load module from Python frontend
+TVM_REGISTER_GLOBAL("module.loadfile_micro_dev")
+.set_body([](TVMArgs args, TVMRetValue* rv) {
+    std::shared_ptr<MicroModuleNode> n = std::make_shared<MicroModuleNode>();
+    n->InitMicroModule(args[0]);
+    *rv = runtime::Module(n);
+    });
 }  // namespace runtime
 }  // namespace tvm
