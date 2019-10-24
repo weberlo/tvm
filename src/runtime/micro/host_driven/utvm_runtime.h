@@ -49,11 +49,11 @@ typedef struct {
 
 extern void UTVMInit();
 
+extern void UTVMTimerReset();
+
 extern void UTVMTimerStart();
 
 extern void UTVMTimerStop();
-
-extern void UTVMTimerReset();
 
 extern int32_t UTVMTimerRead();
 

@@ -278,24 +278,19 @@ void MicroSession::PushToExecQueue(DevPtr func_ptr, const TVMArgs& args) {
   int32_t (*func_dev_addr)(void*, void*, int32_t) =
       reinterpret_cast<int32_t (*)(void*, void*, int32_t)>(func_ptr.value());
 
-  std::cout << "AA" << std::endl;
   // Create an allocator stream for the memory region after the most recent
   // allocation in the args section.
   DevPtr args_addr =
       low_level_device()->ToDevPtr(GetAllocator(SectionKind::kArgs)->curr_end_offset());
   TargetDataLayoutEncoder encoder(args_addr);
-  std::cout << "BB" << std::endl;
 
   std::tuple<DevPtr, DevPtr> arg_field_addrs = EncoderAppend(&encoder, args);
-  std::cout << "BBB" << std::endl;
   // Flush `stream` to device memory.
   DevBaseOffset stream_dev_offset =
       GetAllocator(SectionKind::kArgs)->Allocate(encoder.buf_size());
-  std::cout << "BBBB" << std::endl;
   low_level_device()->Write(stream_dev_offset,
                             reinterpret_cast<void*>(encoder.data()),
                             encoder.buf_size());
-  std::cout << "CC" << std::endl;
 
   //UTVMTask task = {
   //  .func = func_dev_addr,
@@ -323,7 +318,6 @@ void MicroSession::PushToExecQueue(DevPtr func_ptr, const TVMArgs& args) {
   };
   // Write the task.
   DevSymbolWrite(runtime_symbol_map_, "utvm_task", task);
-  std::cout << "DD" << std::endl;
 
   //DevBaseOffset utvm_main_loc = DevBaseOffset(runtime_symbol_map_["UTVMMain"].value());
   DevBaseOffset utvm_main_loc = DevBaseOffset(runtime_symbol_map_["UTVMInit"].value());
@@ -331,10 +325,7 @@ void MicroSession::PushToExecQueue(DevPtr func_ptr, const TVMArgs& args) {
   if (kRequiresThumbModeBit) {
     utvm_main_loc += 1;
   }
-  std::cout << "EE" << std::endl;
 
-  // TODO: figure out why it's not running anymore when we compile it with "-c"
-  // instead of "-shared". we should be relocating the binary.
   //std::cout << "do execution things: ";
   //char tmp;
   //std::cin >> tmp;
@@ -419,13 +410,10 @@ std::tuple<DevPtr, DevPtr> MicroSession::EncoderAppend(
   const int* type_codes = args.type_codes;
   int num_args = args.num_args;
 
-  std::cout << "AYY" << std::endl;
   auto tvm_vals_slot = encoder->Alloc<TVMValue>(num_args);
   auto type_codes_slot = encoder->Alloc<const int>(num_args);
-  std::cout << "LMAO" << std::endl;
 
   for (int i = 0; i < num_args; i++) {
-  std::cout << "WAZ " << i << std::endl;
     switch (type_codes[i]) {
       case kNDArrayContainer:
       case kArrayHandle: {
@@ -436,10 +424,8 @@ std::tuple<DevPtr, DevPtr> MicroSession::EncoderAppend(
         void* old_data = base_arr_handle->data;
         // Mutate the array to unwrap the `data` field.
         base_arr_handle->data = reinterpret_cast<MicroDevSpace*>(old_data)->data;
-        std::cout << "  GLOMO" << std::endl;
         // Now, encode the unwrapped version.
         void* arr_ptr = EncoderAppend(encoder, *base_arr_handle).cast_to<void*>();
-        std::cout << "  FOMO" << std::endl;
         // And restore the original wrapped version.
         base_arr_handle->data = old_data;
 
@@ -479,7 +465,6 @@ DevPtr MicroSession::EncoderAppend(TargetDataLayoutEncoder* encoder, const TVMAr
   auto tvm_arr_slot = encoder->Alloc<ARMTVMArray>();
   auto shape_slot = encoder->Alloc<int64_t>(arr.ndim);
 
-  std::cout << "WRITE" << std::endl;
   // `shape` and `strides` are stored on the host, so we need to write them to
   // the device first. The `data` field is already allocated on the device and
   // is a device pointer, so we don't need to write it.
@@ -491,7 +476,6 @@ DevPtr MicroSession::EncoderAppend(TargetDataLayoutEncoder* encoder, const TVMAr
     stride_slot.WriteArray(arr.strides, arr.ndim);
     strides_addr = stride_slot.start_addr();
   }
-  std::cout << "ON" << std::endl;
 
   int64_t* dev_shape = shape_addr.cast_to<int64_t*>();
   int64_t* dev_strides = strides_addr.cast_to<int64_t*>();
@@ -507,17 +491,12 @@ DevPtr MicroSession::EncoderAppend(TargetDataLayoutEncoder* encoder, const TVMAr
     .pad2 = 0,
   };
 
-  std::cout << "DIDDLY" << std::endl;
-
   // Copy `arr`, update the copy's pointers to be device pointers, then
   // write the copy to `tvm_arr_slot`.
   //TVMArray dev_arr = arr;
   // Update the device type to look like a host, because codegen generates
   // checks that it is a host array.
-  std::cout << "DEV TYPE: " << dev_arr.ctx.device_type << std::endl;
-  std::cout << "DEV TYPE == MICRO: " << (dev_arr.ctx.device_type == static_cast<DLDeviceType>(kDLMicroDev)) << std::endl;
   CHECK(dev_arr.ctx.device_type == static_cast<DLDeviceType>(kDLMicroDev)) << "attempt to write TVMArray with non-micro device type";
-  std::cout << "FRICKIN" << std::endl;
   dev_arr.ctx.device_type = DLDeviceType::kDLCPU;
   // Add the base address of the device to the array's data's device offset to
   // get a device address.
@@ -525,9 +504,7 @@ DevPtr MicroSession::EncoderAppend(TargetDataLayoutEncoder* encoder, const TVMAr
   //dev_arr.data = low_level_device()->ToDevPtr(arr_offset).cast_to<void*>();
   //dev_arr.shape = shape_addr.cast_to<int64_t*>();
   //dev_arr.strides = strides_addr.cast_to<int64_t*>();
-  std::cout << "DANG" << std::endl;
   tvm_arr_slot.WriteValue(dev_arr);
-  std::cout << "TIME" << std::endl;
   return tvm_arr_slot.start_addr();
 }
 
@@ -559,7 +536,6 @@ void MicroSession::PatchImplHole(const SymbolMap& symbol_map, const std::string&
   std::ostringstream func_name_underscore;
   func_name_underscore << func_name << "_";
   DevSymbolWrite(symbol_map, func_name_underscore.str(), (int32_t) runtime_impl_addr.value());
-  std::cout << "finished patching" << std::endl;
 }
 
 std::string MicroSession::ReadString(DevBaseOffset str_offset) {
