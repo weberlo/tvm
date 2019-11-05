@@ -48,7 +48,7 @@
 #include <tuple>
 
 #include "low_level_device.h"
-#include "host_driven/utvm_runtime.h"
+//#include "host_driven/utvm_runtime.h"
 #include "target_data_layout_encoder.h"
 
 namespace tvm {
@@ -75,10 +75,35 @@ class MicroSession : public ModuleNode {
     return "MicroSession";
   }
 
+  // TODO make a micro session config object
   /*!
-   * \brief constructor
+   * \brief creates session by setting up a low-level device and initting allocators for it
+   * \param args TVMArgs passed into the micro.init packedfunc
+   * TODO rewrite docs
    */
-  MicroSession();
+  MicroSession(
+      const std::string& comms_method,
+      const std::string& binary_path,
+      const std::string& toolchain_prefix,
+      uint64_t text_start,
+      size_t text_size,
+      uint64_t rodata_start,
+      size_t rodata_size,
+      uint64_t data_start,
+      size_t data_size,
+      uint64_t bss_start,
+      size_t bss_size,
+      uint64_t args_start,
+      size_t args_size,
+      uint64_t heap_start,
+      size_t heap_size,
+      uint64_t workspace_start,
+      size_t workspace_size,
+      uint64_t stack_start,
+      size_t stack_size,
+      std::uintptr_t base_addr,
+      const std::string& server_addr,
+      int port);
 
   /*!
    * \brief destructor
@@ -87,16 +112,7 @@ class MicroSession : public ModuleNode {
 
   static std::shared_ptr<MicroSession>& Current();
 
-  /*!
-   * \brief creates session by setting up a low-level device and initting allocators for it
-   * \param args TVMArgs passed into the micro.init packedfunc
-   */
-  void CreateSession(const std::string& device_type,
-                     const std::string& binary_path,
-                     const std::string& toolchain_prefix,
-                     std::uintptr_t base_addr,
-                     const std::string& server_addr,
-                     int port);
+  void CreateSession();
 
   //void BakeSession(const std::string& binary_path);
 
