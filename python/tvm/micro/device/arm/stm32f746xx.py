@@ -15,10 +15,22 @@
 # specific language governing permissions and limitations
 # under the License.
 """Compilation and config definitions for ARM STM32F746XX devices"""
+from collections import OrderedDict
+from enum import Enum
+from operator import itemgetter
+
 from .. import create_micro_lib_base, register_device
 
 DEVICE_ID = 'arm.stm32f746xx'
 TOOLCHAIN_PREFIX = 'arm-none-eabi-'
+WORD_SIZE = 4
+#
+# [Device Memory Layout]
+#   RAM   (rwx) : START = 0x20000000, LENGTH = 320K
+#   FLASH (rx)  : START = 0x8000000,  LENGTH = 1024K
+#
+BASE_ADDR = 0x20000000
+AVAILABLE_MEM = 320000
 
 def create_micro_lib(obj_path, src_path, lib_type, options=None):
     """Wrapper over `create_micro_lib_base` to add device-specific options
@@ -70,51 +82,60 @@ def default_config(server_addr, server_port):
     return {
         'device_id': DEVICE_ID,
         'toolchain_prefix': TOOLCHAIN_PREFIX,
-        #
-        # [Device Memory Layout]
-        #   RAM   (rwx) : START = 0x20000000, LENGTH = 320K
-        #   FLASH (rx)  : START = 0x8000000,  LENGTH = 1024K
-        #
-        'mem_layout': {
-            'text': {
-                'start': 0x20000180,
-                'size': 20480,
-            },
-            'rodata': {
-                'start': 0x20005180,
-                'size': 20480,
-            },
-            'data': {
-                'start': 0x2000a180,
-                'size': 768,
-            },
-            'bss': {
-                'start': 0x2000a480,
-                'size': 768,
-            },
-            'args': {
-                'start': 0x2000a780,
-                'size': 1280,
-            },
-            'heap': {
-                'start': 0x2000ac80,
-                'size': 262144,
-            },
-            'workspace': {
-                'start': 0x2004ac80,
-                'size': 20480,
-            },
-            'stack': {
-                'start': 0x2004fc80,
-                'size': 80,
-            },
-        },
-        'word_size': 4,
+        'mem_layout': gen_mem_layout(BASE_ADDR, AVAILABLE_MEM, WORD_SIZE, OrderedDict([
+            ('text', (15000, MemConstraint.ABSOLUTE_BYTES)),
+            ('rodata', (100, MemConstraint.ABSOLUTE_BYTES)),
+            ('data', (100, MemConstraint.ABSOLUTE_BYTES)),
+            ('bss', (100, MemConstraint.ABSOLUTE_BYTES)),
+            ('args', (512, MemConstraint.ABSOLUTE_BYTES)),
+            ('heap', (100.0, MemConstraint.WEIGHT)),
+            ('workspace', (30.0, MemConstraint.WEIGHT)),
+            ('stack', (32, MemConstraint.ABSOLUTE_BYTES)),
+        ])),
+        'word_size': WORD_SIZE,
         'thumb_mode': True,
         'comms_method': 'openocd',
         'server_addr': server_addr,
         'server_port': server_port,
     }
+
+
+class MemConstraint(Enum):
+    ABSOLUTE_BYTES = 0
+    WEIGHT = 1
+
+
+def gen_mem_layout(base_addr, available_mem, word_size, section_constraints):
+    print('[gen_mem_layout]')
+    byte_sum = sum(map(itemgetter(0), filter(lambda x: x[1] == MemConstraint.ABSOLUTE_BYTES, section_constraints.values())))
+    weight_sum = sum(map(itemgetter(0), filter(lambda x: x[1] == MemConstraint.WEIGHT, section_constraints.values())))
+    assert byte_sum <= available_mem
+    available_weight_mem = available_mem - byte_sum
+
+    res = {}
+    curr_addr = base_addr
+    for section, (val, cons_type) in section_constraints.items():
+        print(section, val, cons_type)
+        if cons_type == MemConstraint.ABSOLUTE_BYTES:
+            assert val % word_size == 0
+            size = val
+            res[section] = {
+                'start': curr_addr,
+                'size': size,
+            }
+        else:
+            size = int((val / weight_sum) * available_weight_mem)
+            size = (size // word_size) * word_size
+            res[section] = {
+                'start': curr_addr,
+                'size': size,
+            }
+        curr_addr += size
+
+    import pprint
+    print('  result mem layout:')
+    pprint.pprint(res)
+    return res
 
 
 register_device(DEVICE_ID, {

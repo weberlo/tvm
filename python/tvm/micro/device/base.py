@@ -93,6 +93,12 @@ def create_micro_lib_base(
     options : List[str]
         additional options to pass to GCC
     """
+    print('[MicroBinutil.create_lib]')
+    print('  EXTENDED OPTIONS')
+    print(f'    {obj_path}')
+    print(f'    {src_path}')
+    print(f'    {lib_type}')
+    print(f'    {options}')
     base_compile_cmd = [
         f'{toolchain_prefix}gcc',
         '-std=c11',
@@ -118,10 +124,14 @@ def create_micro_lib_base(
     new_in_src_path = in_src_path
     if lib_type == LibType.RUNTIME:
         dev_dir = _get_device_source_dir(device_id)
+
+        print(dev_dir)
         dev_src_paths = glob.glob(f'{dev_dir}/*.[csS]')
+        print(dev_src_paths)
         # there needs to at least be a utvm_timer.c file
         assert dev_src_paths
         assert 'utvm_timer.c' in map(os.path.basename, dev_src_paths)
+
         src_paths += dev_src_paths
     elif lib_type == LibType.OPERATOR:
         # create a temporary copy of the source, so we can inject the dev lib
@@ -139,6 +149,7 @@ def create_micro_lib_base(
 
     src_paths += [new_in_src_path]
 
+    print(f'include paths: {include_paths}')
     for path in include_paths:
         base_compile_cmd += ['-I', path]
 
