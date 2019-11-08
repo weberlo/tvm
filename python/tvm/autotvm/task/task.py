@@ -178,8 +178,11 @@ def create(func_name, args, target, target_host=None, template_key=None):
     func = TASK_TABLE[func_name]
     ret = Task(func_name, args)
 
+    print('[autotvm.task.create]')
+    print(f'  target before: {target}')
     if isinstance(target, str):
         target = _target.create(target)
+    print(f'  target after: {target}')
 
     # init config space
     ret.config_space = ConfigSpace()
@@ -190,6 +193,7 @@ def create(func_name, args, target, target_host=None, template_key=None):
         with target:
             sch, _ = func(*args)
             ret.config_space.code_hash = getattr(sch, 'code_hash', None)
+    print(f'  ctx: {ctx}')
 
     ret.workload = ctx.workload
     ret.flop = ret.config_space.flop or compute_flop(sch)

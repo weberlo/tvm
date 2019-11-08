@@ -75,8 +75,10 @@ class MicroDeviceAPI final : public DeviceAPI {
                       TVMContext ctx_to,
                       TVMType type_hint,
                       TVMStreamHandle stream) final {
+    std::cout << "[MicroDeviceAPI::CopyDataFromTo]" << std::endl;
     std::tuple<int, int> type_from_to(ctx_from.device_type, ctx_to.device_type);
     if (type_from_to == std::make_tuple(kDLMicroDev, kDLMicroDev)) {
+      std::cout << "  device to device" << std::endl;
       // Copying from the device to the device.
 
       MicroDevSpace* from_space = static_cast<MicroDevSpace*>(const_cast<void*>(from));
@@ -96,6 +98,7 @@ class MicroDeviceAPI final : public DeviceAPI {
       lld->Read(from_dev_addr, static_cast<void*>(buffer.data()), size);
       lld->Write(to_dev_addr, static_cast<void*>(buffer.data()), size);
     } else if (type_from_to == std::make_tuple(kDLMicroDev, kDLCPU)) {
+      std::cout << "  reading from device" << std::endl;
       // Reading from the device.
 
       MicroDevSpace* from_space = static_cast<MicroDevSpace*>(const_cast<void*>(from));
@@ -106,6 +109,7 @@ class MicroDeviceAPI final : public DeviceAPI {
       void* to_host_ptr = GetHostLoc(to, to_offset);
       lld->Read(from_dev_addr, to_host_ptr, size);
     } else if (type_from_to == std::make_tuple(kDLCPU, kDLMicroDev)) {
+      std::cout << "  writing to device" << std::endl;
       // Writing to the device.
 
       MicroDevSpace* to_space = static_cast<MicroDevSpace*>(const_cast<void*>(to));

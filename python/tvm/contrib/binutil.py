@@ -70,6 +70,8 @@ SECTIONS
 }}
 """
 
+TEMPDIR_REFS = []
+
 def run_cmd(cmd):
     """Runs `cmd` in a subprocess and awaits its completion.
 
@@ -221,6 +223,19 @@ def tvm_callback_relocate_binary(
 
     tmp_dir = util.tempdir()
     rel_obj_path = tmp_dir.relpath('relocated.obj')
+
+    global TEMPDIR_REFS
+    TEMPDIR_REFS.append(tmp_dir)
+    with open('/home/pratyush/Code/nucleo-interaction-from-scratch/.gdbinit', 'r') as f:
+        gdbinit_contents = f.read().split('\n')
+    new_contents = []
+    for line in gdbinit_contents:
+        new_contents.append(line)
+        if line.startswith('target'):
+            new_contents.append(f'add-symbol-file {rel_obj_path}')
+    with open('/home/pratyush/Code/nucleo-interaction-from-scratch/.gdbinit', 'w') as f:
+        f.write('\n'.join(new_contents))
+
     rel_ld_script_path = tmp_dir.relpath('relocated.lds')
     with open(rel_ld_script_path, 'w') as f:
         f.write(ld_script_contents)
@@ -229,6 +244,7 @@ def tvm_callback_relocate_binary(
         binary_path,
         '-T', rel_ld_script_path,
         '-o', rel_obj_path])
+    #input(f'relocated obj path is {rel_obj_path}')
     with open(rel_obj_path, 'rb') as f:
         rel_bin = bytearray(f.read())
     return rel_bin

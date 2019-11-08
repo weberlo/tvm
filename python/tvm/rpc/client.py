@@ -70,6 +70,9 @@ class RPCSession(object):
         ctx: TVMContext
             The corresponding encoded remote context.
         """
+        print('[RPCSession.context]')
+        print(f'  dev_type: {dev_type}')
+        print(f'  dev_id: {dev_id}')
         if '-device=micro_dev' in dev_type:
             dev_type = 'micro_dev'
         ctx = nd.context(dev_type, dev_id)
@@ -405,9 +408,14 @@ def connect(url, port, key="", session_timeout=0):
         The connected session.
     """
     try:
+        print('[client.connect]')
+        #session_timeout = 0
+        print('  hardcoding timeout to 0 (always keep alive)!')
         if session_timeout:
             key += " -timeout=%s" % str(session_timeout)
+        print(f'  connecting to RPC server with {url}, {port}, {key}')
         sess = base._Connect(url, port, key)
+        print(f'  finished connecting!')
     except NameError:
         raise RuntimeError("Please compile with USE_RPC=1")
     return RPCSession(sess)

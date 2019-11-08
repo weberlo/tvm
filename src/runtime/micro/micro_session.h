@@ -281,8 +281,6 @@ struct MicroDevSpace {
   std::shared_ptr<MicroSession> session;
 };
 
-// TODO(weberlo): maybe templatize serialization to reduce redundancy
-
 /*! \brief TVM array for serialization to 32-bit devices */
 typedef struct StructTVMArray32 {
   /*!
