@@ -66,8 +66,10 @@ DEV_CREATE_MICRO_LIB = micro.device.get_device_funcs(DEV_CONFIG['device_id'])['c
 DEVICE = 'arm-cortex-m'
 TARGET = tvm.target.create('c -device=micro_dev')
 
-N_TRIAL = 1500
-EARLY_STOPPING = 800
+#N_TRIAL = 1500
+#EARLY_STOPPING = 800
+N_TRIAL = 8
+EARLY_STOPPING = 8
 N_PER_TRIAL = 1
 N_PARALLEL = 8
 
@@ -75,8 +77,6 @@ SERVER_ADDR = '0.0.0.0'
 SERVER_PORT = 9190
 
 LOG_FILE_NAME = f'{DEVICE}.log'
-if os.path.exists(LOG_FILE_NAME):
-    os.remove(LOG_FILE_NAME)
 
 #N, L, M = 32, 32, 32
 #DTYPE = 'float32'
@@ -199,6 +199,6 @@ def evaluate():
 
 
 if __name__ == '__main__':
-    tune()
-    input('finished tuning...')
+    #tune()
+    #input('finished tuning...')
     evaluate()
