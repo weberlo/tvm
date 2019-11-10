@@ -33,6 +33,14 @@ extern "C" {
 #include <tvm/runtime/c_runtime_api.h>
 #include <tvm/runtime/c_backend_api.h>
 
+enum UTVMReturnCode {
+  UTVM_ERR_OK = 0,
+  UTVM_ERR_TIMER_NOT_IMPLEMENTED = -1,
+  UTVM_ERR_TIMER_OVERFLOW = -2,
+  UTVM_ERR_NO_ACTIVE_ALLOCS = -3,
+  UTVM_ERR_ALLOC_TOO_LARGE = -4,
+};
+
 /*!
  * \brief Task structure for uTVM
  */

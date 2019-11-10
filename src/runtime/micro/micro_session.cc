@@ -305,6 +305,7 @@ double MicroSession::PushToExecQueue(DevPtr func_ptr, const TVMArgs& args) {
   //int32_t return_code = DevSymbolRead<int32_t>(runtime_symbol_map_, "utvm_return_code");
   //std::cout << "  return code: " << return_code << std::endl;
   uint32_t task_time = DevSymbolRead<uint32_t>(runtime_symbol_map_, "utvm_task_time");
+  CHECK(task_time != 0) << "invalid task time " << task_time;
   std::cout << "  task time was " << task_time << std::endl;
   std::cout << "  --------------------------------------------------------------------------------" << std::endl;
 

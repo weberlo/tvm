@@ -83,6 +83,9 @@ void UTVMMain() {
 // backends which require breakpoints.
 void UTVMDone() { }
 
+// TODO(weberlo): modify C codegen to generate UTVM error codes for the failure
+// modes in workspace alloc/free.
+
 void* TVMBackendAllocWorkspace(int device_type, int device_id, uint64_t size,
                                int dtype_code_hint, int dtype_bits_hint) {
   // Align up to 8 bytes.
@@ -105,13 +108,13 @@ int TVMBackendFreeWorkspace(int device_type, int device_id, void* ptr) {
     // Reset allocations and workspace (for future task executions).
     utvm_num_active_allocs = 0;
     utvm_workspace_curr = utvm_workspace_start;
-    return -1;
+    return UTVM_ERR_NO_ACTIVE_ALLOCS;
   } else if (utvm_num_active_allocs == 0) {
     // No more allocations.  Reset workspace.
     utvm_workspace_curr = utvm_workspace_start;
-    return 0;
+    return UTVM_ERR_OK;
   } else {
-    return 0;
+    return UTVM_ERR_OK;
   }
 }
 

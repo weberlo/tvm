@@ -60,7 +60,7 @@ int32_t UTVMTimerStart() {
   // wait until timer starts
   while (SYST_CVR == 0) {}
   start_time = SYST_CVR;
-  return 0;
+  return UTVM_ERR_OK;
 }
 
 void UTVMTimerStop() {
@@ -78,7 +78,7 @@ void UTVMTimerReset() {
 uint32_t UTVMTimerRead() {
   if (SYST_CSR & SYST_COUNTFLAG) {
     TVMAPISetLastError("timer overflowed");
-    return -1;
+    return UTVM_ERR_TIMER_OVERFLOW;
   } else {
     return start_time - stop_time;
   }
@@ -102,7 +102,7 @@ void UTVMTimerReset() {
 int32_t UTVMTimerStart() {
   if (DWT_CTRL & DWT_CTRL_NOCYCCNT) {
     TVMAPISetLastError("cycle counter not implemented on device");
-    return -1;
+    return UTVM_ERR_TIMER_NOT_IMPLEMENTED;
   }
   start_time = DWT_CYCCNT;
   DWT_CTRL |= (1 << DWT_CTRL_CYCCNTENA);
@@ -114,11 +114,12 @@ void UTVMTimerStop() {
 }
 
 int32_t UTVMTimerRead() {
-  if (stop_time > stop_time) {
+  // even with this check, we can't know for sure if the timer has overflowed
+  // (it may have overflowed and gone past `start_time`).
+  if (stop_time > start_time) {
     return stop_time - start_time;
   } else {
-    uint32_t largest = ~0;
-    return (largest - start_time) + stop_time;
+    return UTVM_ERR_TIMER_OVERFLOW;
   }
 }
 

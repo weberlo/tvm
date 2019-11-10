@@ -31,8 +31,9 @@ operators. When the TVM compiler compiles these operators, it will query this
 log file to get the best knob parameters.
 
 """
-import os
 import logging
+import os
+import sys
 
 from mxnet.gluon.model_zoo import vision
 import numpy as np
@@ -56,6 +57,7 @@ import tvm.micro as micro
 # --dev-config=<config_file>` in another terminal.
 
 logging.getLogger('autotvm').setLevel(logging.DEBUG)
+logging.getLogger('autotvm').addHandler(logging.StreamHandler(sys.stdout))
 
 DEV_CONFIG = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6666)
 DEV_CREATE_MICRO_LIB = micro.device.get_device_funcs(DEV_CONFIG['device_id'])['create_micro_lib']
@@ -64,9 +66,10 @@ DEV_CREATE_MICRO_LIB = micro.device.get_device_funcs(DEV_CONFIG['device_id'])['c
 DEVICE = 'arm-cortex-m'
 TARGET = tvm.target.create('c -device=micro_dev')
 
-N_TRIAL = 64
+N_TRIAL = 1500
+EARLY_STOPPING = 800
 N_PER_TRIAL = 1
-N_PARALLEL = 1
+N_PARALLEL = 8
 
 SERVER_ADDR = '0.0.0.0'
 SERVER_PORT = 9190
@@ -129,7 +132,6 @@ def tune():
             args=(N, H, W, CO, CI, KH, KW, STRIDES, PADDING, DILATION, LAYOUT, OUT_DTYPE),
             target=TARGET)
 
-    early_stopping = None
     measure_option = autotvm.measure_option(
             builder=autotvm.LocalBuilder(
                 build_func=tvm.micro.cross_compiler(DEV_CREATE_MICRO_LIB, micro.LibType.OPERATOR)),
@@ -146,7 +148,7 @@ def tune():
 
     # do tuning
     tuner.tune(n_trial=min(N_TRIAL, len(task.config_space)),
-            early_stopping=early_stopping,
+            early_stopping=EARLY_STOPPING,
             measure_option=measure_option,
             callbacks=[
                 autotvm.callback.progress_bar(N_TRIAL, prefix='[Conv2D Task]'),
@@ -159,31 +161,44 @@ def tune():
 
 def evaluate():
     print('[EVALUATE]')
+
+    def eval_mod(c_mod):
+        with micro.Session(DEV_CONFIG) as sess:
+            micro_mod = sess.create_micro_mod(c_mod)
+            micro_func = micro_mod['conv2d']
+            ctx = tvm.micro_dev(0)
+
+            # check correctness
+            data_np = np.random.uniform(size=(N, CI, H, W)).astype(np.float32)
+            kernel_np = np.random.uniform(size=(CO, CI, KH, KW)).astype(np.float32)
+
+            c_tvm = tvm.nd.empty([N, CO, H, W], ctx=ctx)
+            res = micro_func(tvm.nd.array(data_np, ctx), tvm.nd.array(kernel_np, ctx), c_tvm)
+            print(f'cycle count: {res}')
+        return res
+            #tvm.testing.assert_allclose(c_np, c_tvm.asnumpy(), rtol=1e-2)
+
+    # compile with default schedule
+    with TARGET:
+        data = tvm.placeholder((N, CI, H, W), name='data')
+        kernel = tvm.placeholder((CO, CI, KH, KW), name='kernel')
+        conv = topi.nn.conv2d_nchw(data, kernel, STRIDES, PADDING, DILATION, OUT_DTYPE)
+        #sched, arg_bufs = conv2d(N, H, W, CO, CI, KH, KW, STRIDES, PADDING, DILATION, LAYOUT, OUT_DTYPE)
+        sched = tvm.create_schedule([conv.op])
+        c_mod = tvm.build(sched, [data, kernel, conv], name='conv2d')
+    default_cycle_count = eval_mod(c_mod)
+
     # compile kernels with history best records
     with autotvm.apply_history_best(LOG_FILE_NAME):
         with TARGET:
             sched, arg_bufs = conv2d(N, H, W, CO, CI, KH, KW, STRIDES, PADDING, DILATION, LAYOUT, OUT_DTYPE)
             c_mod = tvm.build(sched, arg_bufs, name='conv2d')
-            print(c_mod.get_source())
+    autotune_cycle_count = eval_mod(c_mod)
 
-    with micro.Session(DEV_CONFIG) as sess:
-        micro_mod = sess.create_micro_mod(c_mod)
-        micro_func = micro_mod['conv2d']
-        ctx = tvm.micro_dev(0)
-
-        # check correctness
-        data_np = np.random.uniform(size=(N, CI, H, W)).astype(np.float32)
-        kernel_np = np.random.uniform(size=(CO, CI, KH, KW)).astype(np.float32)
-
-        c_tvm = tvm.nd.empty([N, CO, H, W], ctx=ctx)
-        res = micro_func(tvm.nd.array(data_np, ctx), tvm.nd.array(kernel_np, ctx), c_tvm)
-        print(f'cycle count: {res}')
-
-        #tvm.testing.assert_allclose(c_np, c_tvm.asnumpy(), rtol=1e-2)
+    print(f'SPEEDUP: {default_cycle_count / autotune_cycle_count}')
 
 
 if __name__ == '__main__':
-    with tvm.build_config(disable_vectorize=True):
-        tune()
-        input('finished tuning...')
-        evaluate()
+    tune()
+    input('finished tuning...')
+    evaluate()
