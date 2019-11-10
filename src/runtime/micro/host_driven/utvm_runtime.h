@@ -22,8 +22,8 @@
  * \file utvm_runtime.h
  * \brief uTVM runtime headers
  */
-#ifndef TVM_RUNTIME_MICRO_DEVICE_UTVM_RUNTIME_H_
-#define TVM_RUNTIME_MICRO_DEVICE_UTVM_RUNTIME_H_
+#ifndef TVM_RUNTIME_MICRO_HOST_DRIVEN_UTVM_RUNTIME_H_
+#define TVM_RUNTIME_MICRO_HOST_DRIVEN_UTVM_RUNTIME_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -65,4 +65,4 @@ void UTVMDone();
 }  // TVM_EXTERN_C
 #endif
 
-#endif  // TVM_RUNTIME_MICRO_DEVICE_UTVM_RUNTIME_H_
+#endif  // TVM_RUNTIME_MICRO_HOST_DRIVEN_UTVM_RUNTIME_H_
