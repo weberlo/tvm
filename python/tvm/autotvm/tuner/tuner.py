@@ -144,7 +144,13 @@ class Tuner(object):
                              i + k + 1, flops / 1e9, self.best_flops / 1e9,
                              res, config)
 
-            i += len(results)
+            for result in results:
+                if isinstance(result.costs[0], float):
+                    i += 1
+                else:
+                    print('[Tuner.tune]')
+                    print('  not counting failure towards trial count')
+            #i += len(results)
             self.ttl = min(early_stopping + self.best_iter, n_trial) - i
 
             self.update(inputs, results)

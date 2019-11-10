@@ -82,7 +82,7 @@ def default_config(server_addr, server_port):
         'device_id': DEVICE_ID,
         'toolchain_prefix': TOOLCHAIN_PREFIX,
         'mem_layout': gen_mem_layout(BASE_ADDR, AVAILABLE_MEM, WORD_SIZE, OrderedDict([
-            ('text', (15000, MemConstraint.ABSOLUTE_BYTES)),
+            ('text', (30000, MemConstraint.ABSOLUTE_BYTES)),
             ('rodata', (100, MemConstraint.ABSOLUTE_BYTES)),
             ('data', (100, MemConstraint.ABSOLUTE_BYTES)),
             ('bss', (100, MemConstraint.ABSOLUTE_BYTES)),

@@ -156,7 +156,7 @@ def schedule_conv2d_spatial_pack_nchw(cfg, s, data_vec, kernel_vec,
                              axis_lens=[cfg['tile_oh'].size[-1],
                                         cfg['tile_ow'].size[-1],
                                         cfg['tile_co'].size[-1]],
-                             max_unroll=16,
+                             max_unroll=None,
                              cfg=cfg)
 
     # schedule fusion
@@ -171,7 +171,7 @@ def schedule_conv2d_spatial_pack_nchw(cfg, s, data_vec, kernel_vec,
                                  axis_lens=[cfg['tile_oh'].size[-1],
                                             cfg['tile_ow'].size[-1],
                                             cfg['tile_co'].size[-1]],
-                                 max_unroll=16,
+                                 max_unroll=None,
                                  cfg=cfg)
     s[conv].compute_at(s[last], ow)
 
