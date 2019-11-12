@@ -52,11 +52,15 @@ def create_micro_lib(obj_path, src_path, lib_type, options=None):
     if options is None:
         options = []
     options += [
+        '-march=armv7e-m',
         '-mcpu=cortex-m7',
         '-mlittle-endian',
         '-mfloat-abi=hard',
+        # TODO try this one?
+        #'-mfpu=fpv5-d16',
         '-mfpu=fpv5-sp-d16',
         '-mthumb',
+        '-ffast-math',
         '-gdwarf-5',
         '-DARM_MATH_CM7',
         '-D__FPU_PRESENT=1U',
