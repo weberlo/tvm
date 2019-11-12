@@ -244,7 +244,7 @@ def tvm_callback_relocate_binary(
         binary_path,
         '-T', rel_ld_script_path,
         '-o', rel_obj_path])
-    #input(f'relocated obj path is {rel_obj_path}')
+    input(f'relocated obj path is {rel_obj_path}')
     with open(rel_obj_path, 'rb') as f:
         rel_bin = bytearray(f.read())
     return rel_bin

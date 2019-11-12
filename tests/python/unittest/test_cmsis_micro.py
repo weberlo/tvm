@@ -17,6 +17,7 @@
 import os
 
 import numpy as np
+import topi
 import tvm
 from tvm.contrib import graph_runtime, util
 from tvm import relay
@@ -248,66 +249,101 @@ LAYOUT = 'NHWC'
 DTYPE = 'int8'
 
 
-def verify_result(data_tvm, kernel_tvm, output_tvm):
-    raise RuntimeError('get verification working')
-    print('[Verifying]')
-    # Construct Relay program.
-    data_var = relay.var("data", shape=(N, H, W, CI), dtype=DTYPE)
-    kernel_var = relay.var("kernel", dtype=DTYPE)
-    conv_expr = relay.nn.conv2d(
-            data_var, kernel_var,
-            kernel_size=(KH, KW),
-            strides=STRIDES,
-            padding=PADDING,
-            dilation=DILATION,
-            channels=CO,
-            data_layout=LAYOUT,
-            out_layout=LAYOUT)
-    func = relay.Function(relay.analysis.free_vars(conv_expr), conv_expr)
-    mod = relay.Module.from_expr(func)
-    mod = transform.InferType()(mod)
-
-    #data_shape = list(map(lambda x: x.value, mod['main'].params[0].checked_type.shape))
-    #kernel_shape = list(map(lambda x: x.value, mod['main'].params[1].checked_type.shape))
-    #output_shape = list(map(lambda x: x.value, mod['main'].ret_type.shape))
-
-    #print(data_shape)
-    #print(data.shape)
-    #print(kernel_shape)
-    #print(kernel.shape)
-    #print(output_shape)
-    #print(output.shape)
-
-    data = tvm.nd.array(data, tvm.cpu(0))
-    kernel = tvm.nd.array(kernel, tvm.cpu(0))
-
-    intrp = create_executor('debug')
-    expected_output = intrp.evaluate(mod['main'])(data, kernel).data
-
-    tvm.testing.assert_allclose(output.asnumpy(), expected_output.asnumpy())
-
+#def verify_result_relay(data_tvm, kernel_tvm, output_tvm):
+#    print('[Verifying]')
+#    # Construct Relay program.
+#    data_var = relay.var("data", shape=(N, H, W, CI), dtype=DTYPE)
+#    kernel_var = relay.var("kernel", dtype=DTYPE)
+#    conv_expr = relay.nn.conv2d(
+#            data_var, kernel_var,
+#            kernel_size=(KH, KW),
+#            strides=STRIDES,
+#            padding=PADDING,
+#            dilation=DILATION,
+#            channels=CO,
+#            data_layout=LAYOUT,
+#            out_layout=LAYOUT)
+#    func = relay.Function(relay.analysis.free_vars(conv_expr), conv_expr)
+#    mod = relay.Module.from_expr(func)
+#    mod = transform.InferType()(mod)
+#
+#    data_shape = list(map(lambda x: x.value, mod['main'].params[0].checked_type.shape))
+#    kernel_shape = list(map(lambda x: x.value, mod['main'].params[1].checked_type.shape))
+#    output_shape = list(map(lambda x: x.value, mod['main'].ret_type.shape))
+#
+#    intrp = create_executor('debug')
+#    expected_output_tvm = intrp.evaluate(mod['main'])(data_tvm, kernel_tvm).data
+#
+#    tvm.testing.assert_allclose(output_tvm.asnumpy(), expected_output_tvm.asnumpy())
 
 def test_cmsis_conv():
+    import time
     reset_gdbinit()
 
-    with micro.Session(DEV_CONFIG) as sess:
-        micro_mod = sess.create_micro_mod(DummyCMod())
-        micro_func = micro_mod['arm_conv_wrapper']
-        ctx = tvm.micro_dev(0)
+    def get_cmsis_tensors():
+        with micro.Session(DEV_CONFIG) as sess:
+            micro_mod = sess.create_micro_mod(DummyCMod())
+            micro_func = micro_mod['arm_conv_wrapper']
+            ctx = tvm.micro_dev(0)
 
-        data_np = np.random.randint(-100, 100, size=(H, W, CI), dtype=DTYPE)
-        kernel_np = np.random.randint(-100, 100, size=(CO, CI, KH, KW), dtype=DTYPE)
-        print(data_np[0,0,0])
-        print(kernel_np[0,0,0,0])
+            data_np = np.random.randint(-100, 100, size=(N, H, W, CI), dtype=DTYPE)
+            kernel_np = np.random.randint(-5, 5, size=(CO, CI, KH, KW), dtype=DTYPE)
 
-        data_tvm = tvm.nd.array(data_np, ctx=ctx)
-        kernel_tvm = tvm.nd.array(kernel_np, ctx=ctx)
-        output_tvm = tvm.nd.empty([H, W, CO], ctx=ctx, dtype=DTYPE)
-        task_time = micro_func(data_tvm, kernel_tvm, output_tvm)
+            data_tvm = tvm.nd.array(data_np, ctx=ctx)
+            kernel_tvm = tvm.nd.array(kernel_np, ctx=ctx)
+            output_tvm = tvm.nd.empty([N, H, W, CO], ctx=ctx, dtype=DTYPE)
+            start = time.time()
+            task_cycles = micro_func(data_tvm, kernel_tvm, output_tvm)
+            end = time.time()
+            wall_clock_time = end - start
+            print(f'task took {wall_clock_time} seconds')
 
-        print(output_tvm.asnumpy())
-        #tvm.testing.assert_allclose(result.asnumpy(), expected_result.asnumpy())
-        verify_result(data_tvm, kernel_tvm, output_tvm)
+            return data_np, kernel_np, output_tvm.asnumpy(), task_cycles, wall_clock_time
+
+    def get_micro_output(data_np, kernel_np):
+        func_name = 'conv2d'
+        data = tvm.placeholder((N, H, W, CI), name='data')
+        kernel = tvm.placeholder((CO, CI, KH, KW), name='kernel')
+        conv = topi.nn.conv2d_nhwc(data, kernel, STRIDES, PADDING, DILATION, DTYPE)
+        sched = tvm.create_schedule([conv.op])
+        with tvm.build_config(disable_vectorize=True):
+            c_mod = tvm.build(sched, [data, kernel,conv], target='c', name=func_name)
+
+        with micro.Session(DEV_CONFIG) as sess:
+            micro_mod = sess.create_micro_mod(c_mod)
+            micro_func = micro_mod[func_name]
+            ctx = tvm.micro_dev(0)
+
+            data_tvm = tvm.nd.array(data_np, ctx=ctx)
+            kernel_tvm = tvm.nd.array(kernel_np, ctx=ctx)
+            output_tvm = tvm.nd.empty([N, H, W, CO], ctx=ctx, dtype=DTYPE)
+            start = time.time()
+            task_cycles = micro_func(data_tvm, kernel_tvm, output_tvm)
+            end = time.time()
+            wall_clock_time = end - start
+
+            return output_tvm.asnumpy(), task_cycles, wall_clock_time
+
+    data_np, kernel_np, output_np, cmsis_cycles, cmsis_time = get_cmsis_tensors()
+    assert np.sum(output_np) != 0
+    expected_output_np, micro_cycles, micro_time = get_micro_output(data_np, kernel_np)
+    tvm.testing.assert_allclose(output_np, expected_output_np)
+    print('[CMSIS]')
+    print(f'Cycles: {cmsis_cycles}')
+    print(f'Time: {cmsis_time}')
+    print('[MicroTVM]')
+    print(f'Cycles: {micro_cycles}')
+    print(f'Time: {micro_time}')
+    print('[MicroTVM Speedup]')
+    print(f'Cycles: {cmsis_cycles / micro_cycles}')
+    print(f'Time: {cmsis_time / micro_time}')
+
+    #data_np = np.random.randint(-100, 100, size=(N, H, W, CI), dtype=DTYPE)
+    #kernel_np = np.random.randint(-5, 5, size=(CO, CI, KH, KW), dtype=DTYPE)
+    #expected_output_np, micro_cycles, micro_time = get_micro_output(data_np, kernel_np)
+    #print('[MicroTVM]')
+    #print(f'Cycles: {micro_cycles}')
+    #print(f'Time: {micro_time}')
 
 
 def test_conv2d():

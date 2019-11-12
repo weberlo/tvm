@@ -57,8 +57,11 @@ int32_t utvm_return_code = 0;        // NOLINT(*)
 
 uint32_t utvm_task_time = 0;
 
+volatile uint32_t utvm_done = 0;
+
 // Gets called by UTVMInit, after device-specific initialization is finished.
 void UTVMMain() {
+  utvm_done = 0;
   utvm_workspace_curr = utvm_workspace_start;
   utvm_num_active_allocs = 0;
   utvm_last_error = NULL;  // NOLINT(*)
@@ -81,7 +84,9 @@ void UTVMMain() {
 
 // We use a dummy function to signal execution is finished for device
 // backends which require breakpoints.
-void UTVMDone() { }
+void __attribute__ ((noinline)) UTVMDone() {
+  utvm_done = 1;
+}
 
 // TODO(weberlo): modify C codegen to generate UTVM error codes for the failure
 // modes in workspace alloc/free.
