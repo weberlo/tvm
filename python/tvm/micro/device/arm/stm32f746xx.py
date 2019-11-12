@@ -58,6 +58,9 @@ def create_micro_lib(obj_path, src_path, lib_type, options=None):
         '-mfpu=fpv5-sp-d16',
         '-mthumb',
         '-gdwarf-5',
+        '-DARM_MATH_CM7',
+        '-D__FPU_PRESENT=1U',
+        '-DARM_MATH_DSP',
         ]
     create_micro_lib_base(
         obj_path, src_path, TOOLCHAIN_PREFIX, DEVICE_ID, lib_type, options=options)
@@ -86,7 +89,7 @@ def default_config(server_addr, server_port):
             ('text', (30000, MemConstraint.ABSOLUTE_BYTES)),
             ('rodata', (100, MemConstraint.ABSOLUTE_BYTES)),
             ('data', (100, MemConstraint.ABSOLUTE_BYTES)),
-            ('bss', (100, MemConstraint.ABSOLUTE_BYTES)),
+            ('bss', (200, MemConstraint.ABSOLUTE_BYTES)),
             ('args', (512, MemConstraint.ABSOLUTE_BYTES)),
             ('heap', (100.0, MemConstraint.WEIGHT)),
             ('workspace', (30.0, MemConstraint.WEIGHT)),

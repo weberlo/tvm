@@ -189,7 +189,7 @@ def test_conv2d():
     from tvm.relay import transform
 
     dshape = (1, 4, 16, 16)
-    dtype = 'float32'
+    dtype = 'int8'
     func_name = 'fused_nn_conv2d'
 
     reset_gdbinit()
@@ -211,6 +211,8 @@ def test_conv2d():
 
     with tvm.build_config(disable_vectorize=True):
         graph, c_mod, params = relay.build(mod, target="c")
+    print(c_mod.get_source())
+    input('ayy')
 
     with micro.Session(DEV_CONFIG_A) as sess:
         micro_mod = sess.create_micro_mod(c_mod)
@@ -355,8 +357,9 @@ if __name__ == "__main__":
     test_add()
     test_workspace_add()
     test_graph_runtime()
-    test_conv2d()
+    #test_conv2d()
     test_multiple_modules()
-    test_interleave_sessions()
-    test_nested_sessions()
-    test_inactive_session_use()
+
+    #test_interleave_sessions()
+    #test_nested_sessions()
+    #test_inactive_session_use()
