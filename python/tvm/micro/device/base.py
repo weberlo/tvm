@@ -95,6 +95,9 @@ def create_micro_lib_base(obj_path, src_path, toolchain_prefix, device_id, lib_t
     print(f'    {src_path}')
     print(f'    {lib_type}')
     print(f'    {options}')
+    # also look at these (specifically `strip`):
+    # https://stackoverflow.com/questions/15314581/g-compiler-flag-to-minimize-binary-size
+    #raise RuntimeException('try the "-Os" option for small binaries')
     base_compile_cmd = [
             f'{toolchain_prefix}gcc',
             '-std=c11',
@@ -102,8 +105,7 @@ def create_micro_lib_base(obj_path, src_path, toolchain_prefix, device_id, lib_t
             '-Wextra',
             '--pedantic',
             '-c',
-            #'-O0',
-            '-O2',
+            '-Os',
             '-g',
             '-nostartfiles',
             '-nodefaultlibs',
@@ -116,7 +118,7 @@ def create_micro_lib_base(obj_path, src_path, toolchain_prefix, device_id, lib_t
 
     src_paths = []
     include_paths = find_include_path() + [get_micro_host_driven_dir()]
-    ld_script_path = None
+
     tmp_dir = _util.tempdir()
     if lib_type == LibType.RUNTIME:
         dev_dir = _get_device_source_dir(device_id)
@@ -130,6 +132,15 @@ def create_micro_lib_base(obj_path, src_path, toolchain_prefix, device_id, lib_t
 
         src_paths += dev_src_paths
     elif lib_type == LibType.OPERATOR:
+        # todo it's reversed. we need the *operator* to have the source files
+        CMSIS_PATH = '/home/lweber/CMSIS_5/CMSIS'
+        include_paths += [
+                f'{CMSIS_PATH}/Core/Include',
+                f'{CMSIS_PATH}/DSP/Include',
+                f'{CMSIS_PATH}/NN/Include',
+                ]
+        src_paths += glob.glob('/home/lweber/tvm-micro/3rdparty/cmsis/*.c')
+
         # create a temporary copy of the source, so we can inject the dev lib
         # header without modifying the original.
         temp_src_path = tmp_dir.relpath('temp.c')
