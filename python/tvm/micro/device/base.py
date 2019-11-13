@@ -110,6 +110,7 @@ def create_micro_lib_base(
         '--pedantic',
         '-c',
         '-Os',
+        #'-O0',
         '-g',
         '-nostartfiles',
         '-nodefaultlibs',

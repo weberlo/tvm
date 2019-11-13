@@ -6,19 +6,19 @@
 #include <arm_math.h>
 #include <arm_nnfunctions.h>
 
-#define CONV2_IN_DIM 16
-#define CONV2_IN_CH 32
-#define CONV2_KER_DIM 5
-#define CONV2_PAD 2
-#define CONV2_STRIDE 1
-#define CONV2_OUT_CH 32
-#define CONV2_OUT_DIM 16
+#define IN_DIM 16
+#define IN_CH 32
+#define KER_DIM 5
+#define PAD 2
+#define STRIDE 1
+#define OUT_CH 32
+#define OUT_DIM 16
 
-#define CONV2_BIAS_LSHIFT 0
-#define CONV2_OUT_RSHIFT 9
+#define BIAS_LSHIFT 0
+#define OUT_RSHIFT 9
 
-#define CONV2_BIAS {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}
-static q7_t conv2_bias[CONV2_OUT_CH] = CONV2_BIAS;
+#define BIAS {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}
+static q7_t conv2_bias[OUT_CH] = BIAS;
 
 int32_t arm_conv_wrapper(TVMValue* arg_values, int* arg_type_codes, int32_t num_args) {
   void* data_handle = (((TVMValue*)arg_values)[0].v_handle);
@@ -40,25 +40,39 @@ int32_t arm_conv_wrapper(TVMValue* arg_values, int* arg_type_codes, int32_t num_
 
   //void* buffer1 = TVMBackendAllocWorkspace(1, dev_id, (uint64_t)(32768 * sizeof(int8_t)), 2, 8);
   //void* buffer2 = TVMBackendAllocWorkspace(1, dev_id, (uint64_t)(8192 * sizeof(int8_t)), 2, 8);
+
+  uint16_t dim_im_in = data_shape[1];
+  uint16_t in_ch = data_shape[3];
+  uint16_t dim_im_out = output_shape[1];
+  uint16_t out_ch = output_shape[3];
+  uint16_t kernel_size = kernel_shape[2];
+  //uint16_t dim_im_in = IN_DIM;
+  //uint16_t in_ch = IN_CH;
+  //uint16_t dim_im_out = OUT_DIM;
+  //uint16_t out_ch = OUT_CH;
+  //uint16_t kernel_size = KER_DIM;
+
   void* col_buffer = TVMBackendAllocWorkspace(1, dev_id, (uint64_t)(6400 * sizeof(int8_t)), 2, 8);
+  //uint64_t ws_size = 2 * in_ch * kernel_size * kernel_size * sizeof(int16_t);
+  //void* col_buffer = TVMBackendAllocWorkspace(1, dev_id, ws_size, 2, 8);
   if (col_buffer == NULL) {
     return UTVM_ERR_ALLOC_TOO_LARGE;
   }
 
   arm_convolve_HWC_q7_fast(
     /* Im_in      */  data,
-    /* dim_im_in  */  CONV2_IN_DIM,
-    /* ch_im_in   */  CONV2_IN_CH,
+    /* dim_im_in  */  dim_im_in,
+    /* ch_im_in   */  in_ch,
     /* wt         */  kernel,
-    /* ch_im_out  */  CONV2_OUT_CH,
-    /* dim_kernel */  CONV2_KER_DIM,
-    /* padding    */  CONV2_PAD,
-    /* stride     */  CONV2_STRIDE,
+    /* ch_im_out  */  out_ch,
+    /* dim_kernel */  kernel_size,
+    /* padding    */  PAD,
+    /* stride     */  STRIDE,
     /* bias       */  conv2_bias,
-    /* bias_shift */  CONV2_BIAS_LSHIFT,
-    /* out_shift  */  CONV2_OUT_RSHIFT,
+    /* bias_shift */  BIAS_LSHIFT,
+    /* out_shift  */  OUT_RSHIFT,
     /* Im_out     */  output,
-    /* dim_im_out */  CONV2_OUT_DIM,
+    /* dim_im_out */  dim_im_out,
     /* bufferA    */  (q15_t*)col_buffer,
     /* bufferB    */  NULL);
 
