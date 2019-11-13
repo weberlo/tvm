@@ -176,14 +176,14 @@ def reset_gdbinit():
     with open('/home/lweber/gdb-conf/.gdbinit', 'w') as f:
         gdbinit_contents = (
 """
-layout asm
+#layout asm
 target remote localhost:3333
 
 print "utvm_task.num_args"
 print utvm_task.num_args
 
 """)
-        for i in range(3):
+        for i in range(1):
             gdbinit_contents += (
 f"""
 print "[[TENSOR {i}]]"
@@ -194,23 +194,32 @@ print utvm_task.arg_values[{i}]
 print "*((TVMArray*) (utvm_task.arg_values[{i}]).v_handle)"
 print (*((TVMArray*) (utvm_task.arg_values[{i}]).v_handle))
 
-print "*((TVMArray*) (utvm_task.arg_values[{i}]).v_handle)"
-print (*((TVMArray*) (utvm_task.arg_values[{i}]).v_handle))
+print "data addr"
+print &((*((TVMArray*) (utvm_task.arg_values[{i}]).v_handle)).data)
+
+print "ctx addr"
+print &((*((TVMArray*) (utvm_task.arg_values[{i}]).v_handle)).ctx)
+
+print "ndim addr"
+print &((*((TVMArray*) (utvm_task.arg_values[{i}]).v_handle)).ndim)
+
+print "dtype addr"
+print &((*((TVMArray*) (utvm_task.arg_values[{i}]).v_handle)).dtype)
+
+print "shape addr"
+print &((*((TVMArray*) (utvm_task.arg_values[{i}]).v_handle)).shape)
+
+print "strides addr"
+print &((*((TVMArray*) (utvm_task.arg_values[{i}]).v_handle)).strides)
+
+print "byte_offset addr"
+print &((*((TVMArray*) (utvm_task.arg_values[{i}]).v_handle)).byte_offset)
 
 print "((TVMArray*) (utvm_task.arg_values[{i}]).v_handle)->data"
 print ((TVMArray*) (utvm_task.arg_values[{i}]).v_handle)->data
 
 print "((int8_t*) ((TVMArray*) (utvm_task.arg_values[{i}]).v_handle)->data)[0]"
 print ((int8_t*) ((TVMArray*) (utvm_task.arg_values[{i}]).v_handle)->data)[0]
-
-#print "((TVMArray*) (((TVMValue*) utvm_task.arg_values[{i}])->v_handle))"
-#print ((TVMArray*) (((TVMValue*) utvm_task.arg_values[{i}])->v_handle))
-#
-#print "(int8_t*) ((TVMArray*) (((TVMValue*) utvm_task.arg_values[{i}])->v_handle))->data"
-#print (int8_t*) ((TVMArray*) (((TVMValue*) utvm_task.arg_values[{i}])->v_handle))->data
-#
-#print "((int8_t*) ((TVMArray*) (((TVMValue*) utvm_task.arg_values[{i}])->v_handle))->data)[0]"
-#print ((int8_t*) ((TVMArray*) (((TVMValue*) utvm_task.arg_values[{i}])->v_handle))->data)[0]
 
 """)
 
@@ -243,38 +252,11 @@ DEV_CONFIG = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6666)
 #OUT_DTYPE = 'float32'
 
 # cmsis cifar10 dims
-N, H, W, CO, CI, KH, KW = 1, 16, 16, 32, 32, 5, 5
+N, H, W, CO, CI, KH, KW = 1, 32, 32, 32, 32, 5, 5
+#N, H, W, CO, CI, KH, KW = 1, 32, 32, 32, 32, 5, 5
 STRIDES, PADDING, DILATION = (1, 1), (2, 2), (1, 1)
 LAYOUT = 'NHWC'
 DTYPE = 'int8'
-
-
-#def verify_result_relay(data_tvm, kernel_tvm, output_tvm):
-#    print('[Verifying]')
-#    # Construct Relay program.
-#    data_var = relay.var("data", shape=(N, H, W, CI), dtype=DTYPE)
-#    kernel_var = relay.var("kernel", dtype=DTYPE)
-#    conv_expr = relay.nn.conv2d(
-#            data_var, kernel_var,
-#            kernel_size=(KH, KW),
-#            strides=STRIDES,
-#            padding=PADDING,
-#            dilation=DILATION,
-#            channels=CO,
-#            data_layout=LAYOUT,
-#            out_layout=LAYOUT)
-#    func = relay.Function(relay.analysis.free_vars(conv_expr), conv_expr)
-#    mod = relay.Module.from_expr(func)
-#    mod = transform.InferType()(mod)
-#
-#    data_shape = list(map(lambda x: x.value, mod['main'].params[0].checked_type.shape))
-#    kernel_shape = list(map(lambda x: x.value, mod['main'].params[1].checked_type.shape))
-#    output_shape = list(map(lambda x: x.value, mod['main'].ret_type.shape))
-#
-#    intrp = create_executor('debug')
-#    expected_output_tvm = intrp.evaluate(mod['main'])(data_tvm, kernel_tvm).data
-#
-#    tvm.testing.assert_allclose(output_tvm.asnumpy(), expected_output_tvm.asnumpy())
 
 def test_cmsis_conv():
     import time
@@ -324,26 +306,67 @@ def test_cmsis_conv():
 
             return output_tvm.asnumpy(), task_cycles, wall_clock_time
 
-    data_np, kernel_np, output_np, cmsis_cycles, cmsis_time = get_cmsis_tensors()
-    assert np.sum(output_np) != 0
-    expected_output_np, micro_cycles, micro_time = get_micro_output(data_np, kernel_np)
-    tvm.testing.assert_allclose(output_np, expected_output_np)
-    print('[CMSIS]')
-    print(f'Cycles: {cmsis_cycles}')
-    print(f'Time: {cmsis_time}')
-    print('[MicroTVM]')
-    print(f'Cycles: {micro_cycles}')
-    print(f'Time: {micro_time}')
-    print('[MicroTVM Speedup]')
-    print(f'Cycles: {cmsis_cycles / micro_cycles}')
-    print(f'Time: {cmsis_time / micro_time}')
+    def verify_result_relay(data_np, kernel_np, output_np):
+        print('[Verifying]')
+        # Construct Relay program.
+        data_var = relay.var("data", shape=(N, H, W, CI), dtype=DTYPE)
+        kernel_var = relay.var("kernel", dtype=DTYPE)
+        conv_expr = relay.nn.conv2d(
+                data_var, kernel_var,
+                kernel_size=(KH, KW),
+                strides=STRIDES,
+                padding=PADDING,
+                dilation=DILATION,
+                channels=CO,
+                data_layout=LAYOUT,
+                out_layout=LAYOUT)
+        func = relay.Function(relay.analysis.free_vars(conv_expr), conv_expr)
+        mod = relay.Module.from_expr(func)
+        mod = transform.InferType()(mod)
 
-    #data_np = np.random.randint(-100, 100, size=(N, H, W, CI), dtype=DTYPE)
-    #kernel_np = np.random.randint(-5, 5, size=(CO, CI, KH, KW), dtype=DTYPE)
+        print(mod)
+
+        data_shape = list(map(lambda x: x.value, mod['main'].params[0].checked_type.shape))
+        print(data_shape)
+        kernel_shape = list(map(lambda x: x.value, mod['main'].params[1].checked_type.shape))
+        print(kernel_shape)
+        output_shape = list(map(lambda x: x.value, mod['main'].ret_type.shape))
+        print(output_shape)
+
+        intrp = create_executor('debug')
+        data_tvm = tvm.nd.array(data_np, ctx=tvm.cpu(0))
+        kernel_tvm = tvm.nd.array(kernel_np, ctx=tvm.cpu(0))
+        expected_output_tvm = intrp.evaluate(mod['main'])(data_tvm, kernel_tvm).data
+
+        tvm.testing.assert_allclose(output_np, expected_output_tvm.asnumpy())
+
+    #data_np, kernel_np, output_np, cmsis_cycles, cmsis_time = get_cmsis_tensors()
+    #assert np.sum(output_np) != 0
     #expected_output_np, micro_cycles, micro_time = get_micro_output(data_np, kernel_np)
+    #tvm.testing.assert_allclose(output_np, expected_output_np)
+
+    #verify_result_relay(data_np, kernel_np, output_np)
+    #print('[CMSIS]')
+    #print(f'Cycles: {cmsis_cycles}')
+    #print(f'Time: {cmsis_time}')
     #print('[MicroTVM]')
     #print(f'Cycles: {micro_cycles}')
     #print(f'Time: {micro_time}')
+    #print('[MicroTVM Speedup]')
+    #print(f'Cycles: {cmsis_cycles / micro_cycles}')
+    #print(f'Time: {cmsis_time / micro_time}')
+
+    data_np = np.random.randint(-100, 100, size=(N, H, W, CI), dtype=DTYPE)
+    kernel_np = np.random.randint(-5, 5, size=(CO, CI, KH, KW), dtype=DTYPE)
+    expected_output_np, micro_cycles, micro_time = get_micro_output(data_np, kernel_np)
+    print('[MicroTVM]')
+    print(f'Cycles: {micro_cycles}')
+    print(f'Time: {micro_time}')
+
+    #data_np = np.random.randint(-100, 100, size=(N, H, W, CI), dtype=DTYPE)
+    #kernel_np = np.random.randint(-5, 5, size=(CO, CI, KH, KW), dtype=DTYPE)
+    #output_np = np.zeros((N, H, W, CO), dtype=DTYPE)
+    #verify_result_relay(data_np, kernel_np, output_np)
 
 
 def test_conv2d():

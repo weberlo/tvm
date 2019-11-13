@@ -106,6 +106,7 @@ def create_micro_lib_base(obj_path, src_path, toolchain_prefix, device_id, lib_t
             '--pedantic',
             '-c',
             '-Os',
+            #'-O0',
             '-g',
             '-nostartfiles',
             '-nodefaultlibs',

@@ -294,7 +294,7 @@ typedef struct StructTVMArray32 {
   /*! \brief Number of dimensions */
   int32_t ndim;
   /*! \brief Padding to enforce struct alignment */
-  uint32_t pad0;
+  //uint32_t pad0;
   /*! \brief The data type of the pointer */
   DLDataType dtype;
   /*! \brief The shape of the tensor */
