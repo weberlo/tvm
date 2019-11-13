@@ -15,21 +15,11 @@
 # specific language governing permissions and limitations
 # under the License.
 """
-Auto-tuning matrix multiplication on an ARM Cortex-M7 STM32F746 Board
+Auto-tuning convolution on an ARM Cortex-M7 STM32F746 Board
 =====================================================================
 **Author**: `Logan Weber <https://github.com/weberlo>`_
 
-Auto-tuning for a specific accelerator design is critical for getting the best
-performance for any given operator. This is a tutorial showcases how to tune a
-whole convolutional network on VTA.
-
-The operator implementation for VTA in TVM is written in template form.
-The template has many tunable knobs (tile factor, virtual threads, etc).
-We will tune all convolution operators in the neural network. After tuning,
-we produce a log file which stores the best schedule parameters for all tuned
-operators. When the TVM compiler compiles these operators, it will query this
-log file to get the best knob parameters.
-
+TODO More docs
 """
 import logging
 import os
@@ -43,99 +33,287 @@ import topi
 import tvm
 from tvm import rpc, autotvm, relay
 from tvm.contrib import graph_runtime, util, download
-#from tvm.autotvm.measure.measure_methods import request_remote
 from tvm.autotvm.tuner import XGBTuner, GATuner, RandomTuner, GridSearchTuner
 import tvm.micro as micro
 
+################
+# Instructions #
+################
+#
 # First, locate your OpenOCD script directory (e.g.,
-# OPENOCD_SCRIPT_DIR=/usr/share/openocd/scripts) and run `openocd -f
-# $(OPENOCD_SCRIPT_DIR)/interface/stlink-v2-1.cfg -f $(OPENOCD_SCRIPT_DIR)/target/stm32f7x.cfg` in one terminal.
+# OPENOCD_SCRIPT_DIR=/usr/share/openocd/scripts) and run
+#   `openocd -f $(OPENOCD_SCRIPT_DIR)/interface/stlink-v2-1.cfg -f $(OPENOCD_SCRIPT_DIR)/target/stm32f7x.cfg`
+# in one terminal.
 #
-# Then, run `python -m tvm.exec.rpc_tracker --host 0.0.0.0 --port=9190` in another terminal.
+# If you want to connect multiple boards, you will need to
+# identify the serial number of the JTAG adapter for each board.  To do so, use
+# this trick:
+# https://stackoverflow.com/questions/29121050/openocd-debugging-multiple-devices-at-once
 #
-# Then, run `python -m tvm.micro.rpc_server --tracker=0.0.0.0:9190 --key=micro
-# --dev-config=<config_file>` in another terminal.
+# Once you have the serial numbers, create an OpenOCD `.cfg` file for each one,
+# using the following template:
+#   source [find target/stm32f7x.cfg]
+#   hla_serial $SERIAL_NUMBER
+#   gdb_port $GDB_PORT
+#   tcl_port $TCL_PORT
+#   telnet_port $TELNET_PORT
+# Make sure that in each config file, the GDB, Tcl, and Telnet ports are unique
+# across all config files.  We only care about the Tcl port, but OpenOCD will
+# quit if *any* of the ports are already in use.
+#
+# With the config files created, use the following command, replacing
+# $BOARD_CONFIG_FILE with each board's respective config file:
+#   `openocd -f $(OPENOCD_SCRIPT_DIR)/interface/stlink-v2-1.cfg -f $BOARD_CONFIG_FILE
+#
+# Then, run
+#   `python -m tvm.exec.rpc_tracker --host 0.0.0.0 --port=9190`
+# in another terminal.
+#
+# Then, run
+#   `python -m tvm.exec.rpc_server --tracker=0.0.0.0:9190 --key=micro --utvm-dev-id='arm.stm32f746xx' --utvm-dev-config-args='["127.0.0.1", 6666]'`
+# in another terminal.  If you have multiple boards, you will need to run this
+# command for each board, adjusting the port accordingly.
+#
 
+
+#########################################
+# Compute/Schedule/Template Definitions #
+#########################################
+
+#
+# The compute and schedule definitions have been adapted from the ARM CPU
+# spatial pack templates to disable vectorization, as we do not currently emit
+# vectorized instructions from the C codegen.
+#
+# The original definitions can be found here:
+#   https://github.com/apache/incubator-tvm/blob/master/topi/python/topi/arm_cpu/conv2d_spatial_pack.py#L26
+#
+
+def conv2d_spatial_pack_nchw(cfg, data, kernel, strides, padding, dilation,
+                             out_dtype, num_tile):
+    """compute define for Conv2d Spatial Pack with NCHW layout"""
+    out_dtype = out_dtype or data.dtype
+    N, CI, IH, IW = get_const_tuple(data.shape)
+
+    if isinstance(dilation, int):
+        dilation_h = dilation_w = dilation
+    else:
+        dilation_h, dilation_w = dilation
+
+    if len(kernel.shape) == 4:
+        pre_packed = False
+        CO, _, KH, KW = get_const_tuple(kernel.shape)
+    else:  # kernel tensor is pre packed
+        pre_packed = True
+        CO, _, KH, KW, VC = get_const_tuple(kernel.shape)
+        CO = CO * VC
+
+    dilated_kernel_h = (KH - 1) * dilation_h + 1
+    dilated_kernel_w = (KW - 1) * dilation_w + 1
+    pad_top, pad_left, pad_bottom, pad_right = get_pad_tuple(
+        padding, (dilated_kernel_h, dilated_kernel_w))
+    HSTR, WSTR = strides if isinstance(strides, (tuple, list)) else (strides, strides)
+    OH = (IH + pad_top + pad_bottom - dilated_kernel_h) // HSTR + 1
+    OW = (IW + pad_left + pad_right - dilated_kernel_w) // WSTR + 1
+    data_pad = nn.pad(data, [0, 0, pad_top, pad_left], [0, 0, pad_bottom, pad_right])
+
+    # ==================== define configuration space ====================
+    n, co, oh, ow = cfg.axis(N), cfg.axis(CO), cfg.axis(OH), cfg.axis(OW)
+    ci, kh, kw = cfg.reduce_axis(CI), cfg.reduce_axis(KH), cfg.reduce_axis(KW)
+
+    if num_tile == 2:     # for arm cpu
+        co, vc = cfg.define_split('tile_co', co, num_outputs=2)
+        oh, vh = cfg.define_split('tile_oh', oh, num_outputs=2)
+        ow, vw = cfg.define_split('tile_ow', ow, num_outputs=2)
+    elif num_tile == 3:   # for mali gpu
+        co, _, vc = cfg.define_split('tile_co', co, num_outputs=3)
+        oh, _, vh = cfg.define_split('tile_oh', oh, num_outputs=3)
+        ow, _, vw = cfg.define_split('tile_ow', ow, num_outputs=3)
+    else:
+        raise RuntimeError("Invalid num_tile")
+
+    cfg.define_reorder("reorder_0",
+                       [n, co, oh, ow, ci, kh, kw, vh, vw, vc],
+                       policy='candidate', candidate=[
+                           [n, co, oh, ow, ci, kh, kw, vh, vw, vc],
+                           [n, co, oh, ow, ci, kh, kw, vc, vh, vw]])
+
+    cfg.define_annotate("ann_reduce", [kh, kw], policy='try_unroll')
+    #cfg.define_annotate("ann_spatial", [vh, vw, vc], policy='try_unroll_vec')
+    cfg.define_annotate("ann_spatial", [vh, vw, vc], policy='try_unroll')
+
+    # fallback support
+    if cfg.is_fallback:
+        if num_tile == 2:     # arm cpu
+            ref_log = autotvm.tophub.load_reference_log('arm_cpu', 'rk3399', 'conv2d', 'direct')
+            cfg.fallback_with_reference_log(ref_log)
+        elif num_tile == 3:  # mali gpu
+            ref_log = autotvm.tophub.load_reference_log('mali', 'rk3399', 'conv2d', 'direct')
+            cfg.fallback_with_reference_log(ref_log)
+    # ====================================================================
+
+    VC = cfg["tile_co"].size[-1]
+    VH = cfg["tile_oh"].size[-1]
+    VW = cfg["tile_ow"].size[-1]
+
+    kvshape = (CO // VC, CI, KH, KW, VC)
+    ovshape = (N, CO // VC, OH // VH, OW // VW, VH, VW, VC)
+    oshape = (N, CO, OH, OW)
+
+    if dilation_h != 1 or dilation_w != 1:
+        # undilate input data
+        dvshape = (N, OH // VH, OW // VW, CI, KH, KW, VH, VW)
+        data_vec = tvm.compute(dvshape, lambda n, h, w, ci, kh, kw, vh, vw:
+                               data_pad[n][ci][(h*VH+vh)*HSTR+kh*dilation_h]
+                               [(w*VW+vw)*WSTR+kw*dilation_w],
+                               name='data_vec_undilated')
+    else:
+        dvshape = (N, OH // VH, OW // VW, CI, VH*HSTR + KH-1, VW*WSTR + KW-1)
+        data_vec = tvm.compute(dvshape, lambda n, h, w, ci, vh, vw:
+                               data_pad[n][ci][h*VH*HSTR+vh][w*VW*WSTR+vw],
+                               name='data_vec')
+
+    if pre_packed:
+        kernel_vec = kernel
+    else:
+        kernel_vec = tvm.compute(kvshape, lambda co, ci, kh, kw, vc:
+                                 kernel[co*VC+vc][ci][kh][kw],
+                                 name='kernel_vec')
+
+    ci = tvm.reduce_axis((0, CI), name='ci')
+    kh = tvm.reduce_axis((0, KH), name='kh')
+    kw = tvm.reduce_axis((0, KW), name='kw')
+
+    if dilation_h != 1 or dilation_w != 1:
+        conv = tvm.compute(ovshape, lambda n, co, h, w, vh, vw, vc: \
+            tvm.sum(data_vec[n, h, w, ci, kh, kw, vh, vw].astype(out_dtype) *
+                    kernel_vec[co, ci, kh, kw, vc].astype(out_dtype),
+                    axis=[ci, kh, kw]), name='conv')
+    else:
+        conv = tvm.compute(ovshape, lambda n, co, h, w, vh, vw, vc: \
+            tvm.sum(data_vec[n, h, w, ci, vh*HSTR+kh, vw*WSTR+kw].astype(out_dtype) *
+                    kernel_vec[co, ci, kh, kw, vc].astype(out_dtype),
+                    axis=[ci, kh, kw]), name='conv')
+
+    idxdiv = tvm.indexdiv
+    idxmod = tvm.indexmod
+
+    output = tvm.compute(oshape, lambda n, co, h, w:
+                         conv[n,
+                              idxdiv(co, VC), idxdiv(h, VH), idxdiv(w, VW),
+                              idxmod(h, VH), idxmod(w, VW), idxmod(co, VC)],
+                         name='output_unpack', tag='spatial_conv2d_output')
+    return output
+
+
+def schedule_conv2d_spatial_pack_nchw(cfg, s, data_vec, kernel_vec,
+                                      conv, output, last):
+    """schedule implementation"""
+    n, co, oh, ow, vh, vw, vc = s[conv].op.axis
+    ci, kh, kw = s[conv].op.reduce_axis
+
+    # schedule conv
+    cfg["reorder_0"].apply(s, conv, [n, co, oh, ow, ci, kh, kw, vh, vw, vc])
+    cfg["ann_reduce"].apply(s, conv, [kh, kw],
+                            axis_lens=[get_const_int(kh.dom.extent),
+                                       get_const_int(kw.dom.extent)],
+                            max_unroll=16,
+                            cfg=cfg)
+    cfg["ann_spatial"].apply(s, conv, [vh, vw, vc],
+                             axis_lens=[cfg['tile_oh'].size[-1],
+                                        cfg['tile_ow'].size[-1],
+                                        cfg['tile_co'].size[-1]],
+                             max_unroll=None,
+                             cfg=cfg)
+
+    # schedule fusion
+    n, co, h, w = s[last].op.axis
+    co, vc = cfg['tile_co'].apply(s, last, co)
+    oh, vh = cfg['tile_oh'].apply(s, last, h)
+    ow, vw = cfg['tile_ow'].apply(s, last, w)
+    s[last].reorder(n, co, oh, ow, vh, vw, vc)
+    if last != output:
+        s[output].compute_inline()
+        cfg["ann_spatial"].apply(s, last, [vh, vw, vc],
+                                 axis_lens=[cfg['tile_oh'].size[-1],
+                                            cfg['tile_ow'].size[-1],
+                                            cfg['tile_co'].size[-1]],
+                                 max_unroll=None,
+                                 cfg=cfg)
+    s[conv].compute_at(s[last], ow)
+
+    if data_vec.op.name == 'data_vec_undilated':
+        _, h, _, _, _, _, _, _ = s[data_vec].op.axis
+    else:
+        _, h, _, _, _, _ = s[data_vec].op.axis
+
+    if kernel_vec.op.name == 'kernel_vec':
+        co, _, _, _, _ = s[kernel_vec].op.axis
+        if autotvm.GLOBAL_SCOPE.in_tuning:
+            # kernel packing will be pre-computed during compilation, so we skip
+            # this part to make tuning records correct
+            s[kernel_vec].pragma(co, 'debug_skip_region')
+
+    return s
+
+
+@autotvm.template
+def conv2d_template(N, H, W, CO, CI, KH, KW, strides, padding, dilation, layout, out_dtype):
+    data = tvm.placeholder((N, CI, H, W), name='data')
+    kernel = tvm.placeholder((CO, CI, KH, KW), name='kernel')
+
+    cfg = autotvm.get_config()
+    conv = conv2d_spatial_pack_nchw(
+            cfg, data, kernel, strides, padding, dilation, layout, out_dtype)
+    sched = schedule_conv2d_spatial_pack_nchw(cfg, [conv])
+    return sched, [data, kernel, conv]
+
+
+####################
+# Autotuning Setup #
+####################
 logging.getLogger('autotvm').setLevel(logging.DEBUG)
 logging.getLogger('autotvm').addHandler(logging.StreamHandler(sys.stdout))
 
 DEV_CONFIG = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6666)
 DEV_CREATE_MICRO_LIB = micro.device.get_device_funcs(DEV_CONFIG['device_id'])['create_micro_lib']
-#DEV_CONFIG = micro.device.host.default_config()
 
-DEVICE = 'arm-cortex-m'
+DEVICE = 'arm-stm32f746xx'
 TARGET = tvm.target.create('c -device=micro_dev')
 
-#N_TRIAL = 1500
-#EARLY_STOPPING = 800
-N_TRIAL = 8
-EARLY_STOPPING = 8
+N_TRIAL = 1500
+EARLY_STOPPING = 800
+# we only need one per trial because the timings are cycle-accurate
 N_PER_TRIAL = 1
+# change this to the number of boards you have attached
 N_PARALLEL = 8
 
-SERVER_ADDR = '0.0.0.0'
-SERVER_PORT = 9190
+TRACKER_ADDR = '0.0.0.0'
+TRACKER_PORT = 9190
 
 LOG_FILE_NAME = f'{DEVICE}.log'
 
-#N, L, M = 32, 32, 32
-#DTYPE = 'float32'
-#
-#@autotvm.template
-#def matmul(N, L, M, dtype):
-#    A = tvm.placeholder((N, L), name='A', dtype=dtype)
-#    B = tvm.placeholder((L, M), name='B', dtype=dtype)
-#
-#    k = tvm.reduce_axis((0, L), name='k')
-#    C = tvm.compute((N, M), lambda i, j: tvm.sum(A[i, k] * B[k, j], axis=k), name='C')
-#    s = tvm.create_schedule(C.op)
-#
-#    # schedule
-#    y, x = s[C].op.axis
-#    k = s[C].op.reduce_axis[0]
-#
-#    # define schedule space
-#    cfg = autotvm.get_config()
-#    cfg.define_split('tile_y', y, num_outputs=2)
-#    cfg.define_split('tile_x', x, num_outputs=2)
-#
-#    # schedule according to config
-#    yo, yi = cfg['tile_y'].apply(s, C, y)
-#    xo, xi = cfg['tile_x'].apply(s, C, x)
-#
-#    s[C].reorder(yo, xo, k, yi, xi)
-#
-#    return s, [A, B, C]
-
-N, H, W, CO, CI, KH, KW = 1, 32, 32, 4, 4, 3, 3
+N, H, W, CO, CI, KH, KW = 1, 16, 16, 3, 3, 5, 5
 STRIDES, PADDING, DILATION = (1, 1), (1, 1), 1
 LAYOUT = 'NCHW'
 OUT_DTYPE = 'float32'
+# disable timeouts because JTAG is slow
 TIMEOUT = 0
 assert N == 1, "Only consider batch_size = 1 in this template"
 
-@autotvm.template
-def conv2d(N, H, W, CO, CI, KH, KW, strides, padding, dilation, layout, out_dtype):
-    data = tvm.placeholder((N, CI, H, W), name='data')
-    kernel = tvm.placeholder((CO, CI, KH, KW), name='kernel')
-
-    cfg = autotvm.get_config()
-    conv = topi.arm_cpu.conv2d.conv2d_arm_cpu(
-            cfg, data, kernel, strides, padding, dilation, layout, out_dtype)
-    sched = topi.arm_cpu.conv2d.schedule_conv2d_nchw_arm_cpu(cfg, [conv])
-    return sched, [data, kernel, conv]
-
-
+##############
+# Autotuning #
+##############
 def tune():
-    print('[TUNE]')
-    task = autotvm.task.create(conv2d,
+    print('[Tuning]')
+    task = autotvm.task.create(conv2d_template,
             args=(N, H, W, CO, CI, KH, KW, STRIDES, PADDING, DILATION, LAYOUT, OUT_DTYPE),
             target=TARGET)
 
     measure_option = autotvm.measure_option(
             builder=autotvm.LocalBuilder(
-                build_func=tvm.micro.cross_compiler(DEV_CREATE_MICRO_LIB, micro.LibType.OPERATOR)),
-            runner=autotvm.RPCRunner('micro', SERVER_ADDR, SERVER_PORT, n_parallel=N_PARALLEL, number=N_PER_TRIAL, timeout=TIMEOUT)
+                build_func=tvm.micro.cross_compiler(DEV_CREATE_MICRO_LIB, DEV_CONFIG['mem_layout'], micro.LibType.OPERATOR)),
+            runner=autotvm.RPCRunner('micro', TRACKER_ADDR, TRACKER_PORT, n_parallel=N_PARALLEL, number=N_PER_TRIAL, timeout=TIMEOUT)
             )
 
     # create tmp log file
@@ -143,10 +321,9 @@ def tune():
     if os.path.exists(tmp_log_file):
         os.remove(tmp_log_file)
 
-    #tuner = RandomTuner(task)
     tuner = XGBTuner(task, loss_type='rank')
 
-    # do tuning
+    # start tuning
     tuner.tune(n_trial=min(N_TRIAL, len(task.config_space)),
             early_stopping=EARLY_STOPPING,
             measure_option=measure_option,
@@ -154,13 +331,16 @@ def tune():
                 autotvm.callback.progress_bar(N_TRIAL, prefix='[Conv2D Task]'),
                 autotvm.callback.log_to_file(tmp_log_file)])
 
-    # pick best records to a cache file
+    # store best record in a cache file
     autotvm.record.pick_best(tmp_log_file, LOG_FILE_NAME)
     os.remove(tmp_log_file)
 
 
+#######################################
+# Evaluation Against Untuned Schedule #
+#######################################
 def evaluate():
-    print('[EVALUATE]')
+    print('[Evaluation]')
 
     def eval_mod(c_mod):
         with micro.Session(DEV_CONFIG) as sess:
@@ -168,78 +348,31 @@ def evaluate():
             micro_func = micro_mod['conv2d']
             ctx = tvm.micro_dev(0)
 
-            # check correctness
             data_np = np.random.uniform(size=(N, CI, H, W)).astype(np.float32)
+            data_tvm = tvm.nd.array(data_np, ctx)
             kernel_np = np.random.uniform(size=(CO, CI, KH, KW)).astype(np.float32)
-
+            kernel_tvm = tvm.nd.array(kernel_np, ctx)
             c_tvm = tvm.nd.empty([N, CO, H, W], ctx=ctx)
-            res = micro_func(tvm.nd.array(data_np, ctx), tvm.nd.array(kernel_np, ctx), c_tvm)
-            print(f'cycle count: {res}')
+            res = micro_func(data_tvm, kernel_tvm, c_tvm)
         return res
-            #tvm.testing.assert_allclose(c_np, c_tvm.asnumpy(), rtol=1e-2)
 
     # compile with default schedule
     with TARGET:
-        data = tvm.placeholder((N, CI, H, W), name='data')
-        kernel = tvm.placeholder((CO, CI, KH, KW), name='kernel')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        print('SHOULD REPLACE THIS WITH THE ARM_CPU COMPUTE DECLARATION')
-        conv = topi.nn.conv2d_nchw(data, kernel, STRIDES, PADDING, DILATION, OUT_DTYPE)
-        #sched, arg_bufs = conv2d(N, H, W, CO, CI, KH, KW, STRIDES, PADDING, DILATION, LAYOUT, OUT_DTYPE)
-        sched = tvm.create_schedule([conv.op])
-        c_mod = tvm.build(sched, [data, kernel, conv], name='conv2d')
+        sched, arg_bufs = conv2d_template(N, H, W, CO, CI, KH, KW, STRIDES, PADDING, DILATION, LAYOUT, OUT_DTYPE)
+        c_mod = tvm.build(sched, arg_bufs, name='conv2d')
     default_cycle_count = eval_mod(c_mod)
 
     # compile kernels with history best records
     with autotvm.apply_history_best(LOG_FILE_NAME):
         with TARGET:
-            sched, arg_bufs = conv2d(N, H, W, CO, CI, KH, KW, STRIDES, PADDING, DILATION, LAYOUT, OUT_DTYPE)
+            sched, arg_bufs = conv2d_template(N, H, W, CO, CI, KH, KW, STRIDES, PADDING, DILATION, LAYOUT, OUT_DTYPE)
             c_mod = tvm.build(sched, arg_bufs, name='conv2d')
     autotune_cycle_count = eval_mod(c_mod)
 
-    print(f'SPEEDUP: {default_cycle_count / autotune_cycle_count}')
+    print(f'  speedup: {default_cycle_count / autotune_cycle_count}')
 
 
 if __name__ == '__main__':
-    #tune()
-    #input('finished tuning...')
+    tune()
+    input('finished tuning...')
     evaluate()
