@@ -443,10 +443,6 @@ DevPtr MicroSession::EncoderAppend(TargetDataLayoutEncoder* encoder, const TVMAr
 
     int64_t* dev_shape = shape_addr.cast_to<int64_t*>();
     int64_t* dev_strides = strides_addr.cast_to<int64_t*>();
-    std::cout << "  arr.shape[0]: " << arr.shape[0] << std::endl;
-    std::cout << "  arr.dtype: " << arr.dtype << std::endl;
-    std::cout << "  dev_shape: " << dev_shape << std::endl;
-    std::cout << "  dev_strides: " << dev_strides << std::endl;
     TVMArray32 dev_arr = {
       .data = *((uint32_t*) &arr.data),
       .ctx = arr.ctx,
@@ -459,13 +455,6 @@ DevPtr MicroSession::EncoderAppend(TargetDataLayoutEncoder* encoder, const TVMAr
       .byte_offset = *((uint32_t*) &arr.byte_offset),
       .pad2 = 0,
     };
-    std::cout << "  " << &dev_arr.data << std::endl;
-    std::cout << "  " << &dev_arr.ctx << std::endl;
-    std::cout << "  " << &dev_arr.ndim << std::endl;
-    std::cout << "  " << &dev_arr.dtype << std::endl;
-    std::cout << "  " << &dev_arr.shape << std::endl;
-    std::cout << "  " << &dev_arr.strides << std::endl;
-    std::cout << "  " << &dev_arr.byte_offset << std::endl;
     // Update the device type to look like a host, because codegen generates
     // checks that it is a host array.
     CHECK(dev_arr.ctx.device_type == static_cast<DLDeviceType>(kDLMicroDev)) << "attempt to write TVMArray with non-micro device type";

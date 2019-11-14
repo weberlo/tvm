@@ -2,6 +2,8 @@
 extern "C" {
 #endif
 
+#include <stdint.h>
+
 #include "utvm_runtime.h"
 
 // There are two implementations of cycle counters on the STM32F7X: SysTick and
@@ -12,10 +14,10 @@ extern "C" {
 
 #ifdef USE_SYSTICK
 
-#define SYST_CSR    (*((volatile unsigned long *) 0xE000E010))
-#define SYST_RVR    (*((volatile unsigned long *) 0xE000E014))
-#define SYST_CVR    (*((volatile unsigned long *) 0xE000E018))
-#define SYST_CALIB  (*((volatile unsigned long *) 0xE000E01C))
+#define SYST_CSR    (*((volatile uint32_t *) 0xE000E010))
+#define SYST_RVR    (*((volatile uint32_t *) 0xE000E014))
+#define SYST_CVR    (*((volatile uint32_t *) 0xE000E018))
+#define SYST_CALIB  (*((volatile uint32_t *) 0xE000E01C))
 
 #define SYST_CSR_ENABLE     0
 #define SYST_CSR_TICKINT    1
@@ -37,7 +39,7 @@ int32_t UTVMTimerStart() {
 }
 
 void UTVMTimerStop() {
-  SYST_CSR = 0;
+  SYST_CSR &= ~((uint32_t) 1);
   stop_time = SYST_CVR;
 }
 

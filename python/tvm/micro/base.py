@@ -131,7 +131,7 @@ class Session:
         lib_obj_path = temp_dir.relpath('dev_lib.obj')
         c_mod.export_library(
                 lib_obj_path,
-                fcompile=cross_compiler(self.create_micro_lib, LibType.OPERATOR))
+                fcompile=cross_compiler(self.create_micro_lib, self.mem_layout, LibType.OPERATOR))
         micro_mod = tvm.module.load(lib_obj_path)
         return micro_mod
 
@@ -155,7 +155,27 @@ class Session:
         self._exit()
 
 
-def cross_compiler(create_micro_lib, lib_type):
+def _calc_max_workspace_usage(src):
+    import re
+    alloc_re = re.compile(r'.*void\* (.*) = TVMBackendAllocWorkspace\(.+, .+, \(uint64_t\)(.+), .+, .+\).*')
+    free_re = re.compile(r'.*if \(TVMBackendFreeWorkspace\(.+, .+, (.+)\) != 0\) {.*')
+    max_usage = 0
+    alloc_map = {}
+    for line in src.split('\n'):
+        if line.strip().startswith('//'):
+            continue
+        match = alloc_re.match(line)
+        if match is not None:
+            alloc_map[match.group(1)] = int(match.group(2))
+            max_usage = max(max_usage, sum(alloc_map.values()))
+        else:
+            match = free_re.match(line)
+            if match is not None:
+                del alloc_map[match.group(1)]
+    return max_usage
+
+
+def cross_compiler(create_micro_lib, mem_layout, lib_type):
     """Create a cross compile function that wraps `create_lib` for a `Binutil` instance.
 
     For use in `tvm.module.Module.export_library`.
@@ -188,6 +208,11 @@ def cross_compiler(create_micro_lib, lib_type):
             obj_path = obj_path[0]
         if isinstance(src_path, list):
             src_path = src_path[0]
+        # check that workspace allocations don't exceed available workspace memory
+        with open(src_path) as f:
+            max_ws_usage = _calc_max_workspace_usage(f.read())
+            if max_ws_usage > mem_layout['workspace']['size']:
+                raise RuntimeError('workspace allocations in library exceed available memory')
         create_micro_lib(obj_path, src_path, lib_type, kwargs.get('options', None))
     return _cc.cross_compiler(compile_func, output_format='obj')
 

@@ -176,7 +176,7 @@ def reset_gdbinit():
     with open('/home/lweber/gdb-conf/.gdbinit', 'w') as f:
         gdbinit_contents = (
 """
-#layout asm
+layout asm
 target remote localhost:3333
 
 print "utvm_task.num_args"
@@ -252,8 +252,8 @@ DEV_CONFIG = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6666)
 #OUT_DTYPE = 'float32'
 
 # cmsis cifar10 dims
-N, H, W, CO, CI, KH, KW = 1, 32, 32, 32, 32, 5, 5
-#N, H, W, CO, CI, KH, KW = 1, 32, 32, 32, 32, 5, 5
+#N, H, W, CO, CI, KH, KW = 1, 16, 16, 32, 32, 5, 5
+N, H, W, CO, CI, KH, KW = 1, 24, 24, 32, 32, 5, 5
 STRIDES, PADDING, DILATION = (1, 1), (2, 2), (1, 1)
 LAYOUT = 'NHWC'
 DTYPE = 'int8'
@@ -340,33 +340,121 @@ def test_cmsis_conv():
 
         tvm.testing.assert_allclose(output_np, expected_output_tvm.asnumpy())
 
-    #data_np, kernel_np, output_np, cmsis_cycles, cmsis_time = get_cmsis_tensors()
-    #assert np.sum(output_np) != 0
-    #expected_output_np, micro_cycles, micro_time = get_micro_output(data_np, kernel_np)
-    #tvm.testing.assert_allclose(output_np, expected_output_np)
+    data_np, kernel_np, output_np, cmsis_cycles, cmsis_time = get_cmsis_tensors()
+    assert np.sum(output_np) != 0
+    expected_output_np, micro_cycles, micro_time = get_micro_output(data_np, kernel_np)
 
     #verify_result_relay(data_np, kernel_np, output_np)
-    #print('[CMSIS]')
-    #print(f'Cycles: {cmsis_cycles}')
-    #print(f'Time: {cmsis_time}')
-    #print('[MicroTVM]')
-    #print(f'Cycles: {micro_cycles}')
-    #print(f'Time: {micro_time}')
-    #print('[MicroTVM Speedup]')
-    #print(f'Cycles: {cmsis_cycles / micro_cycles}')
-    #print(f'Time: {cmsis_time / micro_time}')
-
-    data_np = np.random.randint(-100, 100, size=(N, H, W, CI), dtype=DTYPE)
-    kernel_np = np.random.randint(-5, 5, size=(CO, CI, KH, KW), dtype=DTYPE)
-    expected_output_np, micro_cycles, micro_time = get_micro_output(data_np, kernel_np)
+    print('[CMSIS]')
+    print(f'Cycles: {cmsis_cycles}')
+    print(f'Time: {cmsis_time}')
     print('[MicroTVM]')
     print(f'Cycles: {micro_cycles}')
     print(f'Time: {micro_time}')
+    print('[MicroTVM Speedup]')
+    print(f'Cycles: {cmsis_cycles / micro_cycles}')
+    print(f'Time: {cmsis_time / micro_time}')
+    tvm.testing.assert_allclose(output_np, expected_output_np)
+
+    #data_np = np.random.randint(-100, 100, size=(N, H, W, CI), dtype=DTYPE)
+    #kernel_np = np.random.randint(-5, 5, size=(CO, CI, KH, KW), dtype=DTYPE)
+    #expected_output_np, micro_cycles, micro_time = get_micro_output(data_np, kernel_np)
+    #print('[MicroTVM]')
+    #print(f'Cycles: {micro_cycles}')
+    #print(f'Time: {micro_time}')
 
     #data_np = np.random.randint(-100, 100, size=(N, H, W, CI), dtype=DTYPE)
     #kernel_np = np.random.randint(-5, 5, size=(CO, CI, KH, KW), dtype=DTYPE)
     #output_np = np.zeros((N, H, W, CO), dtype=DTYPE)
     #verify_result_relay(data_np, kernel_np, output_np)
+
+# N, H, W, CO, CI, KH, KW = 1, 16, 16, 32, 32, 5, 5
+# [CMSIS]
+# Cycles: 10918149.0
+# Time: 0.23316740989685059
+# [MicroTVM]
+# Cycles: 95281.0
+# Time: 0.16225314140319824
+# [MicroTVM Speedup]
+# Cycles: 114.58894218154721
+# Time: 1.437059448466583
+
+# N, H, W, CO, CI, KH, KW = 1, 18, 18, 32, 32, 5, 5
+# [CMSIS]
+# Cycles: 13792940.0
+# Time: 0.24947428703308105
+# [MicroTVM]
+# Cycles: 109095.0
+# Time: 0.16560769081115723
+# [MicroTVM Speedup]
+# Cycles: 126.43054218800128
+# Time: 1.5064172793614825
+
+# N, H, W, CO, CI, KH, KW = 1, 20, 20, 32, 32, 5, 5
+# [CMSIS]
+# Cycles: 245489.0
+# Time: 0.26293063163757324
+# [MicroTVM]
+# Cycles: 131617.0
+# Time: 0.16651177406311035
+# [MicroTVM Speedup]
+# Cycles: 1.8651769908142566
+# Time: 1.5790512900181988
+
+# N, H, W, CO, CI, KH, KW = 1, 24, 24, 32, 32, 5, 5
+# [CMSIS]
+# Cycles: 7707967.0
+# Time: 0.2836883068084717
+# [MicroTVM]
+# Cycles: 185840.0
+# Time: 0.17332792282104492
+# [MicroTVM Speedup]
+# Cycles: 41.47636138613861
+# Time: 1.6367143977221146
+
+# N, H, W, CO, CI, KH, KW = 1, 28, 28, 32, 32, 5, 5
+# [CMSIS]
+# Cycles: 16546962.0
+# Time: 0.33393096923828125
+# [MicroTVM]
+# Cycles: 2710118.0
+# Time: 0.18435430526733398
+# [MicroTVM Speedup]
+# Cycles: 6.105624183153648
+# Time: 1.811354330749394
+
+# N, H, W, CO, CI, KH, KW = 1, 30, 30, 32, 32, 5, 5
+# [CMSIS]
+# Cycles: 4694608.0
+# Time: 0.3659372329711914
+# [MicroTVM]
+# Cycles: 4411234.0
+# Time: 0.2863960266113281
+# [MicroTVM Speedup]
+# Cycles: 1.0642391675435943
+# Time: 1.2777315289635973
+
+# N, H, W, CO, CI, KH, KW = 1, 31, 31, 32, 32, 5, 5
+# [CMSIS]
+# Cycles: 7286871.0
+# Time: 0.37795591354370117
+# [MicroTVM]
+# Cycles: 3704344.0
+# Time: 0.3617746829986572
+# [MicroTVM Speedup]
+# Cycles: 1.9671150951423517
+# Time: 1.0447273712215623
+
+# N, H, W, CO, CI, KH, KW = 1, 32, 32, 32, 32, 5, 5
+# [CMSIS]
+# Cycles: 9957309.0
+# Time: 0.3922536373138428
+# [MicroTVM]
+# Cycles: 13185781.0
+# Time: 0.49291563034057617
+# [MicroTVM Speedup]
+# Cycles: 0.7551550416315879
+# Time: 0.7957825095601416
 
 
 def test_conv2d():
