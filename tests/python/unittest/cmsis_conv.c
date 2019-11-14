@@ -52,9 +52,9 @@ int32_t arm_conv_wrapper(TVMValue* arg_values, int* arg_type_codes, int32_t num_
   //uint16_t out_ch = OUT_CH;
   //uint16_t kernel_size = KER_DIM;
 
-  void* col_buffer = TVMBackendAllocWorkspace(1, dev_id, (uint64_t)(6400 * sizeof(int8_t)), 2, 8);
-  //uint64_t ws_size = 2 * in_ch * kernel_size * kernel_size * sizeof(int16_t);
-  //void* col_buffer = TVMBackendAllocWorkspace(1, dev_id, ws_size, 2, 8);
+  //void* col_buffer = TVMBackendAllocWorkspace(1, dev_id, (uint64_t)(6400 * sizeof(int8_t)), 2, 8);
+  uint64_t ws_size = 2 * in_ch * kernel_size * kernel_size * sizeof(int16_t);
+  void* col_buffer = TVMBackendAllocWorkspace(1, dev_id, ws_size, 2, 8);
   if (col_buffer == NULL) {
     return UTVM_ERR_ALLOC_TOO_LARGE;
   }

@@ -434,6 +434,7 @@ std::tuple<DevPtr, DevPtr> MicroSession::EncoderAppend(
 
 template <typename T>
 DevPtr MicroSession::EncoderAppend(TargetDataLayoutEncoder* encoder, const TVMArray& arr) {
+  std::cout << "[MicroSession::EncoderAppend]" << std::endl;
   auto tvm_arr_slot = encoder->Alloc<T>();
   auto shape_slot = encoder->Alloc<int64_t>(arr.ndim);
 

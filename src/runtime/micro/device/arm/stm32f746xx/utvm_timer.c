@@ -64,7 +64,7 @@ int32_t UTVMTimerStart() {
 }
 
 void UTVMTimerStop() {
-  SYST_CSR = 0;
+  SYST_CSR &= ~((uint32_t) 1);
   stop_time = SYST_CVR;
 }
 

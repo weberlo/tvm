@@ -294,7 +294,6 @@ struct TVMArray32 {
     : data(data.val32),
       ctx(ctx),
       ndim(ndim),
-      pad0(0),
       dtype(dtype),
       shape(shape.val32),
       strides(strides.val32),
