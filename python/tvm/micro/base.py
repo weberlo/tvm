@@ -211,8 +211,9 @@ def cross_compiler(create_micro_lib, mem_layout, lib_type):
         # check that workspace allocations don't exceed available workspace memory
         with open(src_path) as f:
             max_ws_usage = _calc_max_workspace_usage(f.read())
-            if max_ws_usage > mem_layout['workspace']['size']:
-                raise RuntimeError('workspace allocations in library exceed available memory')
+            available_mem = mem_layout['workspace']['size']
+            #if max_ws_usage > available_mem:
+            #    raise RuntimeError(f'workspace allocations in library ({max_ws_usage}) exceed available memory ({available_mem})')
         create_micro_lib(obj_path, src_path, lib_type, kwargs.get('options', None))
     return _cc.cross_compiler(compile_func, output_format='obj')
 
