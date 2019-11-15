@@ -17,5 +17,5 @@
 """MicroTVM module for bare-metal backends"""
 
 from ..contrib import binutil
-from .base import Session, cross_compiler, LibType, get_micro_host_driven_dir, get_micro_device_dir
+from .base import Session, create_micro_mod, cross_compiler, LibType, get_micro_host_driven_dir, get_micro_device_dir
 from . import device

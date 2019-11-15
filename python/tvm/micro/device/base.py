@@ -124,9 +124,7 @@ def create_micro_lib_base(obj_path, src_path, toolchain_prefix, device_id, lib_t
     if lib_type == LibType.RUNTIME:
         dev_dir = _get_device_source_dir(device_id)
 
-        print(dev_dir)
         dev_src_paths = glob.glob(f'{dev_dir}/*.[csS]')
-        print(dev_src_paths)
         # there needs to at least be a utvm_timer.c file
         assert dev_src_paths
         assert 'utvm_timer.c' in map(os.path.basename, dev_src_paths)
@@ -164,7 +162,7 @@ def create_micro_lib_base(obj_path, src_path, toolchain_prefix, device_id, lib_t
 
     prereq_obj_paths = []
     for src_path in src_paths:
-        curr_obj_path = Path(src_path).with_suffix('.o').name
+        curr_obj_path = tmp_dir.relpath(Path(src_path).with_suffix('.o').name)
         assert curr_obj_path not in prereq_obj_paths
         prereq_obj_paths.append(curr_obj_path)
         curr_compile_cmd = base_compile_cmd + [src_path, '-o', curr_obj_path]
