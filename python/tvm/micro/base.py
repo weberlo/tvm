@@ -111,28 +111,6 @@ class Session:
         self._enter = self.module['enter']
         self._exit = self.module['exit']
 
-    def create_micro_mod(self, c_mod):
-        """Produces a micro module from a given module.
-
-        Parameters
-        ----------
-        c_mod : tvm.module.Module
-            module with "c" as its target backend
-
-        Return
-        ------
-        micro_mod : tvm.module.Module
-            micro module for the target device
-        """
-        print('[create_micro_mod]')
-        temp_dir = _util.tempdir()
-        lib_obj_path = temp_dir.relpath('dev_lib.obj')
-        c_mod.export_library(
-            lib_obj_path,
-            fcompile=cross_compiler(self.create_micro_lib, self.mem_layout, LibType.OPERATOR))
-        micro_mod = tvm.module.load(lib_obj_path)
-        return micro_mod
-
     def _check_system(self):
         """Check if the user's system is supported by MicroTVM.
 
@@ -171,6 +149,32 @@ def _calc_max_workspace_usage(src):
             if match is not None:
                 del alloc_map[match.group(1)]
     return max_usage
+
+
+def create_micro_mod(c_mod, dev_config):
+    """Produces a micro module from a given module.
+
+    Parameters
+    ----------
+    c_mod : tvm.module.Module
+        module with "c" as its target backend
+
+    Return
+    ------
+    micro_mod : tvm.module.Module
+        micro module for the target device
+    """
+    print('[create_micro_mod]')
+    temp_dir = _util.tempdir()
+    lib_obj_path = temp_dir.relpath('dev_lib.obj')
+    dev_funcs = tvm.micro.device.get_device_funcs(config['device_id'])
+    create_micro_lib = dev_funcs['create_micro_lib']
+    mem_layout = dev_config['mem_layout']
+    c_mod.export_library(
+            lib_obj_path,
+            fcompile=cross_compiler(create_micro_lib, mem_layout, LibType.OPERATOR))
+    micro_mod = tvm.module.load(lib_obj_path)
+    return micro_mod
 
 
 def cross_compiler(create_micro_lib, mem_layout, lib_type):
