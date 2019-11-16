@@ -66,6 +66,8 @@ class MicroSession : public ModuleNode {
   virtual PackedFunc GetFunction(const std::string& name,
                                  const ObjectPtr<Object>& sptr_to_self);
 
+  static const size_t kTaskQueueCapacity = 5;
+
   /*!
    * \return The type key of the executor.
    */
@@ -137,7 +139,21 @@ class MicroSession : public ModuleNode {
    * \param args args to the packed function
    * \return elapsed time during function execution on the device
    */
-  double PushToExecQueue(DevPtr func, const TVMArgs& args);
+  void PushToExecQueue(DevPtr func, const TVMArgs& args);
+
+  /*!
+   * \brief sets up runtime metadata for `func`, copies arguments for on-device execution, and bgexecutes.
+   * \param func address of the function to be executed
+   * \param args args to the packed function
+   * \return elapsed time during function execution on the device
+   */
+  double MicroSession::FlushExecQueue();
+
+  /*!
+   * \brief TODO
+   */
+  template <typename T>
+  double MicroSession::FlushExecQueuePriv();
 
   /*!
    * \brief loads binary onto device
@@ -217,6 +233,7 @@ class MicroSession : public ModuleNode {
   bool thumb_mode_;
   /*! \brief symbol map for the device runtime */
   SymbolMap runtime_symbol_map_;
+  std::vector<std::tuple<DevPtr, TVMValue>> task_queue_;
 
   /*!
    * \brief patches a function pointer in this module to an implementation

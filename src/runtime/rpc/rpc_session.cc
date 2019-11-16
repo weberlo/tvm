@@ -39,6 +39,7 @@
 #include "../object_internal.h"
 #include "../../common/ring_buffer.h"
 #include "../../common/socket.h"
+#include "../micro/micro_session.h"
 
 namespace tvm {
 namespace runtime {
@@ -1276,6 +1277,7 @@ PackedFunc MicroTimeEvaluator(
     int number,
     int repeat,
     int min_repeat_ms) {
+  /*
   auto ftimer = [pf, ctx, number, repeat, min_repeat_ms](TVMArgs args, TVMRetValue *rv) mutable {
     TVMRetValue temp;
     std::ostringstream os;
@@ -1290,6 +1292,53 @@ PackedFunc MicroTimeEvaluator(
         DeviceAPI::Get(ctx)->StreamSync(ctx, nullptr);
         speed += (temp.operator double()) / number;
       }
+      os.write(reinterpret_cast<char*>(&speed), sizeof(speed));
+    }
+    std::string blob = os.str();
+    TVMByteArray arr;
+    arr.size = blob.length();
+    arr.data = blob.data();
+    // return the time.
+    *rv = arr;
+  };
+  */
+
+  auto ftimer = [pf, ctx, number, repeat, min_repeat_ms](TVMArgs args, TVMRetValue *rv) mutable {
+    TVMRetValue temp;
+    std::ostringstream os;
+    // skip first time call, to activate lazy compilation components.
+    pf.CallPacked(args, &temp);
+    DeviceAPI::Get(ctx)->StreamSync(ctx, nullptr);
+
+    for (int i = 0; i < repeat; ++i) {
+      std::chrono::time_point<
+        std::chrono::high_resolution_clock, std::chrono::nanoseconds> tbegin, tend;
+      double duration_ms = 0.0;
+
+      do {
+        if (duration_ms > 0.0) {
+          number = static_cast<int>(
+              std::max((min_repeat_ms / (duration_ms / number) + 1),
+                       number * 1.618));   // 1.618 is chosen by random
+        }
+
+        // start timing
+        CHECK(number == MicroSession::kTaskQueueCapacity) << "`number` must match uTVM task queue capacity";
+        for (int i = 0; i < number - 1; ++i) {
+          pf.CallPacked(args, &temp);
+        }
+        tbegin = std::chrono::high_resolution_clock::now();
+        // the last call will trigger all tasks to be executed;
+        pf.CallPacked(args, &temp);
+        DeviceAPI::Get(ctx)->StreamSync(ctx, nullptr);
+        tend = std::chrono::high_resolution_clock::now();
+
+        duration_ms = std::chrono::duration_cast<std::chrono::duration<double> >
+            (tend - tbegin).count() * 1000;
+      } while (duration_ms < min_repeat_ms);
+
+      double speed = std::chrono::duration_cast<std::chrono::duration<double> >(
+          tend - tbegin).count() / number;
       os.write(reinterpret_cast<char*>(&speed), sizeof(speed));
     }
     std::string blob = os.str();

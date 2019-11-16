@@ -36,14 +36,26 @@ extern "C" {
 #include "utvm_runtime.h"
 
 // Task pointers must be patched before calling a function.
+  /*
 UTVMTask utvm_task = {
     .func = NULL,
     .arg_values = NULL,
     .arg_type_codes = NULL,
     .num_args = 0,
 };
+*/
 
-size_t utvm_word_size = 0;  // NOLINT(*)
+// TODO(weberlo): make all of these volatile
+
+UTVMTask utvm_tasks[5] = {
+    .func = NULL,
+    .arg_values = NULL,
+    .arg_type_codes = NULL,
+    .num_args = 0,
+};
+size_t utvm_num_tasks = 0;
+
+size_t utvm_word_size = 0;
 
 // These pointers are patched at load time to point to the workspace section.
 char* utvm_workspace_start = NULL;  // NOLINT(*)
@@ -73,12 +85,20 @@ void UTVMMain() {
     utvm_return_code = err;
     UTVMDone();
   }
-  utvm_return_code = utvm_task.func(
-          (void*) utvm_task.arg_values,      // NOLINT(*)
-          (void*) utvm_task.arg_type_codes,  // NOLINT(*)
-          utvm_task.num_args);
+  for (int i = 0; i < utvm_num_tasks; i++) {
+    utvm_return_code = utvm_task.func(
+            (void*) utvm_tasks[i].arg_values,      // NOLINT(*)
+            (void*) utvm_tasks[i].arg_type_codes,  // NOLINT(*)
+            utvm_tasks[i].num_args);
+    if (utvm_return_code < 0) {
+      break;
+    }
+  }
   UTVMTimerStop();
   utvm_task_time = UTVMTimerRead();
+  if (utvm_task_time < 0) {
+    utvm_return_code = utvm_task_time;
+  }
   UTVMDone();
 }
 

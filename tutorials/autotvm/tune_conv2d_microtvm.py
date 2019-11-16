@@ -278,13 +278,15 @@ logging.getLogger('autotvm').addHandler(logging.StreamHandler(sys.stdout))
 DEV_CONFIG = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6666)
 DEV_CREATE_MICRO_LIB = micro.device.get_device_funcs(DEV_CONFIG['device_id'])['create_micro_lib']
 
-DEVICE = 'arm-stm32f746xx'
+DEVICE = 'arm.stm32f746xx'
 TARGET = tvm.target.create('c -device=micro_dev')
 
-N_TRIAL = 1500
-EARLY_STOPPING = 800
+#N_TRIAL = 1500
+#EARLY_STOPPING = 800
+N_TRIAL = 8
+EARLY_STOPPING = 3
 # we only need one per trial because the timings are cycle-accurate
-N_PER_TRIAL = 1
+N_PER_TRIAL = 3
 # change this to the number of boards you have attached
 N_PARALLEL = 8
 
@@ -293,10 +295,12 @@ TRACKER_PORT = 9190
 
 LOG_FILE_NAME = f'{DEVICE}.log'
 
+INPUT_SHAPE = (1, 3, 32, 32)
+
 N, H, W, CO, CI, KH, KW = 1, 16, 16, 3, 3, 5, 5
 STRIDES, PADDING, DILATION = (1, 1), (1, 1), 1
 LAYOUT = 'NCHW'
-OUT_DTYPE = 'float32'
+DTYPE = 'float32'
 # disable timeouts because JTAG is slow
 TIMEOUT = 0
 assert N == 1, "Only consider batch_size = 1 in this template"
@@ -306,14 +310,23 @@ assert N == 1, "Only consider batch_size = 1 in this template"
 ##############
 def tune():
     print('[Tuning]')
-    task = autotvm.task.create(conv2d_template,
-            args=(N, H, W, CO, CI, KH, KW, STRIDES, PADDING, DILATION, LAYOUT, OUT_DTYPE),
-            target=TARGET)
+    from mxnet.gluon.model_zoo.vision import get_model
+    block = get_model('mobilenetv2_0.25', pretrained=True)
+    mod, params = relay.frontend.from_mxnet(block, shape={'data': INPUT_SHAPE}, dtype=DTYPE)
+    #net = mod["main"]
+    #net = relay.Function(net.params, relay.nn.softmax(net.body), None, net.type_params, net.attrs)
+    #mod = relay.Module.from_expr(net)
+
+    tasks = autotvm.task.extract_from_program(mod["main"], target=TARGET,
+            params=params, ops=(relay.op.nn.conv2d,))
+    #task = autotvm.task.create(conv2d_template,
+    #        args=(N, H, W, CO, CI, KH, KW, STRIDES, PADDING, DILATION, LAYOUT, OUT_DTYPE),
+    #        target=TARGET)
 
     measure_option = autotvm.measure_option(
             builder=autotvm.LocalBuilder(
                 build_func=tvm.micro.cross_compiler(DEV_CREATE_MICRO_LIB, DEV_CONFIG['mem_layout'], micro.LibType.OPERATOR)),
-            runner=autotvm.RPCRunner('micro', TRACKER_ADDR, TRACKER_PORT, n_parallel=N_PARALLEL, number=N_PER_TRIAL, timeout=TIMEOUT)
+            runner=autotvm.RPCRunner(DEVICE, TRACKER_ADDR, TRACKER_PORT, n_parallel=N_PARALLEL, number=N_PER_TRIAL, timeout=TIMEOUT)
             )
 
     # create tmp log file
@@ -321,15 +334,17 @@ def tune():
     if os.path.exists(tmp_log_file):
         os.remove(tmp_log_file)
 
-    tuner = XGBTuner(task, loss_type='rank')
+    for i, task in enumerate(reversed(tasks)):
+        prefix = "[Task %2d/%2d] " % (i+1, len(tasks))
+        tuner = XGBTuner(task, loss_type='rank')
 
-    # start tuning
-    tuner.tune(n_trial=min(N_TRIAL, len(task.config_space)),
-            early_stopping=EARLY_STOPPING,
-            measure_option=measure_option,
-            callbacks=[
-                autotvm.callback.progress_bar(N_TRIAL, prefix='[Conv2D Task]'),
-                autotvm.callback.log_to_file(tmp_log_file)])
+        # start tuning
+        tuner.tune(n_trial=min(N_TRIAL, len(task.config_space)),
+                early_stopping=EARLY_STOPPING,
+                measure_option=measure_option,
+                callbacks=[
+                    autotvm.callback.progress_bar(N_TRIAL, prefix=prefix),
+                    autotvm.callback.log_to_file(tmp_log_file)])
 
     # store best record in a cache file
     autotvm.record.pick_best(tmp_log_file, LOG_FILE_NAME)

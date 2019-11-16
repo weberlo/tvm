@@ -221,26 +221,75 @@ MicroSession::~MicroSession() {
   low_level_device_ = nullptr;
 }
 
-double MicroSession::PushToExecQueue(DevPtr func_ptr, const TVMArgs& args) {
-  std::cout << "[MicroSession::PushToExecQueue]" << std::endl;
-  if (thumb_mode_) {
-    func_ptr += 1;
-  }
-  TargetVal func_dev_addr = { .val64 = func_ptr.value() };
+void MicroSession::PushToExecQueue(DevPtr func_ptr, const TVMArgs& args) {
+  task_queue_.push_back(std::make_tuple(func_ptr, args));
+}
 
+double MicroSession::FlushExecQueue() {
+  if (word_size_ == 4) {
+    return FlushExecQueuePriv<UTVMTask32>();
+  } else if (word_size_ == 8) {
+    return FlushExecQueuePriv<UTVMTask64>();
+  }
+  //TargetVal func_dev_addr = { .val64 = func_ptr.value() };
+}
+
+template <typename T>
+double MicroSession::FlushExecQueuePriv() {
+  std::cout << "[MicroSession::PushToExecQueue]" << std::endl;
   // Create an allocator stream for the memory region after the most recent
   // allocation in the args section.
   DevPtr args_addr = GetAllocator(SectionKind::kArgs)->curr_end_addr();
-  TargetDataLayoutEncoder encoder(args_addr, word_size_);
+  std::vector<T> prepped_tasks;
+  for (const auto& task : task_queue_) {
+    DevPtr func_ptr = std::get<0>(task);
+    TVMArgs args = std::get<1>(task);
+    if (thumb_mode_) {
+      func_ptr += 1;
+    }
+    int32_t (*func_dev_addr)(void*, void*, int32_t) =
+      reinterpret_cast<int32_t (*)(void*, void*, int32_t)>(func_ptr.value());
 
-  std::tuple<DevPtr, DevPtr> arg_field_addrs = EncoderAppend(&encoder, args);
+    TargetDataLayoutEncoder encoder(args_addr, word_size_);
+
+    std::tuple<DevPtr, DevPtr> arg_field_addrs = EncoderAppend(&encoder, args);
+
+    DevPtr utvm_init_addr = runtime_symbol_map_["UTVMInit"];
+    DevPtr utvm_done_addr = runtime_symbol_map_["UTVMDone"];
+    if (thumb_mode_) {
+      utvm_init_addr += 1;
+    }
+
+    /*
+    if (word_size_ == 4) {
+      auto workspace_start = DevSymbolRead<uint32_t>(runtime_symbol_map_, "utvm_workspace_start");
+      std::cout << "  workspace start: " << (void*) workspace_start << std::endl;
+      auto workspace_end = DevSymbolRead<uint32_t>(runtime_symbol_map_, "utvm_workspace_end");
+      std::cout << "  workspace end: " << (void*) workspace_end << std::endl;
+      auto word_size = DevSymbolRead<uint32_t>(runtime_symbol_map_, "utvm_word_size");
+      std::cout << "  word size: " << word_size << std::endl;
+    } else if (word_size_ == 8) {
+      auto workspace_start = DevSymbolRead<uint64_t>(runtime_symbol_map_, "utvm_workspace_start");
+      std::cout << "  workspace start: " << (void*) workspace_start << std::endl;
+      auto workspace_end = DevSymbolRead<uint64_t>(runtime_symbol_map_, "utvm_workspace_end");
+      std::cout << "  workspace end: " << (void*) workspace_end << std::endl;
+      auto word_size = DevSymbolRead<uint64_t>(runtime_symbol_map_, "utvm_word_size");
+      std::cout << "  word size: " << word_size << std::endl;
+    }
+    */
+
+    uint32_t task_time = DevSymbolRead<uint32_t>(runtime_symbol_map_, "utvm_task_time");
+    CHECK(task_time != 0) << "invalid task time " << task_time;
+    std::cout << "  task time was " << task_time << std::endl;
+    std::cout << "  --------------------------------------------------------------------------------" << std::endl;
+  }
 
   // Flush `stream` to device memory.
   DevPtr stream_dev_addr =
-      GetAllocator(SectionKind::kArgs)->Allocate(encoder.buf_size());
+    GetAllocator(SectionKind::kArgs)->Allocate(encoder.buf_size());
   low_level_device()->Write(stream_dev_addr,
-                            reinterpret_cast<void*>(encoder.data()),
-                            encoder.buf_size());
+      reinterpret_cast<void*>(encoder.data()),
+      encoder.buf_size());
 
   TargetVal arg_values_dev_addr = { .val64 = std::get<0>(arg_field_addrs).value() };
   TargetVal arg_type_codes_dev_addr = { .val64 = std::get<1>(arg_field_addrs).value() };
@@ -263,14 +312,7 @@ double MicroSession::PushToExecQueue(DevPtr func_ptr, const TVMArgs& args) {
     // Write the task.
     DevSymbolWrite(runtime_symbol_map_, "utvm_task", task);
   }
-
   std::cout << "  after task write" << std::endl;
-
-  DevPtr utvm_init_addr = runtime_symbol_map_["UTVMInit"];
-  DevPtr utvm_done_addr = runtime_symbol_map_["UTVMDone"];
-  if (thumb_mode_) {
-    utvm_init_addr += 1;
-  }
 
   std::cout << "  UTVMInit loc: " << utvm_init_addr.cast_to<void*>() << std::endl;
   std::cout << "  UTVMDone loc: " << utvm_done_addr.cast_to<void*>() << std::endl;
@@ -281,33 +323,6 @@ double MicroSession::PushToExecQueue(DevPtr func_ptr, const TVMArgs& args) {
 
   // Check if there was an error during execution.  If so, log it.
   CheckDeviceError();
-
-  if (word_size_ == 4) {
-    auto workspace_start = DevSymbolRead<uint32_t>(runtime_symbol_map_, "utvm_workspace_start");
-    std::cout << "  workspace start: " << (void*) workspace_start << std::endl;
-    auto workspace_end = DevSymbolRead<uint32_t>(runtime_symbol_map_, "utvm_workspace_end");
-    std::cout << "  workspace end: " << (void*) workspace_end << std::endl;
-  } else if (word_size_ == 8) {
-    auto workspace_start = DevSymbolRead<uint64_t>(runtime_symbol_map_, "utvm_workspace_start");
-    std::cout << "  workspace start: " << (void*) workspace_start << std::endl;
-    auto workspace_end = DevSymbolRead<uint64_t>(runtime_symbol_map_, "utvm_workspace_end");
-    std::cout << "  workspace end: " << (void*) workspace_end << std::endl;
-  }
-  auto word_size = DevSymbolRead<uint32_t>(runtime_symbol_map_, "utvm_word_size");
-  std::cout << "  word size: " << word_size << std::endl;
-
-  //std::uintptr_t workspace_curr = DevSymbolRead<std::uintptr_t>(runtime_symbol_map_, "utvm_workspace_curr");
-  //std::cout << "  workspace curr: " << workspace_curr << std::endl;
-  //size_t num_active_allocs = DevSymbolRead<size_t>(runtime_symbol_map_, "utvm_num_active_allocs");
-  //std::cout << "  num active allocs: " << num_active_allocs << std::endl;
-  //std::uintptr_t last_error = DevSymbolRead<std::uintptr_t>(runtime_symbol_map_, "utvm_last_error");
-  //std::cout << "  last error: " << last_error << std::endl;
-  //int32_t return_code = DevSymbolRead<int32_t>(runtime_symbol_map_, "utvm_return_code");
-  //std::cout << "  return code: " << return_code << std::endl;
-  uint32_t task_time = DevSymbolRead<uint32_t>(runtime_symbol_map_, "utvm_task_time");
-  CHECK(task_time != 0) << "invalid task time " << task_time;
-  std::cout << "  task time was " << task_time << std::endl;
-  std::cout << "  --------------------------------------------------------------------------------" << std::endl;
 
   GetAllocator(SectionKind::kArgs)->Free(stream_dev_addr);
   return static_cast<double>(task_time);
