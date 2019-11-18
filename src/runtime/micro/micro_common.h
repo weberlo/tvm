@@ -54,24 +54,25 @@ enum class SectionKind : size_t {
 };
 
 /*! \brief union for storing values on varying target word sizes */
-union TargetVal {
+union DevVal {
   /*! \brief 32-bit pointer */
   uint32_t val32;
   /*! \brief 64-bit pointer */
   uint64_t val64;
 };
 
+// TODO just get rid of `DevPtr`.
 /*! \brief absolute device address */
 class DevPtr {
  public:
   /*! \brief construct a device address with value `value` */
-  explicit DevPtr(std::uintptr_t value) : value_(TargetVal { .val64 = value }) {}
+  explicit DevPtr(std::uintptr_t value) : value_(DevVal { .val64 = value }) {}
 
   /*! \brief default constructor */
-  DevPtr() : value_(TargetVal { .val64 = 0 }) {}
+  DevPtr() : value_(DevVal { .val64 = 0 }) {}
 
   /*! \brief construct a null address */
-  explicit DevPtr(std::nullptr_t value) : value_(TargetVal { .val64 = 0 }) {}
+  explicit DevPtr(std::nullptr_t value) : value_(DevVal { .val64 = 0 }) {}
 
   /*! \brief destructor */
   ~DevPtr() {}
@@ -80,7 +81,7 @@ class DevPtr {
    * \brief get value of pointer
    * \return value of pointer
    */
-  TargetVal value() const { return value_; }
+  DevVal value() const { return value_; }
 
   /*!
    * \brief cast location to type `T`
@@ -119,7 +120,7 @@ class DevPtr {
 
  private:
   /*! \brief raw value storing the pointer */
-  TargetVal value_;
+  DevVal value_;
 };
 
 /*!

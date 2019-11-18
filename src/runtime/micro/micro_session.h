@@ -52,6 +52,8 @@
 namespace tvm {
 namespace runtime {
 
+struct DevTask;
+
 /*!
  * \brief session for facilitating micro device interaction
  */
@@ -66,7 +68,8 @@ class MicroSession : public ModuleNode {
   virtual PackedFunc GetFunction(const std::string& name,
                                  const ObjectPtr<Object>& sptr_to_self);
 
-  static const size_t kTaskQueueCapacity = 5;
+  // todo having this decoupled from the value in utvm_runtime.c gives me stress dreams
+  static const size_t kTaskQueueCapacity = 10;
 
   /*!
    * \return The type key of the executor.
@@ -134,26 +137,24 @@ class MicroSession : public ModuleNode {
   static ObjectPtr<MicroSession>& Current();
 
   /*!
-   * \brief sets up runtime metadata for `func` and copies arguments for on-device execution
+   * \brief TODO
    * \param func address of the function to be executed
    * \param args args to the packed function
    * \return elapsed time during function execution on the device
    */
-  void PushToExecQueue(DevPtr func, const TVMArgs& args);
+  void PushToTaskQueue(DevPtr func, const TVMArgs& args);
 
   /*!
-   * \brief sets up runtime metadata for `func`, copies arguments for on-device execution, and bgexecutes.
-   * \param func address of the function to be executed
-   * \param args args to the packed function
+   * \brief serialize runtime metadata to the device for enqueued tasks and execute
    * \return elapsed time during function execution on the device
    */
-  double MicroSession::FlushExecQueue();
+  void FlushTaskQueue();
 
   /*!
    * \brief TODO
    */
   template <typename T>
-  double MicroSession::FlushExecQueuePriv();
+  void FlushTaskQueuePriv();
 
   /*!
    * \brief loads binary onto device
@@ -212,6 +213,10 @@ class MicroSession : public ModuleNode {
     return low_level_device_;
   }
 
+  const double GetLastBatchTime() const {
+    return last_batch_time_;
+  }
+
  private:
   /*! \brief low-level device pointer */
   std::shared_ptr<LowLevelDevice> low_level_device_;
@@ -233,7 +238,14 @@ class MicroSession : public ModuleNode {
   bool thumb_mode_;
   /*! \brief symbol map for the device runtime */
   SymbolMap runtime_symbol_map_;
-  std::vector<std::tuple<DevPtr, TVMValue>> task_queue_;
+  /*! \brief TODO */
+  std::vector<DevTask> task_queue_;
+  // TODO(weberlo): we don't even need an allocator mechanism for the args
+  // section. there's only ever one allocation.
+  /*! \brief TODO fukn hack */
+  TargetDataLayoutEncoder batch_args_encoder_;
+  /*! \brief TODO fukn hack */
+  double last_batch_time_;
 
   /*!
    * \brief patches a function pointer in this module to an implementation
@@ -301,13 +313,13 @@ struct MicroDevSpace {
 /*! \brief TVM array for serialization to 32-bit devices */
 struct TVMArray32 {
   TVMArray32(
-      TargetVal data,
+      DevVal data,
       DLContext ctx,
       int32_t ndim,
       DLDataType dtype,
-      TargetVal shape,
-      TargetVal strides,
-      TargetVal byte_offset)
+      DevVal shape,
+      DevVal strides,
+      DevVal byte_offset)
     : data(data.val32),
       ctx(ctx),
       ndim(ndim),
@@ -350,13 +362,13 @@ struct TVMArray32 {
 /*! \brief TVM array for serialization to 64-bit devices */
 struct TVMArray64 {
   TVMArray64(
-      TargetVal data,
+      DevVal data,
       DLContext ctx,
       int32_t ndim,
       DLDataType dtype,
-      TargetVal shape,
-      TargetVal strides,
-      TargetVal byte_offset)
+      DevVal shape,
+      DevVal strides,
+      DevVal byte_offset)
     : data(data.val64),
       ctx(ctx),
       ndim(ndim),
@@ -390,8 +402,26 @@ struct TVMArray64 {
   uint64_t byte_offset;
 };
 
+/*! \brief MicroTVM task to store in task queue before specializing to word size */
+struct DevTask {
+  /*! \brief Pointer to function to call for this task */
+  DevVal func;
+  /*! \brief Array of argument values */
+  DevVal arg_values;
+  /*! \brief Array of type codes for each argument value */
+  DevVal arg_type_codes;
+  /*! \brief Number of arguments */
+  int32_t num_args;
+};
+
 /*! \brief MicroTVM task for serialization to 32-bit devices */
-typedef struct StructUTVMTask32 {
+struct UTVMTask32 {
+  UTVMTask32(DevTask task)
+    : func(task.func.val32),
+      arg_values(task.arg_values.val32),
+      arg_type_codes(task.arg_type_codes.val32),
+      num_args(task.num_args) { }
+
   /*! \brief Pointer to function to call for this task */
   uint32_t func;
   /*! \brief Array of argument values */
@@ -400,10 +430,16 @@ typedef struct StructUTVMTask32 {
   uint32_t arg_type_codes;
   /*! \brief Number of arguments */
   int32_t num_args;
-} UTVMTask32;
+};
 
 /*! \brief MicroTVM task for serialization to 64-bit devices */
-typedef struct StructUTVMTask64 {
+struct UTVMTask64 {
+  UTVMTask64(DevTask task)
+    : func(task.func.val64),
+      arg_values(task.arg_values.val64),
+      arg_type_codes(task.arg_type_codes.val64),
+      num_args(task.num_args) { }
+
   /*! \brief Pointer to function to call for this task */
   uint64_t func;
   /*! \brief Array of argument values */
@@ -412,7 +448,7 @@ typedef struct StructUTVMTask64 {
   uint64_t arg_type_codes;
   /*! \brief Number of arguments */
   int32_t num_args;
-} UTVMTask64;
+};
 
 }  // namespace runtime
 }  // namespace tvm

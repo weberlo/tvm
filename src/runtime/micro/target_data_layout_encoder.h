@@ -97,9 +97,8 @@ class TargetDataLayoutEncoder {
    * \brief constructor
    * \param start_addr start address of the encoder in device memory
    */
-  explicit TargetDataLayoutEncoder(DevPtr start_addr, size_t word_size)
+  explicit TargetDataLayoutEncoder(size_t word_size)
       : buf_(std::vector<uint8_t>()), curr_offset_(0), word_size_(word_size) {
-    start_addr_ = DevPtr(UpperAlignValue(start_addr.value().val64, word_size_));
   }
 
   /*!
@@ -116,7 +115,12 @@ class TargetDataLayoutEncoder {
     }
     size_t slot_start_offset = curr_offset_;
     curr_offset_ += size;
-    return Slot<T>(this, slot_start_offset, size, start_addr_ + slot_start_offset);
+    return Slot<T>(this, slot_start_offset, size, start_addr() + slot_start_offset);
+  }
+
+  void Clear() {
+    buf_.clear();
+    curr_offset_ = 0;
   }
 
   /*!
@@ -131,8 +135,22 @@ class TargetDataLayoutEncoder {
    * \brief returns current size of the encoder's buffer
    * \return buffer size
    */
-  size_t buf_size() {
+  size_t buf_size() const {
     return buf_.size();
+  }
+
+  /*!
+   * \brief TODO
+   */
+  DevPtr start_addr() const {
+    // todo change to check_ne
+    CHECK_NE(start_addr_.value().val64, 0) << "start addr uninitialized";
+    return start_addr_;
+  }
+
+  void set_start_addr(DevPtr start_addr) {
+    CHECK_EQ(buf_.size(), 0) << "cannot change encoder start addr unless empty";
+    start_addr_ = DevPtr(UpperAlignValue(start_addr.value().val64, word_size_));
   }
 
  private:

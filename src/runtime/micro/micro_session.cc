@@ -23,6 +23,7 @@
 
 #include <dmlc/thread_local.h>
 #include <tvm/runtime/registry.h>
+#include <chrono>
 #include <memory>
 #include <stack>
 #include <tuple>
@@ -81,9 +82,10 @@ MicroSession::MicroSession(
     bool thumb_mode,
     const std::string& server_addr,
     int port)
-    : toolchain_prefix_(toolchain_prefix)
-    , word_size_(word_size)
-    , thumb_mode_(thumb_mode) {
+    : toolchain_prefix_(toolchain_prefix),
+      word_size_(word_size),
+      thumb_mode_(thumb_mode),
+      batch_args_encoder_(word_size) {
   CHECK(word_size_ == 4 || word_size_ == 8) << "unsupported word size " << word_size_;
   if (comms_method == "host") {
     // TODO(weberlo): move checks to python
@@ -193,16 +195,19 @@ MicroSession::MicroSession(
   std::cout << "  workspace (size = " << (section_allocators_[6]->capacity() / 1000.0) << " KB): " << section_allocators_[6]->start_addr().cast_to<void*>() << std::endl;
   std::cout << "  stack (size = " << (section_allocators_[7]->capacity() / 1000.0) << " KB): " << section_allocators_[7]->start_addr().cast_to<void*>() << std::endl;
 
+  DevPtr args_start_addr = GetAllocator(SectionKind::kArgs)->start_addr();
+  batch_args_encoder_.set_start_addr(args_start_addr);
+
   runtime_symbol_map_ = LoadBinary(binary_path, false).symbol_map;
   std::cout << runtime_symbol_map_["UTVMMain"].cast_to<void*>() << std::endl;
-  std::cout << runtime_symbol_map_["utvm_task"].cast_to<void*>() << std::endl;
+  std::cout << runtime_symbol_map_["utvm_tasks"].cast_to<void*>() << std::endl;
 
   // Patch pointers to define the bounds of the workspace section and the word
   // size (for allocation alignment).
   std::shared_ptr<MicroSectionAllocator> ws_allocator = GetAllocator(SectionKind::kWorkspace);
-  TargetVal ws_start = ws_allocator->start_addr().value();
-  TargetVal ws_end = ws_allocator->max_addr().value();
-  TargetVal target_word_size { .val64 = word_size_ };
+  DevVal ws_start = ws_allocator->start_addr().value();
+  DevVal ws_end = ws_allocator->max_addr().value();
+  DevVal target_word_size { .val64 = word_size_ };
   if (word_size_ == 4) {
     DevSymbolWrite(runtime_symbol_map_, "utvm_workspace_start", ws_start.val32);
     DevSymbolWrite(runtime_symbol_map_, "utvm_workspace_end", ws_end.val32);
@@ -221,111 +226,103 @@ MicroSession::~MicroSession() {
   low_level_device_ = nullptr;
 }
 
-void MicroSession::PushToExecQueue(DevPtr func_ptr, const TVMArgs& args) {
-  task_queue_.push_back(std::make_tuple(func_ptr, args));
+void MicroSession::PushToTaskQueue(DevPtr func_ptr, const TVMArgs& args) {
+  std::cout << "[MicroSession::PushToTaskQueue]" << std::endl;
+  if (thumb_mode_) {
+    func_ptr += 1;
+  }
+  DevVal func_dev_addr = func_ptr.value();
+
+  std::tuple<DevPtr, DevPtr> arg_field_addrs = EncoderAppend(&batch_args_encoder_, args);
+  DevVal arg_values_dev_addr = { .val64 = std::get<0>(arg_field_addrs).value() };
+  DevVal arg_type_codes_dev_addr = { .val64 = std::get<1>(arg_field_addrs).value() };
+
+  task_queue_.push_back(
+      DevTask {
+        .func = func_dev_addr,
+        .arg_values = arg_values_dev_addr,
+        .arg_type_codes = arg_type_codes_dev_addr,
+        .num_args = args.num_args
+      });
+
+  if (task_queue_.size() == MicroSession::kTaskQueueCapacity) {
+    FlushTaskQueue();
+  }
 }
 
-double MicroSession::FlushExecQueue() {
-  if (word_size_ == 4) {
-    return FlushExecQueuePriv<UTVMTask32>();
-  } else if (word_size_ == 8) {
-    return FlushExecQueuePriv<UTVMTask64>();
+void MicroSession::FlushTaskQueue() {
+  if (task_queue_.size() == 0) {
+    // nothing to run
+    return;
   }
-  //TargetVal func_dev_addr = { .val64 = func_ptr.value() };
+  if (word_size_ == 4) {
+    FlushTaskQueuePriv<UTVMTask32>();
+  } else if (word_size_ == 8) {
+    FlushTaskQueuePriv<UTVMTask64>();
+  }
 }
 
 template <typename T>
-double MicroSession::FlushExecQueuePriv() {
-  std::cout << "[MicroSession::PushToExecQueue]" << std::endl;
-  // Create an allocator stream for the memory region after the most recent
-  // allocation in the args section.
-  DevPtr args_addr = GetAllocator(SectionKind::kArgs)->curr_end_addr();
+void MicroSession::FlushTaskQueuePriv() {
+  std::cout << "[MicroSession::FlushTaskQueue]" << std::endl;
   std::vector<T> prepped_tasks;
   for (const auto& task : task_queue_) {
-    DevPtr func_ptr = std::get<0>(task);
-    TVMArgs args = std::get<1>(task);
-    if (thumb_mode_) {
-      func_ptr += 1;
-    }
-    int32_t (*func_dev_addr)(void*, void*, int32_t) =
-      reinterpret_cast<int32_t (*)(void*, void*, int32_t)>(func_ptr.value());
-
-    TargetDataLayoutEncoder encoder(args_addr, word_size_);
-
-    std::tuple<DevPtr, DevPtr> arg_field_addrs = EncoderAppend(&encoder, args);
-
-    DevPtr utvm_init_addr = runtime_symbol_map_["UTVMInit"];
-    DevPtr utvm_done_addr = runtime_symbol_map_["UTVMDone"];
-    if (thumb_mode_) {
-      utvm_init_addr += 1;
-    }
-
-    /*
-    if (word_size_ == 4) {
-      auto workspace_start = DevSymbolRead<uint32_t>(runtime_symbol_map_, "utvm_workspace_start");
-      std::cout << "  workspace start: " << (void*) workspace_start << std::endl;
-      auto workspace_end = DevSymbolRead<uint32_t>(runtime_symbol_map_, "utvm_workspace_end");
-      std::cout << "  workspace end: " << (void*) workspace_end << std::endl;
-      auto word_size = DevSymbolRead<uint32_t>(runtime_symbol_map_, "utvm_word_size");
-      std::cout << "  word size: " << word_size << std::endl;
-    } else if (word_size_ == 8) {
-      auto workspace_start = DevSymbolRead<uint64_t>(runtime_symbol_map_, "utvm_workspace_start");
-      std::cout << "  workspace start: " << (void*) workspace_start << std::endl;
-      auto workspace_end = DevSymbolRead<uint64_t>(runtime_symbol_map_, "utvm_workspace_end");
-      std::cout << "  workspace end: " << (void*) workspace_end << std::endl;
-      auto word_size = DevSymbolRead<uint64_t>(runtime_symbol_map_, "utvm_word_size");
-      std::cout << "  word size: " << word_size << std::endl;
-    }
-    */
-
-    uint32_t task_time = DevSymbolRead<uint32_t>(runtime_symbol_map_, "utvm_task_time");
-    CHECK(task_time != 0) << "invalid task time " << task_time;
-    std::cout << "  task time was " << task_time << std::endl;
-    std::cout << "  --------------------------------------------------------------------------------" << std::endl;
+    prepped_tasks.push_back(T(task));
   }
 
-  // Flush `stream` to device memory.
-  DevPtr stream_dev_addr =
-    GetAllocator(SectionKind::kArgs)->Allocate(encoder.buf_size());
-  low_level_device()->Write(stream_dev_addr,
-      reinterpret_cast<void*>(encoder.data()),
-      encoder.buf_size());
+  std::cout << "  prepped tasks" << std::endl;
 
-  TargetVal arg_values_dev_addr = { .val64 = std::get<0>(arg_field_addrs).value() };
-  TargetVal arg_type_codes_dev_addr = { .val64 = std::get<1>(arg_field_addrs).value() };
-  if (word_size_ == 4) {
-    UTVMTask32 task = {
-      .func = func_dev_addr.val32,
-      .arg_values = arg_values_dev_addr.val32,
-      .arg_type_codes = arg_type_codes_dev_addr.val32,
-      .num_args = args.num_args,
-    };
-    // Write the task.
-    DevSymbolWrite(runtime_symbol_map_, "utvm_task", task);
-  } else if (word_size_ == 8) {
-    UTVMTask64 task = {
-      .func = func_dev_addr.val64,
-      .arg_values = arg_values_dev_addr.val64,
-      .arg_type_codes = arg_type_codes_dev_addr.val64,
-      .num_args = args.num_args,
-    };
-    // Write the task.
-    DevSymbolWrite(runtime_symbol_map_, "utvm_task", task);
+  std::cout << "  writing args to "
+    << batch_args_encoder_.start_addr().cast_to<void*>()
+    << " from "
+    << (void*) batch_args_encoder_.data()
+    << " (buf size "
+    << batch_args_encoder_.buf_size()
+    << ")"
+    << std::endl;
+  // Flush `args` to device memory.
+  low_level_device()->Write(
+      batch_args_encoder_.start_addr(),
+      reinterpret_cast<void*>(batch_args_encoder_.data()),
+      batch_args_encoder_.buf_size());
+
+  std::cout << "  flushed args" << std::endl;
+
+  // Flush `tasks` to device memory.
+  DevPtr dev_tasks_addr = runtime_symbol_map_["utvm_tasks"];
+  low_level_device()->Write(
+      dev_tasks_addr,
+      reinterpret_cast<void*>(prepped_tasks.data()),
+      prepped_tasks.size() * sizeof(T));
+  std::cout << "  flushed tasks" << std::endl;
+  DevSymbolWrite<uint32_t>(runtime_symbol_map_, "utvm_num_tasks", prepped_tasks.size());
+  std::cout << "  wrote num tasks " << prepped_tasks.size() << std::endl;
+
+  DevPtr utvm_init_addr = runtime_symbol_map_["UTVMInit"];
+  DevPtr utvm_done_addr = runtime_symbol_map_["UTVMDone"];
+  if (thumb_mode_) {
+    utvm_init_addr += 1;
   }
-  std::cout << "  after task write" << std::endl;
-
   std::cout << "  UTVMInit loc: " << utvm_init_addr.cast_to<void*>() << std::endl;
   std::cout << "  UTVMDone loc: " << utvm_done_addr.cast_to<void*>() << std::endl;
+
+  std::chrono::time_point<
+    std::chrono::high_resolution_clock, std::chrono::nanoseconds> tbegin, tend;
+  tbegin = std::chrono::high_resolution_clock::now();
   //std::cout << "  do execution things: ";
   //char tmp;
   //std::cin >> tmp;
   low_level_device()->Execute(utvm_init_addr, utvm_done_addr);
+  tend = std::chrono::high_resolution_clock::now();
 
   // Check if there was an error during execution.  If so, log it.
   CheckDeviceError();
 
-  GetAllocator(SectionKind::kArgs)->Free(stream_dev_addr);
-  return static_cast<double>(task_time);
+  batch_args_encoder_.Clear();
+  task_queue_.clear();
+
+  last_batch_time_ = std::chrono::duration_cast<std::chrono::duration<double> >
+      (tend - tbegin).count() * 1000;
 }
 
 BinaryInfo MicroSession::LoadBinary(const std::string& binary_path, bool patch_dylib_pointers) {
@@ -355,10 +352,10 @@ BinaryInfo MicroSession::LoadBinary(const std::string& binary_path, bool patch_d
         data_section.start != nullptr && bss_section.start != nullptr)
       << "not enough space to load module on device";
 
-  std::cout << "text start: " << std::hex << text_section.start.value() << std::endl;
-  std::cout << "rodata start: " << std::hex << rodata_section.start.value() << std::endl;
-  std::cout << "data start: " << std::hex << data_section.start.value() << std::endl;
-  std::cout << "bss start: " << std::hex << bss_section.start.value() << std::endl;
+  std::cout << "text start: " << text_section.start.cast_to<void*>() << std::endl;
+  std::cout << "rodata start: " << rodata_section.start.cast_to<void*>() << std::endl;
+  std::cout << "data start: " << data_section.start.cast_to<void*>() << std::endl;
+  std::cout << "bss start: " << bss_section.start.cast_to<void*>() << std::endl;
   std::string relocated_bin = RelocateBinarySections(
       binary_path,
       word_size_,
@@ -466,13 +463,13 @@ DevPtr MicroSession::EncoderAppend(TargetDataLayoutEncoder* encoder, const TVMAr
   }
 
   T dev_arr(
-      TargetVal { .val64 = reinterpret_cast<uint64_t>(arr.data) },
+      DevVal { .val64 = reinterpret_cast<uint64_t>(arr.data) },
       arr.ctx,
       arr.ndim,
       arr.dtype,
       shape_dev_addr.value(),
       strides_dev_addr.value(),
-      TargetVal { .val64 = arr.byte_offset });
+      DevVal { .val64 = arr.byte_offset });
   CHECK(dev_arr.ctx.device_type == static_cast<DLDeviceType>(kDLMicroDev))
     << "attempt to write TVMArray with non-micro device type";
   // Update the device type to CPU, because from the microcontroller's
@@ -482,22 +479,16 @@ DevPtr MicroSession::EncoderAppend(TargetDataLayoutEncoder* encoder, const TVMAr
   return tvm_arr_slot.start_addr();
 }
 
+// TODO(weberlo): switch over entirely to error codes that expand to error
+// messages on the host side.
 void MicroSession::CheckDeviceError() {
   std::cout << "[MicroSession::CheckDeviceError]" << std::endl;
   int32_t return_code = DevSymbolRead<int32_t>(runtime_symbol_map_, "utvm_return_code");
 
   if (return_code) {
-    std::uintptr_t last_error =
-        DevSymbolRead<std::uintptr_t>(runtime_symbol_map_, "utvm_last_error");
-    std::string last_error_str;
-    if (last_error) {
-      DevPtr last_err_addr = DevPtr(last_error);
-      last_error_str = ReadString(last_err_addr);
-    }
     LOG(FATAL) << "error during micro function execution:\n"
-               << "  return code: " << std::dec << return_code << std::endl;
-               //<< "  dev str addr: 0x" << std::hex << last_error << "\n"
-               //<< "  dev str data: " << last_error_str << std::endl;
+               << "  return code: " << std::dec << return_code << std::endl
+               << "  error message: " << " TODO: convert retcodes to err msgs";
   }
 }
 
@@ -506,13 +497,15 @@ void MicroSession::PatchImplHole(const SymbolMap& symbol_map, const std::string&
   if (thumb_mode_) {
     runtime_impl_addr += 1;
   }
-  std::cout << "patching " << func_name << " at " << symbol_map[func_name].cast_to<void*>() << " with addr " << runtime_impl_addr.cast_to<void*>() << std::endl;
   std::ostringstream func_name_underscore;
   func_name_underscore << func_name << "_";
+  std::cout << "patching " << func_name_underscore.str() << " at " <<
+    symbol_map[func_name_underscore.str()].cast_to<void*>() << " with addr " <<
+    runtime_impl_addr.cast_to<void*>() << std::endl;
   if (word_size_ == 4) {
-    DevSymbolWrite(symbol_map, func_name_underscore.str(), runtime_impl_addr.value().val32);
+    DevSymbolWrite<uint32_t>(symbol_map, func_name_underscore.str(), runtime_impl_addr.value().val32);
   } else if (word_size_ == 8) {
-    DevSymbolWrite(symbol_map, func_name_underscore.str(), runtime_impl_addr.value().val64);
+    DevSymbolWrite<uint64_t>(symbol_map, func_name_underscore.str(), runtime_impl_addr.value().val64);
   }
 }
 

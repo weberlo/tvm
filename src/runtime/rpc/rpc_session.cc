@@ -1277,68 +1277,20 @@ PackedFunc MicroTimeEvaluator(
     int number,
     int repeat,
     int min_repeat_ms) {
-  /*
   auto ftimer = [pf, ctx, number, repeat, min_repeat_ms](TVMArgs args, TVMRetValue *rv) mutable {
     TVMRetValue temp;
     std::ostringstream os;
-    // skip first time call, to activate lazy compilation components.
-    pf.CallPacked(args, &temp);
-    DeviceAPI::Get(ctx)->StreamSync(ctx, nullptr);
 
     for (int i = 0; i < repeat; ++i) {
-      double speed = 0.0;
-      for (int j = 0; j < number; ++j) {
+      // start timing
+      CHECK(number < MicroSession::kTaskQueueCapacity)
+        << "`number` must be less than uTVM task queue capacity";
+      for (int i = 0; i < number; ++i) {
         pf.CallPacked(args, &temp);
-        DeviceAPI::Get(ctx)->StreamSync(ctx, nullptr);
-        speed += (temp.operator double()) / number;
       }
-      os.write(reinterpret_cast<char*>(&speed), sizeof(speed));
-    }
-    std::string blob = os.str();
-    TVMByteArray arr;
-    arr.size = blob.length();
-    arr.data = blob.data();
-    // return the time.
-    *rv = arr;
-  };
-  */
-
-  auto ftimer = [pf, ctx, number, repeat, min_repeat_ms](TVMArgs args, TVMRetValue *rv) mutable {
-    TVMRetValue temp;
-    std::ostringstream os;
-    // skip first time call, to activate lazy compilation components.
-    pf.CallPacked(args, &temp);
-    DeviceAPI::Get(ctx)->StreamSync(ctx, nullptr);
-
-    for (int i = 0; i < repeat; ++i) {
-      std::chrono::time_point<
-        std::chrono::high_resolution_clock, std::chrono::nanoseconds> tbegin, tend;
-      double duration_ms = 0.0;
-
-      do {
-        if (duration_ms > 0.0) {
-          number = static_cast<int>(
-              std::max((min_repeat_ms / (duration_ms / number) + 1),
-                       number * 1.618));   // 1.618 is chosen by random
-        }
-
-        // start timing
-        CHECK(number == MicroSession::kTaskQueueCapacity) << "`number` must match uTVM task queue capacity";
-        for (int i = 0; i < number - 1; ++i) {
-          pf.CallPacked(args, &temp);
-        }
-        tbegin = std::chrono::high_resolution_clock::now();
-        // the last call will trigger all tasks to be executed;
-        pf.CallPacked(args, &temp);
-        DeviceAPI::Get(ctx)->StreamSync(ctx, nullptr);
-        tend = std::chrono::high_resolution_clock::now();
-
-        duration_ms = std::chrono::duration_cast<std::chrono::duration<double> >
-            (tend - tbegin).count() * 1000;
-      } while (duration_ms < min_repeat_ms);
-
-      double speed = std::chrono::duration_cast<std::chrono::duration<double> >(
-          tend - tbegin).count() / number;
+      ObjectPtr<MicroSession> session = MicroSession::Current();
+      DeviceAPI::Get(ctx)->StreamSync(ctx, nullptr);
+      double speed = session->GetLastBatchTime();
       os.write(reinterpret_cast<char*>(&speed), sizeof(speed));
     }
     std::string blob = os.str();
@@ -1357,10 +1309,10 @@ PackedFunc WrapTimeEvaluator(PackedFunc pf,
                              int repeat,
                              int min_repeat_ms) {
   std::cout << "[WrapTimeEvaluator]" << std::endl;
-  //if (static_cast<int>(ctx.device_type) == static_cast<int>(kDLMicroDev)) {
-  //  std::cout << "  USING MICRO TIME EVAL" << std::endl;
-  //  return MicroTimeEvaluator(pf, ctx, number, repeat, min_repeat_ms);
-  //}
+  if (static_cast<int>(ctx.device_type) == static_cast<int>(kDLMicroDev)) {
+    std::cout << "  USING MICRO TIME EVAL" << std::endl;
+    return MicroTimeEvaluator(pf, ctx, number, repeat, min_repeat_ms);
+  }
   std::cout << "  USING NORMAL TIME EVAL" << std::endl;
 
   auto ftimer = [pf, ctx, number, repeat, min_repeat_ms](TVMArgs args, TVMRetValue *rv) mutable {

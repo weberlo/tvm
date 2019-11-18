@@ -95,8 +95,8 @@ def create_micro_lib_base(
     """
     print('[MicroBinutil.create_lib]')
     print('  EXTENDED OPTIONS')
-    print(f'    {obj_path}')
-    print(f'    {src_path}')
+    print(f'    {out_obj_path}')
+    print(f'    {in_src_path}')
     print(f'    {lib_type}')
     print(f'    {options}')
     # also look at these (specifically `strip`):
@@ -110,6 +110,7 @@ def create_micro_lib_base(
         '--pedantic',
         '-c',
         '-Os',
+        # TODO(weberlo): make a debug flag
         #'-O0',
         '-g',
         '-nostartfiles',
@@ -136,14 +137,13 @@ def create_micro_lib_base(
 
         src_paths += dev_src_paths
     elif lib_type == LibType.OPERATOR:
-        # todo it's reversed. we need the *operator* to have the source files
-        CMSIS_PATH = '/home/lweber/CMSIS_5/CMSIS'
-        include_paths += [
-                f'{CMSIS_PATH}/Core/Include',
-                f'{CMSIS_PATH}/DSP/Include',
-                f'{CMSIS_PATH}/NN/Include',
-                ]
-        src_paths += glob.glob('/home/lweber/tvm-micro/3rdparty/cmsis/*.c')
+        #CMSIS_PATH = '/home/lweber/CMSIS_5/CMSIS'
+        #include_paths += [
+        #        f'{CMSIS_PATH}/Core/Include',
+        #        f'{CMSIS_PATH}/DSP/Include',
+        #        f'{CMSIS_PATH}/NN/Include',
+        #        ]
+        #src_paths += glob.glob('/home/lweber/tvm-micro/3rdparty/cmsis/*.c')
 
         # create a temporary copy of the source, so we can inject the dev lib
         # header without modifying the original.

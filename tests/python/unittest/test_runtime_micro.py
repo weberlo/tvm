@@ -24,17 +24,22 @@ import tvm.micro as micro
 from tvm.relay.testing import resnet
 
 # Use the host emulated micro device.
-#DEV_CONFIG_A = micro.device.host.default_config()
-DEV_CONFIG_A = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6666)
-DEV_CONFIG_B = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6667)
+DEV_CONFIG_A = micro.device.host.default_config()
+DEV_CONFIG_B = micro.device.host.default_config()
 
-def relay_micro_build(func, sess, params=None):
+#DEV_CONFIG_A = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6666)
+#DEV_CONFIG_B = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6667)
+
+def relay_micro_build(func, dev_config, params=None):
     """Create a graph runtime module with a micro device context from a Relay function.
 
     Parameters
     ----------
     func : relay.Function
         function to compile
+
+    dev_config : TODO
+        TODO
 
     params : dict
         input parameters that do not change during inference
@@ -46,7 +51,7 @@ def relay_micro_build(func, sess, params=None):
     """
     with tvm.build_config(disable_vectorize=True):
         graph, c_mod, params = relay.build(func, target="c", params=params)
-    micro_mod = sess.create_micro_mod(c_mod)
+    micro_mod = micro.create_micro_mod(c_mod, dev_config)
     ctx = tvm.micro_dev(0)
     mod = graph_runtime.create(graph, micro_mod, ctx)
     mod.set_input(**params)
@@ -54,24 +59,17 @@ def relay_micro_build(func, sess, params=None):
 
 
 def reset_gdbinit():
-    pass
-#    with open('/home/pratyush/Code/nucleo-interaction-from-scratch/.gdbinit', 'w') as f:
-#        gdbinit_contents = (
-#"""layout asm
-#target remote localhost:3333
-#
-##print "(*((TVMValue*) utvm_task.arg_values)).v_handle"
-##print (*((TVMValue*) utvm_task.arg_values)).v_handle
-##print "*((TVMArray*) ((*((TVMValue*) utvm_task.arg_values)).v_handle))"
-##print *((TVMArray*) ((*((TVMValue*) utvm_task.arg_values)).v_handle))
-##print "((float*) (*((TVMArray*) ((*((TVMValue*) utvm_task.arg_values)).v_handle))).data)[0]"
-##print ((float*) (*((TVMArray*) ((*((TVMValue*) utvm_task.arg_values)).v_handle))).data)[0]
-##print "((float*) (*((TVMArray*) ((*((TVMValue*) utvm_task.arg_values)).v_handle))).data)[1]"
-##print ((float*) (*((TVMArray*) ((*((TVMValue*) utvm_task.arg_values)).v_handle))).data)[1]
-##break UTVMMain
-##break UTVMDone
-##jump UTVMMain""")
-#        f.write(gdbinit_contents)
+    if 'server_port' not in DEV_CONFIG_A:
+        return
+    with open('/home/lweber/gdb-conf/.gdbinit', 'w') as f:
+        gdb_port = DEV_CONFIG_A['server_port'] - 3333
+        gdbinit_contents = (
+f"""layout asm
+target remote localhost:{gdb_port}
+set $pc = UTVMInit
+break UTVMDone
+""")
+        f.write(gdbinit_contents)
 
 
 def test_alloc():
@@ -106,8 +104,8 @@ def test_add():
     func_name = "fadd"
     c_mod = tvm.build(s, [A, B, C], target="c", name=func_name)
 
-    with micro.Session(DEV_CONFIG_A) as sess:
-        micro_mod = sess.create_micro_mod(c_mod)
+    with micro.Session(DEV_CONFIG_A):
+        micro_mod = micro.create_micro_mod(c_mod, DEV_CONFIG_A)
         micro_func = micro_mod[func_name]
         ctx = tvm.micro_dev(0)
         a = tvm.nd.array(np.random.uniform(size=shape).astype(dtype), ctx)
@@ -129,6 +127,8 @@ def test_workspace_add():
     shape = (1024,)
     dtype = "float32"
 
+    reset_gdbinit()
+
     # Construct TVM expression.
     tvm_shape = tvm.convert(shape)
     A = tvm.placeholder(tvm_shape, name="A", dtype=dtype)
@@ -140,8 +140,8 @@ def test_workspace_add():
     func_name = "fadd_two_workspace"
     c_mod = tvm.build(s, [A, C], target="c", name=func_name)
 
-    with micro.Session(DEV_CONFIG_A) as sess:
-        micro_mod = sess.create_micro_mod(c_mod)
+    with micro.Session(DEV_CONFIG_A):
+        micro_mod = micro.create_micro_mod(c_mod, DEV_CONFIG_A)
         micro_func = micro_mod[func_name]
         ctx = tvm.micro_dev(0)
         a = tvm.nd.array(np.random.uniform(size=shape).astype(dtype), ctx)
@@ -168,8 +168,8 @@ def test_graph_runtime():
     z = relay.add(xx, relay.const(1.0))
     func = relay.Function([x], z)
 
-    with micro.Session(DEV_CONFIG_A) as sess:
-        mod = relay_micro_build(func, sess)
+    with micro.Session(DEV_CONFIG_A):
+        mod = relay_micro_build(func, DEV_CONFIG_A)
 
         x_in = np.random.uniform(size=shape[0]).astype(dtype)
         print(x_in)
@@ -214,8 +214,8 @@ def test_conv2d():
     print(c_mod.get_source())
     input('ayy')
 
-    with micro.Session(DEV_CONFIG_A) as sess:
-        micro_mod = sess.create_micro_mod(c_mod)
+    with micro.Session(DEV_CONFIG_A):
+        micro_mod = micro.create_micro_mod(c_mod, DEV_CONFIG_A)
         micro_func = micro_mod[func_name]
         ctx = tvm.micro_dev(0)
 
@@ -248,9 +248,9 @@ def test_multiple_modules():
     ret = relay.subtract(x, relay.const(1.0))
     sub_const_func = relay.Function([x], ret)
 
-    with micro.Session(DEV_CONFIG_A) as sess:
-        add_const_mod = relay_micro_build(add_const_func, sess)
-        sub_const_mod = relay_micro_build(sub_const_func, sess)
+    with micro.Session(DEV_CONFIG_A):
+        add_const_mod = relay_micro_build(add_const_func, DEV_CONFIG_A)
+        sub_const_mod = relay_micro_build(sub_const_func, DEV_CONFIG_A)
 
         x_in = np.random.uniform(size=shape[0]).astype(dtype)
         add_const_mod.run(x=x_in)
@@ -285,13 +285,13 @@ def test_interleave_sessions():
         np_tensor_b = np.random.uniform(size=shape).astype(dtype)
         micro_tensor_b = tvm.nd.array(np_tensor_b, tvm.micro_dev(0))
     with sess_a:
-        add_const_mod = relay_micro_build(add_const_func, sess_a)
+        add_const_mod = relay_micro_build(add_const_func, DEV_CONFIG_A)
         add_const_mod.run(x=micro_tensor_a)
         add_result = add_const_mod.get_output(0).asnumpy()
         tvm.testing.assert_allclose(
                 add_result, np_tensor_a + 1.0)
     with sess_b:
-        add_const_mod = relay_micro_build(add_const_func, sess_b)
+        add_const_mod = relay_micro_build(add_const_func, DEV_CONFIG_B)
         add_const_mod.run(x=micro_tensor_b)
         add_result = add_const_mod.get_output(0).asnumpy()
         tvm.testing.assert_allclose(
@@ -318,7 +318,7 @@ def test_nested_sessions():
         with sess_b:
             np_tensor_b = np.random.uniform(size=shape).astype(dtype)
             micro_tensor_b = tvm.nd.array(np_tensor_b, tvm.micro_dev(0))
-        add_const_mod = relay_micro_build(add_const_func, sess_a)
+        add_const_mod = relay_micro_build(add_const_func, DEV_CONFIG_A)
         add_const_mod.run(x=micro_tensor_a)
         add_result = add_const_mod.get_output(0).asnumpy()
         tvm.testing.assert_allclose(
@@ -342,7 +342,7 @@ def test_inactive_session_use():
     with sess_a:
         np_tensor_a = np.random.uniform(size=shape).astype(dtype)
         micro_tensor_a = tvm.nd.array(np_tensor_a, tvm.micro_dev(0))
-        add_const_mod = relay_micro_build(add_const_func, sess_a)
+        add_const_mod = relay_micro_build(add_const_func, DEV_CONFIG_A)
 
     with sess_b:
         # These objects belong to `sess_a`.
@@ -357,9 +357,8 @@ if __name__ == "__main__":
     test_add()
     test_workspace_add()
     test_graph_runtime()
-    #test_conv2d()
+    test_conv2d()
     test_multiple_modules()
-
-    #test_interleave_sessions()
-    #test_nested_sessions()
-    #test_inactive_session_use()
+    test_interleave_sessions()
+    test_nested_sessions()
+    test_inactive_session_use()

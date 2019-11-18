@@ -33,10 +33,10 @@ extern "C" {
 #include <stdint.h>
 #include <stddef.h>
 
-void *(*TVMBackendAllocWorkspace_)(int, int, uint64_t, int, int) =
+volatile void *(*TVMBackendAllocWorkspace_)(int, int, uint64_t, int, int) =
     (void *(*)(int, int, uint64_t, int, int)) NULL;
-int (*TVMBackendFreeWorkspace_)(int, int, void*) = (int (*)(int, int, void*)) NULL;
-void (*TVMAPISetLastError_)(const char*) = (void (*)(const char*)) NULL;
+volatile int (*TVMBackendFreeWorkspace_)(int, int, void*) = (int (*)(int, int, void*)) NULL;
+volatile void (*TVMAPISetLastError_)(const char*) = (void (*)(const char*)) NULL;
 
 void* TVMBackendAllocWorkspace(int device_type, int device_id, uint64_t size,
     int dtype_code_hint, int dtype_bits_hint) {

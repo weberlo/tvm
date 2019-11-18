@@ -89,6 +89,8 @@ class MicroDeviceAPI final : public DeviceAPI {
       CHECK(ctx_from.device_id == ctx_to.device_id)
         << "can only copy between the same micro device";
       ObjectPtr<MicroSession>& session = from_space->session;
+      // flush all pending tasks to ensure data is consistent
+      session->FlushTaskQueue();
       const std::shared_ptr<LowLevelDevice>& lld = session->low_level_device();
 
       DevPtr from_dev_addr = GetDevLoc(from_space, from_offset);
@@ -103,6 +105,8 @@ class MicroDeviceAPI final : public DeviceAPI {
 
       MicroDevSpace* from_space = static_cast<MicroDevSpace*>(const_cast<void*>(from));
       ObjectPtr<MicroSession>& session = from_space->session;
+      // flush all pending tasks to ensure data is consistent
+      session->FlushTaskQueue();
       const std::shared_ptr<LowLevelDevice>& lld = session->low_level_device();
 
       DevPtr from_dev_addr = GetDevLoc(from_space, from_offset);
@@ -114,6 +118,8 @@ class MicroDeviceAPI final : public DeviceAPI {
 
       MicroDevSpace* to_space = static_cast<MicroDevSpace*>(const_cast<void*>(to));
       ObjectPtr<MicroSession>& session = to_space->session;
+      // flush all pending tasks to ensure data is consistent
+      session->FlushTaskQueue();
       const std::shared_ptr<LowLevelDevice>& lld = session->low_level_device();
 
       void* from_host_ptr = GetHostLoc(from, from_offset);
@@ -125,6 +131,7 @@ class MicroDeviceAPI final : public DeviceAPI {
   }
 
   void StreamSync(TVMContext ctx, TVMStreamHandle stream) final {
+    MicroSession::Current()->FlushTaskQueue();
   }
 
   void* AllocWorkspace(TVMContext ctx, size_t size, TVMType type_hint) final {

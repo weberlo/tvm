@@ -47,27 +47,21 @@ UTVMTask utvm_task = {
 
 // TODO(weberlo): make all of these volatile
 
-UTVMTask utvm_tasks[5] = {
-    .func = NULL,
-    .arg_values = NULL,
-    .arg_type_codes = NULL,
-    .num_args = 0,
-};
-size_t utvm_num_tasks = 0;
+volatile UTVMTask utvm_tasks[10] = { };
+volatile uint32_t utvm_num_tasks = 0;
 
-size_t utvm_word_size = 0;
+volatile uint32_t utvm_word_size = 0;
 
 // These pointers are patched at load time to point to the workspace section.
-char* utvm_workspace_start = NULL;  // NOLINT(*)
-char* utvm_workspace_end = NULL;    // NOLINT(*)
-char* utvm_workspace_curr = NULL;   // NOLINT(*)
+volatile char* utvm_workspace_start = NULL;  // NOLINT(*)
+volatile char* utvm_workspace_end = NULL;    // NOLINT(*)
+volatile char* utvm_workspace_curr = NULL;   // NOLINT(*)
 // Keep track of how many active allocations there are on the workspace.
-size_t utvm_num_active_allocs = 0;
+volatile uint32_t utvm_num_active_allocs = 0;
 
-const char* utvm_last_error = NULL;  // NOLINT(*)
-int32_t utvm_return_code = 0;        // NOLINT(*)
+volatile int32_t utvm_return_code = 0;        // NOLINT(*)
 
-uint32_t utvm_task_time = 0;
+volatile uint32_t utvm_task_time = 0;
 
 volatile uint32_t utvm_done = 0;
 
@@ -76,8 +70,7 @@ void UTVMMain() {
   utvm_done = 0;
   utvm_workspace_curr = utvm_workspace_start;
   utvm_num_active_allocs = 0;
-  utvm_last_error = NULL;  // NOLINT(*)
-  utvm_return_code = 0;
+  utvm_return_code = UTVM_ERR_NOT_FINISHED;
   utvm_task_time = 0;
   UTVMTimerReset();
   int32_t err = UTVMTimerStart();
@@ -86,7 +79,7 @@ void UTVMMain() {
     UTVMDone();
   }
   for (int i = 0; i < utvm_num_tasks; i++) {
-    utvm_return_code = utvm_task.func(
+    utvm_return_code = utvm_tasks[i].func(
             (void*) utvm_tasks[i].arg_values,      // NOLINT(*)
             (void*) utvm_tasks[i].arg_type_codes,  // NOLINT(*)
             utvm_tasks[i].num_args);
@@ -98,6 +91,9 @@ void UTVMMain() {
   utvm_task_time = UTVMTimerRead();
   if (utvm_task_time < 0) {
     utvm_return_code = utvm_task_time;
+  }
+  if (utvm_return_code == UTVM_ERR_NOT_FINISHED) {
+    utvm_return_code = UTVM_ERR_OK;
   }
   UTVMDone();
 }
@@ -143,9 +139,7 @@ int TVMBackendFreeWorkspace(int device_type, int device_id, void* ptr) {
   }
 }
 
-void TVMAPISetLastError(const char* msg) {
-  utvm_last_error = msg;
-}
+void TVMAPISetLastError(const char* msg) { }
 
 #ifdef __cplusplus
 }  // TVM_EXTERN_C
