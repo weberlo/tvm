@@ -579,7 +579,7 @@ def _alter_conv2d_layout_arm(attrs, inputs, tinfos, F):
 
             return F.nn.conv2d(*copy_inputs, **new_attrs)
         elif cfg.template_key == "winograd":  # pre-compute weight transformation in winograd
-            if "-device=arm_cpu" in target.options or "-device=micro_dev" in target.options:
+            if "-device=arm_cpu" in target.options:
                 tile_size = 4
                 VC = cfg['tile_k'].size[-1]
             elif "-device=bifrost" in target.options:

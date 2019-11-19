@@ -358,10 +358,6 @@ def register_topi_compute(topi_compute, target_keys, template_keys, func=None, o
     --------
     See tvm/topi/python/topi/arm_cpu/depthwise_conv2d.py for example usage.
     """
-    # TODO(weberlo): fukn hack
-    if target_keys == 'arm_cpu':
-        target_keys = ['arm_cpu', 'micro_dev']
-
     def _decorator(f):
         targets = [target_keys] if isinstance(target_keys, str) else target_keys
         for target_key in targets:
@@ -450,10 +446,6 @@ def register_topi_schedule(topi_schedule, target_keys, template_keys, func=None,
     --------
     See tvm/topi/python/topi/arm_cpu/depthwise_conv2d.py for example usage.
     """
-    # TODO(weberlo): fukn hack
-    if target_keys == 'arm_cpu':
-        target_keys = ['arm_cpu', 'micro_dev']
-
     def _decorator(f):
         targets = [target_keys] if isinstance(target_keys, str) else target_keys
         for target_key in targets:

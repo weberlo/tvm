@@ -19,18 +19,9 @@ stop_training_after = 1
 # Use GPU if one exists, else use CPU
 ctx = mx.gpu() if mx.context.num_gpus() else mx.cpu()
 
-## MNIST images are 28x28. Total pixels in input layer is 28x28 = 784
-#num_inputs = 784
-## Clasify the images into one of the 10 digits
-#num_outputs = 10
-# 64 images in a batch
 batch_size = 64
 
 LAYOUT = 'NCHW'
-
-# Load the training data
-#train_data = gluon.data.DataLoader(gluon.data.vision.MNIST(train=True).transform_first(transforms.ToTensor()),
-#                                   batch_size, shuffle=True)
 
 train_data = gluon.data.DataLoader(
     gluon.data.vision.CIFAR10(train=True).transform_first(transforms.ToTensor()),
@@ -241,28 +232,26 @@ def @main(%data: Tensor[(1, 3, 32, 32), int8],
     %hybridsequential0_conv2_weight: Tensor[(64, 32, 5, 5), int8],
     %hybridsequential0_conv2_bias: Tensor[(64), int8],
     %hybridsequential0_dense0_weight: Tensor[(10, 576), int8],
-    %hybridsequential0_dense0_bias: Tensor[(10), int8]) -> Tensor[(1, 10), int16] {
-  %0 = nn.conv2d(%data, %hybridsequential0_conv0_weight, padding=[2, 2], channels=32, kernel_size=[5, 5], out_dtype="int16");
-  %1 = nn.bias_add(%0, cast(%hybridsequential0_conv0_bias, "int16"));
+    %hybridsequential0_dense0_bias: Tensor[(10), int8]) -> Tensor[(1, 10), int8] {
+  %0 = nn.conv2d(%data, %hybridsequential0_conv0_weight, padding=[2, 2], channels=32, kernel_size=[5, 5], out_dtype="int8");
+  %1 = nn.bias_add(%0, %hybridsequential0_conv0_bias);
   %2 = nn.max_pool2d(%1, pool_size=[3, 3], strides=[2, 2]);
   %3 = nn.relu(%2);
-  %4 = nn.conv2d(%3, cast(%hybridsequential0_conv1_weight, "int16"), padding=[2, 2], channels=32, kernel_size=[5, 5], out_dtype="int16");
-  %5 = nn.bias_add(%4, cast(%hybridsequential0_conv1_bias, "int16"));
+  %4 = nn.conv2d(%3, %hybridsequential0_conv1_weight, padding=[2, 2], channels=32, kernel_size=[5, 5], out_dtype="int8");
+  %5 = nn.bias_add(%4, %hybridsequential0_conv1_bias);
   %6 = nn.relu(%5);
   %7 = nn.avg_pool2d(%6, pool_size=[3, 3], strides=[2, 2], count_include_pad=True);
-  %8 = nn.conv2d(%7, cast(%hybridsequential0_conv2_weight, "int16"), padding=[2, 2], channels=64, kernel_size=[5, 5], out_dtype="int16");
-  %9 = nn.bias_add(%8, cast(%hybridsequential0_conv2_bias, "int16"));
+  %8 = nn.conv2d(%7, %hybridsequential0_conv2_weight, padding=[2, 2], channels=64, kernel_size=[5, 5], out_dtype="int8");
+  %9 = nn.bias_add(%8, %hybridsequential0_conv2_bias);
   %10 = nn.relu(%9);
   %11 = nn.avg_pool2d(%10, pool_size=[3, 3], strides=[2, 2], count_include_pad=True);
   %12 = nn.batch_flatten(%11);
-  %13 = nn.dense(%12, cast(%hybridsequential0_dense0_weight, "int16"), units=10, out_dtype="int16");
-  nn.bias_add(%13, cast(%hybridsequential0_dense0_bias, "int16"), axis=-1)
+  %13 = nn.dense(%12, %hybridsequential0_dense0_weight, units=10, out_dtype="int8");
+  nn.bias_add(%13, %hybridsequential0_dense0_bias, axis=-1)
 }
 """)
 # TODO: add clip, scale, and cast("int8") ops after each int16 out_dtype
 # TODO: check exactly what the intermediate types of ARM's CMSIS-NN model are (where do they do casting?).
-print(mod)
-input('ayy')
 
 # generate random params
 params = {}
@@ -306,21 +295,21 @@ with micro.Session(DEV_CONFIG):
     #print(f'  Actual label: {prediction_idx}')
 
 
-from tvm.relay import create_executor
-main_gv = relay.GlobalVar('main')
-mod = relay.Module({main_gv: mod['main']})
-intrp = create_executor("debug", mod)
-f = intrp.evaluate(main_gv)
-# need to maintain arg ordering
-args = [image] + [params[param.name_hint] for param in mod['main'].params[1:]]
-relay_output = f(*args)
-print(relay_output)
+#from tvm.relay import create_executor
+#main_gv = relay.GlobalVar('main')
+#mod = relay.Module({main_gv: mod['main']})
+#intrp = create_executor("debug", mod)
+#f = intrp.evaluate(main_gv)
+## need to maintain arg ordering
+#args = [image] + [params[param.name_hint] for param in mod['main'].params[1:]]
+#relay_output = f(*args)
+#print(relay_output)
 
-#with tvm.build_config(disable_vectorize=True):
-#    graph, op_mod, params = relay.build(mod['main'], target="llvm", params=params)
-#graph_mod = graph_runtime.create(graph, op_mod, tvm.cpu(0))
-#graph_mod.set_input(**params)
-#graph_mod.run(data=image)
-#relay_output = graph_mod.get_output(0)
-#
-#tvm.testing.assert_allclose(micro_output_np, relay_output_np)
+with tvm.build_config(disable_vectorize=True):
+    graph, op_mod, params = relay.build(mod['main'], target="llvm", params=params)
+graph_mod = graph_runtime.create(graph, op_mod, tvm.cpu(0))
+graph_mod.set_input(**params)
+graph_mod.run(data=image)
+relay_output = graph_mod.get_output(0)
+
+tvm.testing.assert_allclose(micro_output_np, relay_output_np)
