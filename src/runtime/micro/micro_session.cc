@@ -398,7 +398,7 @@ BinaryInfo MicroSession::LoadBinary(const std::string& binary_path, bool patch_d
 
 std::tuple<DevPtr, DevPtr> MicroSession::EncoderAppend(
     TargetDataLayoutEncoder* encoder, const TVMArgs& args) {
-  std::cout << "[MicroSession::EncoderAppend]" << std::endl;
+  std::cout << "[MicroSession::EncoderAppend(TVMArgs)]" << std::endl;
   const int* type_codes = args.type_codes;
   int num_args = args.num_args;
 
@@ -446,7 +446,7 @@ std::tuple<DevPtr, DevPtr> MicroSession::EncoderAppend(
 
 template <typename T>
 DevPtr MicroSession::EncoderAppend(TargetDataLayoutEncoder* encoder, const TVMArray& arr) {
-  std::cout << "[MicroSession::EncoderAppend]" << std::endl;
+  std::cout << "[MicroSession::EncoderAppend(TVMArray)]" << std::endl;
   auto tvm_arr_slot = encoder->Alloc<T>();
   auto shape_slot = encoder->Alloc<int64_t>(arr.ndim);
 

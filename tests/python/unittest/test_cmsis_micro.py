@@ -306,39 +306,41 @@ def test_cmsis_conv():
 
             return output_tvm.asnumpy(), task_cycles, wall_clock_time
 
-    def verify_result_relay(data_np, kernel_np, output_np):
-        print('[Verifying]')
-        # Construct Relay program.
-        data_var = relay.var("data", shape=(N, H, W, CI), dtype=DTYPE)
-        kernel_var = relay.var("kernel", dtype=DTYPE)
-        conv_expr = relay.nn.conv2d(
-                data_var, kernel_var,
-                kernel_size=(KH, KW),
-                strides=STRIDES,
-                padding=PADDING,
-                dilation=DILATION,
-                channels=CO,
-                data_layout=LAYOUT,
-                out_layout=LAYOUT)
-        func = relay.Function(relay.analysis.free_vars(conv_expr), conv_expr)
-        mod = relay.Module.from_expr(func)
-        mod = transform.InferType()(mod)
+    #def verify_result_relay(data_np, kernel_np, output_np):
+    #    print('[Verifying]')
+    #    # Construct Relay program.
+    #    data_var = relay.var("data", shape=(N, H, W, CI), dtype=DTYPE)
+    #    kernel_var = relay.var("kernel", dtype=DTYPE)
+    #    conv_expr = relay.nn.conv2d(
+    #            data_var, kernel_var,
+    #            kernel_size=(KH, KW),
+    #            strides=STRIDES,
+    #            padding=PADDING,
+    #            dilation=DILATION,
+    #            channels=CO,
+    #            data_layout=LAYOUT,
+    #            out_layout=LAYOUT)
+    #    func = relay.Function(relay.analysis.free_vars(conv_expr), conv_expr)
+    #    mod = relay.Module.from_expr(func)
+    #    mod = transform.InferType()(mod)
 
-        print(mod)
+    #    print(mod)
 
-        data_shape = list(map(lambda x: x.value, mod['main'].params[0].checked_type.shape))
-        print(data_shape)
-        kernel_shape = list(map(lambda x: x.value, mod['main'].params[1].checked_type.shape))
-        print(kernel_shape)
-        output_shape = list(map(lambda x: x.value, mod['main'].ret_type.shape))
-        print(output_shape)
+    #    data_shape = list(map(lambda x: x.value, mod['main'].params[0].checked_type.shape))
+    #    print(data_shape)
+    #    kernel_shape = list(map(lambda x: x.value, mod['main'].params[1].checked_type.shape))
+    #    print(kernel_shape)
+    #    output_shape = list(map(lambda x: x.value, mod['main'].ret_type.shape))
+    #    print(output_shape)
 
-        intrp = create_executor('debug')
-        data_tvm = tvm.nd.array(data_np, ctx=tvm.cpu(0))
-        kernel_tvm = tvm.nd.array(kernel_np, ctx=tvm.cpu(0))
-        expected_output_tvm = intrp.evaluate(mod['main'])(data_tvm, kernel_tvm).data
+    #    intrp = create_executor('debug')
+    #    data_tvm = tvm.nd.array(data_np, ctx=tvm.cpu(0))
+    #    kernel_tvm = tvm.nd.array(kernel_np, ctx=tvm.cpu(0))
+    #    expected_output_tvm = intrp.evaluate(mod['main'])(data_tvm, kernel_tvm).data
 
-        tvm.testing.assert_allclose(output_np, expected_output_tvm.asnumpy())
+    #    tvm.testing.assert_allclose(output_np, expected_output_tvm.asnumpy())
+
+    assert False, "use topi.testing.conv2d_nhwc_python to verify!"
 
     data_np, kernel_np, output_np, cmsis_cycles, cmsis_time = get_cmsis_tensors()
     assert np.sum(output_np) != 0

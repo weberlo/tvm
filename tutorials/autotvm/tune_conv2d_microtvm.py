@@ -36,6 +36,10 @@ from tvm.contrib import graph_runtime, util, download
 from tvm.autotvm.tuner import XGBTuner, GATuner, RandomTuner, GridSearchTuner
 import tvm.micro as micro
 
+from tvm.relay.op import nn
+from topi.util import get_const_tuple
+from topi.nn.util import get_const_int, get_pad_tuple
+
 ################
 # Instructions #
 ################
@@ -269,6 +273,37 @@ def conv2d_template(N, H, W, CO, CI, KH, KW, strides, padding, dilation, layout,
     return sched, [data, kernel, conv]
 
 
+#####################
+# Utility Functions #
+#####################
+def relay_micro_build(func, dev_config, params=None):
+    """Create a graph runtime module with a micro device context from a Relay function.
+
+    Parameters
+    ----------
+    func : relay.Function
+        function to compile
+
+    dev_config : TODO
+        TODO
+
+    params : dict
+        input parameters that do not change during inference
+
+    Return
+    ------
+    mod : tvm.module.Module
+        graph runtime module for the target device
+    """
+    with tvm.build_config(disable_vectorize=True):
+        graph, c_mod, params = relay.build(func, target="c", params=params)
+    micro_mod = micro.create_micro_mod(c_mod, dev_config)
+    ctx = tvm.micro_dev(0)
+    mod = graph_runtime.create(graph, micro_mod, ctx)
+    mod.set_input(**params)
+    return mod
+
+
 ####################
 # Autotuning Setup #
 ####################
@@ -278,13 +313,13 @@ logging.getLogger('autotvm').addHandler(logging.StreamHandler(sys.stdout))
 DEV_CONFIG = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6666)
 DEV_CREATE_MICRO_LIB = micro.device.get_device_funcs(DEV_CONFIG['device_id'])['create_micro_lib']
 
-DEVICE = 'arm.stm32f746xx'
+DEVICE_ID = 'arm.stm32f746xx'
 TARGET = tvm.target.create('c -device=micro_dev')
 
 #N_TRIAL = 1500
 #EARLY_STOPPING = 800
-N_TRIAL = 8
-EARLY_STOPPING = 3
+N_TRIAL = 300
+EARLY_STOPPING = 150
 # we only need one per trial because the timings are cycle-accurate
 N_PER_TRIAL = 3
 # change this to the number of boards you have attached
@@ -293,7 +328,7 @@ N_PARALLEL = 8
 TRACKER_ADDR = '0.0.0.0'
 TRACKER_PORT = 9190
 
-LOG_FILE_NAME = f'{DEVICE}.log'
+LOG_FILE_NAME = f'{DEVICE_ID}.log'
 
 INPUT_SHAPE = (1, 3, 32, 32)
 
@@ -305,28 +340,36 @@ DTYPE = 'float32'
 TIMEOUT = 0
 assert N == 1, "Only consider batch_size = 1 in this template"
 
-##############
-# Autotuning #
-##############
-def tune():
-    print('[Tuning]')
-    from mxnet.gluon.model_zoo.vision import get_model
-    block = get_model('mobilenetv2_0.25', pretrained=True)
-    mod, params = relay.frontend.from_mxnet(block, shape={'data': INPUT_SHAPE}, dtype=DTYPE)
-    #net = mod["main"]
-    #net = relay.Function(net.params, relay.nn.softmax(net.body), None, net.type_params, net.attrs)
-    #mod = relay.Module.from_expr(net)
+#############
+# Debugging #
+#############
+def reset_gdbinit():
+    if 'server_port' not in DEV_CONFIG:
+        return
+    with open('/home/lweber/gdb-conf/.gdbinit', 'w') as f:
+        gdb_port = DEV_CONFIG['server_port'] - 3333
+        gdbinit_contents = (
+f"""layout asm
+target remote localhost:{gdb_port}
+set $pc = UTVMInit
+break UTVMDone
+""")
+        f.write(gdbinit_contents)
+reset_gdbinit()
 
-    tasks = autotvm.task.extract_from_program(mod["main"], target=TARGET,
-            params=params, ops=(relay.op.nn.conv2d,))
-    #task = autotvm.task.create(conv2d_template,
-    #        args=(N, H, W, CO, CI, KH, KW, STRIDES, PADDING, DILATION, LAYOUT, OUT_DTYPE),
-    #        target=TARGET)
+########################
+# Conv Autotuning/Eval #
+########################
+def tune_and_eval_conv():
+    print('[Tuning]')
+    tasks = [autotvm.task.create(conv2d_template,
+            args=(N, H, W, CO, CI, KH, KW, STRIDES, PADDING, DILATION, LAYOUT, DTYPE),
+            target=TARGET)]
 
     measure_option = autotvm.measure_option(
             builder=autotvm.LocalBuilder(
                 build_func=tvm.micro.cross_compiler(DEV_CREATE_MICRO_LIB, DEV_CONFIG['mem_layout'], micro.LibType.OPERATOR)),
-            runner=autotvm.RPCRunner(DEVICE, TRACKER_ADDR, TRACKER_PORT, n_parallel=N_PARALLEL, number=N_PER_TRIAL, timeout=TIMEOUT)
+            runner=autotvm.RPCRunner(DEVICE_ID, TRACKER_ADDR, TRACKER_PORT, n_parallel=N_PARALLEL, number=N_PER_TRIAL, timeout=TIMEOUT)
             )
 
     # create tmp log file
@@ -350,11 +393,7 @@ def tune():
     autotvm.record.pick_best(tmp_log_file, LOG_FILE_NAME)
     os.remove(tmp_log_file)
 
-
-#######################################
-# Evaluation Against Untuned Schedule #
-#######################################
-def evaluate():
+    input('finished tuning...')
     print('[Evaluation]')
 
     def eval_mod(c_mod):
@@ -373,21 +412,95 @@ def evaluate():
 
     # compile with default schedule
     with TARGET:
-        sched, arg_bufs = conv2d_template(N, H, W, CO, CI, KH, KW, STRIDES, PADDING, DILATION, LAYOUT, OUT_DTYPE)
+        sched, arg_bufs = conv2d_template(N, H, W, CO, CI, KH, KW, STRIDES, PADDING, DILATION, LAYOUT, DTYPE)
         c_mod = tvm.build(sched, arg_bufs, name='conv2d')
     default_cycle_count = eval_mod(c_mod)
 
     # compile kernels with history best records
     with autotvm.apply_history_best(LOG_FILE_NAME):
         with TARGET:
-            sched, arg_bufs = conv2d_template(N, H, W, CO, CI, KH, KW, STRIDES, PADDING, DILATION, LAYOUT, OUT_DTYPE)
+            sched, arg_bufs = conv2d_template(N, H, W, CO, CI, KH, KW, STRIDES, PADDING, DILATION, LAYOUT, DTYPE)
             c_mod = tvm.build(sched, arg_bufs, name='conv2d')
     autotune_cycle_count = eval_mod(c_mod)
 
     print(f'  speedup: {default_cycle_count / autotune_cycle_count}')
 
 
+#########################
+# Model Autotuning/Eval #
+#########################
+def get_micro_model():
+    pass
+
+
+def tune_and_eval_model():
+    print('[Tuning]')
+    from mxnet.gluon.model_zoo.vision import get_model
+    block = get_model('mobilenetv2_0.25', pretrained=True)
+    mod, params = relay.frontend.from_mxnet(block, shape={'data': INPUT_SHAPE}, dtype=DTYPE)
+    print(mod)
+    input('ayy')
+
+    def tune_model():
+        tasks = autotvm.task.extract_from_program(mod["main"], target=TARGET,
+                params=params, ops=(relay.op.nn.conv2d,))
+
+        measure_option = autotvm.measure_option(
+                builder=autotvm.LocalBuilder(
+                    build_func=tvm.micro.cross_compiler(DEV_CREATE_MICRO_LIB, DEV_CONFIG['mem_layout'], micro.LibType.OPERATOR)),
+                runner=autotvm.RPCRunner(DEVICE_ID, TRACKER_ADDR, TRACKER_PORT, n_parallel=N_PARALLEL, number=N_PER_TRIAL, timeout=TIMEOUT)
+                )
+
+        # create tmp log file
+        tmp_log_file = LOG_FILE_NAME + '.tmp'
+        if os.path.exists(tmp_log_file):
+            os.remove(tmp_log_file)
+
+        for i, task in enumerate(reversed(tasks)):
+            prefix = "[Task %2d/%2d] " % (i+1, len(tasks))
+            tuner = XGBTuner(task, loss_type='rank')
+
+            # start tuning
+            tuner.tune(n_trial=min(N_TRIAL, len(task.config_space)),
+                    early_stopping=EARLY_STOPPING,
+                    measure_option=measure_option,
+                    callbacks=[
+                        autotvm.callback.progress_bar(N_TRIAL, prefix=prefix),
+                        autotvm.callback.log_to_file(tmp_log_file)])
+
+        # store best record in a cache file
+        autotvm.record.pick_best(tmp_log_file, LOG_FILE_NAME)
+        os.remove(tmp_log_file)
+
+    def eval_model():
+        print('[Evaluation]')
+        graph_mod = relay_micro_build(mod['main'], DEV_CONFIG)
+
+        data_tvm = tvm.nd.array(
+            (np.random.uniform(size=input_shape)).astype(input_dtype), ctx)
+        kernel_shape = list(map(lambda x: x.value, mod['main'].params[1].checked_type.shape))
+        kernel_tvm = tvm.nd.array(
+            (np.random.uniform(size=kernel_shape)).astype(input_dtype), ctx)
+
+        graph_mod.set_input(**params)
+        graph_mod.set_input(key='data', value=data_tvm)
+        graph_mod.set_input(key='kernel', value=kernel_tvm)
+
+        # evaluate
+        print("Evaluate inference time cost...")
+        ftimer = graph_mod.module.time_evaluator("run", ctx, number=5, repeat=3)
+        prof_res = np.array(ftimer().results) * 1000  # convert to millisecond
+        print("Mean inference time (std dev): %.2f ms (%.2f ms)" %
+              (np.mean(prof_res), np.std(prof_res)))
+
+    #tune_model()
+    #input('finished tuning...')
+    with micro.Session(DEV_CONFIG):
+        # Load best schedules
+        with autotvm.tophub.context(TARGET, extra_files=[LOG_FILE_NAME]):
+            eval_model()
+
+
 if __name__ == '__main__':
-    tune()
-    input('finished tuning...')
-    evaluate()
+    #tune_and_eval_conv()
+    tune_and_eval_model()
