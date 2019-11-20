@@ -20,7 +20,7 @@
 /*!
  *  Copyright (c) 2019 by Contributors
  * \file utvm_timer.c
- * \brief uTVM timer API stubs for the host emulated device
+ * \brief uTVM timer API stubs for Spike
  */
 
 #ifdef __cplusplus
