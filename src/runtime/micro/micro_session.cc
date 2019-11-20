@@ -563,6 +563,10 @@ PackedFunc MicroSession::GetFunction(
     return PackedFunc([sptr_to_self](TVMArgs args, TVMRetValue* rv) {
       MicroSession::ExitWithScope();
     });
+  } else if (name == "get_last_batch_time") {
+    return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
+      *rv = this->GetLastBatchTime();
+    });
   } else {
     return PackedFunc();
   }
