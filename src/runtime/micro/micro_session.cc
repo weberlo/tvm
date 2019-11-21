@@ -537,10 +537,8 @@ void MicroSession::FreeInSection(SectionKind type, DevPtr addr) {
 
 template <typename T>
 T MicroSession::DevSymbolRead(const SymbolMap& symbol_map, const std::string& symbol) {
-  DevPtr sym_addr = symbol_map[symbol];
-  std::cout << "sym offset for " << symbol << " is " << sym_addr.cast_to<void*>() << std::endl;
   T result;
-  low_level_device()->Read(sym_addr, &result, sizeof(T));
+  low_level_device()->Read(symbol_map[symbol], &result, sizeof(T));
   return result;
 }
 
