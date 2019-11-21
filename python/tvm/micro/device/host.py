@@ -63,7 +63,7 @@ def default_config():
         'toolchain_prefix': TOOLCHAIN_PREFIX,
         'mem_layout': {
             'text': {
-                'size': 20480,
+                'size': 100000,
             },
             'rodata': {
                 'size': 20480,
@@ -78,10 +78,10 @@ def default_config():
                 'size': 1280,
             },
             'heap': {
-                'size': 262144,
+                'size': 10000000,
             },
             'workspace': {
-                'size': 20480,
+                'size': 1000000,
             },
             'stack': {
                 'size': 80,

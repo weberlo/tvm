@@ -224,9 +224,7 @@ def build(mod, target=None, target_host=None, params=None):
     else:
         raise ValueError("Type of input parameter mod must be tvm.relay.module.Module")
 
-    print(f'TARGET BEFORE: {target}')
     target = _update_target(target)
-    print(f'TARGET AFTER: {target}')
 
     if isinstance(target_host, (str, _target.Target)):
         target_host = _target.create(target_host)
