@@ -152,7 +152,7 @@ def _calc_max_workspace_usage(src):
     return max_usage
 
 
-def create_micro_mod(c_mod, dev_config):
+def create_micro_mod(c_mod, dev_config, lib_src_paths=None, lib_include_paths=None):
     """Produces a micro module from a given module.
 
     Parameters
@@ -168,17 +168,21 @@ def create_micro_mod(c_mod, dev_config):
     print('[create_micro_mod]')
     temp_dir = _util.tempdir()
     lib_obj_path = temp_dir.relpath('dev_lib.obj')
-    dev_funcs = tvm.micro.device.get_device_funcs(dev_config['device_id'])
-    create_micro_lib = dev_funcs['create_micro_lib']
-    mem_layout = dev_config['mem_layout']
+    #dev_funcs = tvm.micro.device.get_device_funcs(dev_config['device_id'])
+    #create_micro_lib = dev_funcs['create_micro_lib']
+    #mem_layout = dev_config['mem_layout']
     c_mod.export_library(
             lib_obj_path,
-            fcompile=cross_compiler(create_micro_lib, mem_layout, LibType.OPERATOR))
+            fcompile=cross_compiler(
+                dev_config,
+                LibType.OPERATOR,
+                lib_src_paths=lib_src_paths,
+                lib_include_paths=lib_include_paths))
     micro_mod = tvm.module.load(lib_obj_path)
     return micro_mod
 
 
-def cross_compiler(create_micro_lib, mem_layout, lib_type):
+def cross_compiler(dev_config, lib_type, lib_src_paths=None, lib_include_paths=None):
     """Create a cross compile function that wraps `create_lib` for a `Binutil` instance.
 
     For use in `tvm.module.Module.export_library`.
@@ -206,19 +210,33 @@ def cross_compiler(create_micro_lib, mem_layout, lib_type):
       fcompile = tvm.micro.cross_compiler('arm.stm32f746xx', LibType.OPERATOR)
       c_mod.export_library('dev_lib.obj', fcompile=fcompile)
     """
+    if lib_src_paths is None:
+        lib_src_paths = []
+    if lib_include_paths is None:
+        lib_include_paths = []
+    include_options = []
+    for include_path in lib_include_paths:
+        include_options.append('-I')
+        include_options.append(include_path)
+    create_micro_lib = tvm.micro.device.get_device_funcs(dev_config['device_id'])['create_micro_lib']
+    mem_layout = dev_config['mem_layout']
+
     def compile_func(obj_path, src_path, **kwargs):
         if isinstance(obj_path, list):
             obj_path = obj_path[0]
         if isinstance(src_path, list):
             src_path = src_path[0]
+        options = kwargs.get('options', [])
+        options += include_options
+
         # check that workspace allocations don't exceed available workspace memory
         with open(src_path) as f:
-            print(f'src path is {src_path}')
             max_ws_usage = _calc_max_workspace_usage(f.read())
             available_mem = mem_layout['workspace']['size']
             if max_ws_usage > available_mem:
                 raise RuntimeError(f'workspace allocations in library ({max_ws_usage}) exceed available memory ({available_mem})')
-        create_micro_lib(obj_path, src_path, lib_type, kwargs.get('options', None))
+
+        create_micro_lib(obj_path, src_path, lib_type, options, lib_src_paths=lib_src_paths)
     return _cc.cross_compiler(compile_func, output_format='obj')
 
 

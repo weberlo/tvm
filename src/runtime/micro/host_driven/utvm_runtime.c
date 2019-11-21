@@ -47,7 +47,7 @@ UTVMTask utvm_task = {
 
 // TODO(weberlo): make all of these volatile
 
-volatile UTVMTask utvm_tasks[10] = { };
+volatile UTVMTask utvm_tasks[20] = { };
 volatile uint32_t utvm_num_tasks = 0;
 
 volatile uint32_t utvm_word_size = 0;

@@ -22,7 +22,7 @@ from . import create_micro_lib_base, register_device
 DEVICE_ID = 'riscv_spike'
 TOOLCHAIN_PREFIX = 'riscv64-unknown-elf-'
 
-def create_micro_lib(obj_path, src_path, lib_type, options=None):
+def create_micro_lib(obj_path, src_path, lib_type, options=None, lib_src_paths=None):
     """Wrapper over `create_micro_lib_base` to add device-specific options
 
     Parameters
@@ -38,14 +38,21 @@ def create_micro_lib(obj_path, src_path, lib_type, options=None):
 
     options : Optional[List[str]]
         additional options to pass to GCC
+
+    lib_src_paths : Optional[List[str]]
+        TODO
     """
+    if isinstance(src_paths, str):
+        src_paths = [src_paths]
     create_micro_lib_base(
         obj_path,
         src_path,
         TOOLCHAIN_PREFIX,
         DEVICE_ID,
         lib_type,
-        options=options)
+        options=options,
+        lib_src_paths=lib_src_paths
+        )
 
 
 def default_config(base_addr, server_addr, server_port):

@@ -67,7 +67,9 @@ def create_micro_lib_base(
         toolchain_prefix,
         device_id,
         lib_type,
-        options=None):
+        options=None,
+        lib_src_paths=None,
+        ):
     """Compiles code into a binary for the target micro device.
 
     Parameters
@@ -75,7 +77,7 @@ def create_micro_lib_base(
     out_obj_path : str
         path to generated object file
 
-    in_src_path : str
+    in_src_path : List[str]
         path to source file
 
     toolchain_prefix : str
@@ -92,6 +94,9 @@ def create_micro_lib_base(
 
     options : List[str]
         additional options to pass to GCC
+
+    lib_src_paths : Optional[List[str]]
+        TODO
     """
     print('[MicroBinutil.create_lib]')
     print('  EXTENDED OPTIONS')
@@ -99,9 +104,8 @@ def create_micro_lib_base(
     print(f'    {in_src_path}')
     print(f'    {lib_type}')
     print(f'    {options}')
-    # also look at these (specifically `strip`):
-    # https://stackoverflow.com/questions/15314581/g-compiler-flag-to-minimize-binary-size
-    #raise RuntimeException('try the "-Os" option for small binaries')
+    # look at these (specifically `strip`):
+    #   https://stackoverflow.com/questions/15314581/g-compiler-flag-to-minimize-binary-size
     base_compile_cmd = [
         f'{toolchain_prefix}gcc',
         '-std=c11',
@@ -125,7 +129,7 @@ def create_micro_lib_base(
     src_paths = []
     include_paths = find_include_path() + [get_micro_host_driven_dir()]
     tmp_dir = _util.tempdir()
-    # we might transform the src path in one of the branches below
+    # we need to create a new src file in the operator branch
     new_in_src_path = in_src_path
     if lib_type == LibType.RUNTIME:
         dev_dir = _get_device_source_dir(device_id)
@@ -144,8 +148,11 @@ def create_micro_lib_base(
         #        f'{CMSIS_PATH}/NN/Include',
         #        ]
         #src_paths += glob.glob('/home/lweber/tvm-micro/3rdparty/cmsis/*.c')
-
-        # create a temporary copy of the source, so we can inject the dev lib
+        
+        # TODO gross. we're assuming the first src path is the operator source
+        # and not a 3rd-party lib.
+        
+        # create a temporary copy of the operator source, so we can inject the dev lib
         # header without modifying the original.
         temp_src_path = tmp_dir.relpath('temp.c')
         with open(in_src_path, 'r') as f:
@@ -154,17 +161,19 @@ def create_micro_lib_base(
         with open(temp_src_path, 'w') as f:
             f.write('\n'.join(src_lines))
         new_in_src_path = temp_src_path
-        base_compile_cmd += ['-c']
     else:
         raise RuntimeError('unknown lib type')
 
     src_paths += [new_in_src_path]
+    if lib_src_paths is not None:
+        src_paths += lib_src_paths
 
     print(f'include paths: {include_paths}')
     for path in include_paths:
         base_compile_cmd += ['-I', path]
 
     prereq_obj_paths = []
+    print(src_paths)
     for src_path in src_paths:
         curr_obj_path = tmp_dir.relpath(Path(src_path).with_suffix('.o').name)
         assert curr_obj_path not in prereq_obj_paths

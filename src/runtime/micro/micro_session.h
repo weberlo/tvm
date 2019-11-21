@@ -69,7 +69,7 @@ class MicroSession : public ModuleNode {
                                  const ObjectPtr<Object>& sptr_to_self);
 
   // todo having this decoupled from the value in utvm_runtime.c gives me stress dreams
-  static const size_t kTaskQueueCapacity = 10;
+  static const size_t kTaskQueueCapacity = 20;
 
   /*!
    * \return The type key of the executor.

@@ -32,7 +32,7 @@ WORD_SIZE = 4
 BASE_ADDR = 0x20000000
 AVAILABLE_MEM = 320000
 
-def create_micro_lib(obj_path, src_path, lib_type, options=None):
+def create_micro_lib(obj_path, src_paths, lib_type, options=None, lib_src_paths=None):
     """Wrapper over `create_micro_lib_base` to add device-specific options
 
     Parameters
@@ -48,6 +48,9 @@ def create_micro_lib(obj_path, src_path, lib_type, options=None):
 
     options : Optional[List[str]]
         additional options to pass to GCC
+
+    lib_src_paths : Optional[List[str]]
+        TODO
     """
     if options is None:
         options = []
@@ -67,7 +70,7 @@ def create_micro_lib(obj_path, src_path, lib_type, options=None):
         '-DARM_MATH_DSP',
         ]
     create_micro_lib_base(
-        obj_path, src_path, TOOLCHAIN_PREFIX, DEVICE_ID, lib_type, options=options)
+        obj_path, src_paths, TOOLCHAIN_PREFIX, DEVICE_ID, lib_type, options=options, lib_src_paths=lib_src_paths)
 
 
 def default_config(server_addr, server_port):
@@ -93,7 +96,7 @@ def default_config(server_addr, server_port):
             ('text', (7500, MemConstraint.ABSOLUTE_BYTES)),
             ('rodata', (100, MemConstraint.ABSOLUTE_BYTES)),
             ('data', (100, MemConstraint.ABSOLUTE_BYTES)),
-            ('bss', (300, MemConstraint.ABSOLUTE_BYTES)),
+            ('bss', (420, MemConstraint.ABSOLUTE_BYTES)),
             ('args', (512, MemConstraint.ABSOLUTE_BYTES)),
             ('heap', (50.0, MemConstraint.WEIGHT)),
             ('workspace', (110200, MemConstraint.ABSOLUTE_BYTES)),

@@ -211,8 +211,6 @@ def test_conv2d():
 
     with tvm.build_config(disable_vectorize=True):
         graph, c_mod, params = relay.build(mod, target="c")
-    print(c_mod.get_source())
-    input('ayy')
 
     with micro.Session(DEV_CONFIG_A):
         micro_mod = micro.create_micro_mod(c_mod, DEV_CONFIG_A)

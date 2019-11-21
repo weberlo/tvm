@@ -22,7 +22,7 @@ from . import create_micro_lib_base, register_device
 DEVICE_ID = 'host'
 TOOLCHAIN_PREFIX = ''
 
-def create_micro_lib(obj_path, src_path, lib_type, options=None):
+def create_micro_lib(obj_path, src_path, lib_type, options=None, lib_src_paths=None):
     """Wrapper over `create_micro_lib_base` to add device-specific options
 
     Parameters
@@ -38,13 +38,16 @@ def create_micro_lib(obj_path, src_path, lib_type, options=None):
 
     options : Optional[List[str]]
         additional options to pass to GCC
+
+    lib_src_paths : Optional[List[str]]
+        TODO
     """
     if options is None:
         options = []
     if sys.maxsize > 2**32 and sys.platform.startswith('linux'):
         options += ['-mcmodel=large']
     create_micro_lib_base(
-        obj_path, src_path, TOOLCHAIN_PREFIX, DEVICE_ID, lib_type, options=options)
+        obj_path, src_path, TOOLCHAIN_PREFIX, DEVICE_ID, lib_type, options=options, lib_src_paths=lib_src_paths)
 
 
 def default_config():
