@@ -168,9 +168,6 @@ def create_micro_mod(c_mod, dev_config, lib_src_paths=None, lib_include_paths=No
     print('[create_micro_mod]')
     temp_dir = _util.tempdir()
     lib_obj_path = temp_dir.relpath('dev_lib.obj')
-    #dev_funcs = tvm.micro.device.get_device_funcs(dev_config['device_id'])
-    #create_micro_lib = dev_funcs['create_micro_lib']
-    #mem_layout = dev_config['mem_layout']
     c_mod.export_library(
             lib_obj_path,
             fcompile=cross_compiler(

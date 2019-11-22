@@ -35,18 +35,6 @@ extern "C" {
 
 #include "utvm_runtime.h"
 
-// Task pointers must be patched before calling a function.
-  /*
-UTVMTask utvm_task = {
-    .func = NULL,
-    .arg_values = NULL,
-    .arg_type_codes = NULL,
-    .num_args = 0,
-};
-*/
-
-// TODO(weberlo): make all of these volatile
-
 volatile UTVMTask utvm_tasks[20] = { };
 volatile uint32_t utvm_num_tasks = 0;
 
@@ -104,8 +92,8 @@ void __attribute__ ((noinline)) UTVMDone() {
   utvm_done = 1;
 }
 
-// TODO(weberlo): modify C codegen to generate UTVM error codes for the failure
-// modes in workspace alloc/free.
+// TODO(weberlo): extend C codegen to generate UTVM error codes for the failure
+// modes in workspace alloc/free.  They currently return -1 in all cases.
 
 void* TVMBackendAllocWorkspace(int device_type, int device_id, uint64_t size,
                                int dtype_code_hint, int dtype_bits_hint) {
