@@ -141,6 +141,15 @@ int TVMBackendFreeWorkspace(int device_type, int device_id, void* ptr) {
 
 void TVMAPISetLastError(const char* msg) { }
 
+void *memset(void *s, int c, size_t n) {
+  char *p = s;
+  while (n > 0) {
+    *p = (char) c;
+    p++;
+    n--;
+  }
+}
+
 #ifdef __cplusplus
 }  // TVM_EXTERN_C
 #endif

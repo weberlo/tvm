@@ -52,6 +52,15 @@ void TVMAPISetLastError(const char* msg) {
   (*TVMAPISetLastError_)(msg);
 }
 
+void *memset(void *s, int c, size_t n) {
+  char *p = s;
+  while (n > 0) {
+    *p = (char) c;
+    p++;
+    n--;
+  }
+}
+
 #ifdef __cplusplus
 }  // TVM_EXTERN_C
 #endif

@@ -70,6 +70,10 @@ void UTVMMain();
 
 void UTVMDone();
 
+// GCC -O3 begins to inject memset calls, so we provide an impl in the runtime
+// for this case.
+void *memset(void *s, int c, size_t n);
+
 #ifdef __cplusplus
 }  // TVM_EXTERN_C
 #endif
