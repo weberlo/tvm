@@ -65,6 +65,7 @@ class Session:
         self.mem_layout = config['mem_layout']
         self.word_size = config['word_size']
         self.thumb_mode = config['thumb_mode']
+        self.use_device_timer = config['use_device_timer']
         self.comms_method = config['comms_method']
 
         # First, find and compile runtime library.
@@ -106,6 +107,7 @@ class Session:
             self.mem_layout['stack']['size'],
             self.word_size,
             self.thumb_mode,
+            self.use_device_timer,
             server_addr,
             server_port)
         self._enter = self.module['enter']

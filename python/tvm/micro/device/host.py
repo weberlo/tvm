@@ -72,7 +72,7 @@ def default_config():
                 'size': 768,
             },
             'bss': {
-                'size': 768,
+                'size': 1024,
             },
             'args': {
                 'size': 1280,
@@ -89,6 +89,7 @@ def default_config():
         },
         'word_size': 8 if sys.maxsize > 2**32 else 4,
         'thumb_mode': False,
+        'use_device_timer': False,
         'comms_method': 'host',
     }
 

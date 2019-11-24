@@ -24,11 +24,11 @@ import tvm.micro as micro
 from tvm.relay.testing import resnet
 
 # Use the host emulated micro device.
-DEV_CONFIG_A = micro.device.host.default_config()
-DEV_CONFIG_B = micro.device.host.default_config()
+#DEV_CONFIG_A = micro.device.host.default_config()
+#DEV_CONFIG_B = micro.device.host.default_config()
 
-#DEV_CONFIG_A = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6666)
-#DEV_CONFIG_B = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6667)
+DEV_CONFIG_A = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6666)
+DEV_CONFIG_B = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6667)
 
 def relay_micro_build(func, dev_config, params=None):
     """Create a graph runtime module with a micro device context from a Relay function.
@@ -104,7 +104,7 @@ def test_add():
     func_name = "fadd"
     c_mod = tvm.build(s, [A, B, C], target="c", name=func_name)
 
-    with micro.Session(DEV_CONFIG_A):
+    with micro.Session(DEV_CONFIG_A) as sess:
         micro_mod = micro.create_micro_mod(c_mod, DEV_CONFIG_A)
         micro_func = micro_mod[func_name]
         ctx = tvm.micro_dev(0)

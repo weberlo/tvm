@@ -105,6 +105,7 @@ def default_config(base_addr, server_addr, server_port):
         ]),
         'word_size': 8,
         'thumb_mode': False,
+        'use_device_timer': False,
         'comms_method': 'openocd',
         'server_addr': server_addr,
         'server_port': server_port,

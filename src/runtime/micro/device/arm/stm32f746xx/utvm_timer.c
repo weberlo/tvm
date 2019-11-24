@@ -55,6 +55,13 @@ extern "C" {
 uint32_t start_time = 0;
 uint32_t stop_time = 0;
 
+void UTVMTimerReset() {
+  SYST_CSR = 0;
+  // maximum reload value (24-bit)
+  SYST_RVR = (~((uint32_t) 0)) >> 8;
+  SYST_CVR = 0;
+}
+
 int32_t UTVMTimerStart() {
   SYST_CSR = (1 << SYST_CSR_ENABLE) | (1 << SYST_CSR_CLKSOURCE);
   // wait until timer starts
@@ -68,18 +75,13 @@ void UTVMTimerStop() {
   stop_time = SYST_CVR;
 }
 
-void UTVMTimerReset() {
-  SYST_CSR = 0;
-  // maximum reload value (24-bit)
-  SYST_RVR = (~((uint32_t) 0)) >> 8;
-  SYST_CVR = 0;
-}
-
-uint32_t UTVMTimerRead() {
+uint32_t UTVMTimerRead(int32_t *err) {
   if (SYST_CSR & SYST_COUNTFLAG) {
     TVMAPISetLastError("timer overflowed");
-    return UTVM_ERR_TIMER_OVERFLOW;
+    *err = UTVM_ERR_TIMER_OVERFLOW;
+    return 0;
   } else {
+    *err = UTVM_ERR_OK;
     return start_time - stop_time;
   }
 }
@@ -96,6 +98,7 @@ uint32_t start_time = 0;
 uint32_t stop_time = 0;
 
 void UTVMTimerReset() {
+  DWT_CTRL &= ~(1 << DWT_CTRL_CYCCNTENA);
   DWT_CYCCNT = 0;
 }
 
@@ -106,6 +109,7 @@ int32_t UTVMTimerStart() {
   }
   start_time = DWT_CYCCNT;
   DWT_CTRL |= (1 << DWT_CTRL_CYCCNTENA);
+  return UTVM_ERR_OK;
 }
 
 void UTVMTimerStop() {
@@ -113,13 +117,15 @@ void UTVMTimerStop() {
   DWT_CTRL &= ~(1 << DWT_CTRL_CYCCNTENA);
 }
 
-int32_t UTVMTimerRead() {
+uint32_t UTVMTimerRead(int32_t* err) {
   // even with this check, we can't know for sure if the timer has overflowed
   // (it may have overflowed and gone past `start_time`).
   if (stop_time > start_time) {
+    *err = UTVM_ERR_OK;
     return stop_time - start_time;
   } else {
-    return UTVM_ERR_TIMER_OVERFLOW;
+    *err = UTVM_ERR_TIMER_OVERFLOW;
+    return 0;
   }
 }
 

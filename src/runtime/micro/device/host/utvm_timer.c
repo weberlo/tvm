@@ -39,8 +39,9 @@ void UTVMTimerStop() { }
 
 void UTVMTimerReset() { }
 
-uint32_t UTVMTimerRead() {
-  return 1;
+uint32_t UTVMTimerRead(int32_t* err) {
+  *err = UTVM_ERR_OK;
+  return 0;
 }
 
 #ifdef __cplusplus

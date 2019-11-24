@@ -35,8 +35,10 @@ extern "C" {
 
 #include "utvm_runtime.h"
 
-volatile UTVMTask utvm_tasks[20] = { };
+#define TASK_QUEUE_SIZE 20
+volatile UTVMTask utvm_tasks[TASK_QUEUE_SIZE] = { };
 volatile uint32_t utvm_num_tasks = 0;
+volatile uint32_t utvm_task_times[TASK_QUEUE_SIZE] = { };
 
 volatile uint32_t utvm_word_size = 0;
 
@@ -49,8 +51,6 @@ volatile uint32_t utvm_num_active_allocs = 0;
 
 volatile int32_t utvm_return_code = 0;        // NOLINT(*)
 
-volatile uint32_t utvm_task_time = 0;
-
 volatile uint32_t utvm_done = 0;
 
 // Gets called by UTVMInit, after device-specific initialization is finished.
@@ -59,26 +59,28 @@ void UTVMMain() {
   utvm_workspace_curr = utvm_workspace_start;
   utvm_num_active_allocs = 0;
   utvm_return_code = UTVM_ERR_NOT_FINISHED;
-  utvm_task_time = 0;
-  UTVMTimerReset();
-  int32_t err = UTVMTimerStart();
-  if (err < 0) {
-    utvm_return_code = err;
-    UTVMDone();
-  }
-  for (int i = 0; i < utvm_num_tasks; i++) {
+  for (uint32_t i = 0; i < utvm_num_tasks; i++) {
+    int32_t err = UTVM_ERR_OK;
+    utvm_task_times[i] = 0;
+    UTVMTimerReset();
+    err = UTVMTimerStart();
+    if (err < 0) {
+      utvm_return_code = err;
+      break;
+    }
     utvm_return_code = utvm_tasks[i].func(
             (void*) utvm_tasks[i].arg_values,      // NOLINT(*)
             (void*) utvm_tasks[i].arg_type_codes,  // NOLINT(*)
             utvm_tasks[i].num_args);
+    UTVMTimerStop();
     if (utvm_return_code < 0) {
       break;
     }
-  }
-  UTVMTimerStop();
-  utvm_task_time = UTVMTimerRead();
-  if (utvm_task_time < 0) {
-    utvm_return_code = utvm_task_time;
+    utvm_task_times[i] = UTVMTimerRead(&err);
+    if (err < 0) {
+      utvm_return_code = err;
+      break;
+    }
   }
   if (utvm_return_code == UTVM_ERR_NOT_FINISHED) {
     utvm_return_code = UTVM_ERR_OK;
@@ -111,18 +113,19 @@ void* TVMBackendAllocWorkspace(int device_type, int device_id, uint64_t size,
 }
 
 int TVMBackendFreeWorkspace(int device_type, int device_id, void* ptr) {
-  utvm_num_active_allocs--;
-  if (utvm_num_active_allocs < 0) {
+  if (utvm_num_active_allocs == 0) {
     TVMAPISetLastError("free called with no active workspace allocations");
     // Reset allocations and workspace (for future task executions).
     utvm_num_active_allocs = 0;
     utvm_workspace_curr = utvm_workspace_start;
     return UTVM_ERR_NO_ACTIVE_ALLOCS;
-  } else if (utvm_num_active_allocs == 0) {
+  } else if (utvm_num_active_allocs == 1) {
+    utvm_num_active_allocs--;
     // No more allocations.  Reset workspace.
     utvm_workspace_curr = utvm_workspace_start;
     return UTVM_ERR_OK;
   } else {
+    utvm_num_active_allocs--;
     return UTVM_ERR_OK;
   }
 }
@@ -136,6 +139,7 @@ void *memset(void *s, int c, size_t n) {
     p++;
     n--;
   }
+  return s;
 }
 
 #ifdef __cplusplus

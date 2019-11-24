@@ -64,7 +64,7 @@ extern int32_t UTVMTimerStart();
 
 extern void UTVMTimerStop();
 
-extern uint32_t UTVMTimerRead();
+extern uint32_t UTVMTimerRead(int32_t* err);
 
 void UTVMMain();
 

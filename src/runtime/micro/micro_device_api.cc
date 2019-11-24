@@ -135,6 +135,7 @@ class MicroDeviceAPI final : public DeviceAPI {
   }
 
   void* AllocWorkspace(TVMContext ctx, size_t size, TVMType type_hint) final {
+    CHECK(false) << "the on-device workspace allocator isn't aware of this function";
     ObjectPtr<MicroSession>& session = MicroSession::Current();
 
     void* data = session->AllocateInSection(SectionKind::kWorkspace, size).cast_to<void*>();
@@ -146,6 +147,7 @@ class MicroDeviceAPI final : public DeviceAPI {
   }
 
   void FreeWorkspace(TVMContext ctx, void* data) final {
+    CHECK(false) << "the on-device workspace allocator isn't aware of this function";
     MicroDevSpace* dev_space = static_cast<MicroDevSpace*>(data);
     ObjectPtr<MicroSession>& session = dev_space->session;
     session->FreeInSection(SectionKind::kWorkspace,

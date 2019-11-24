@@ -80,11 +80,13 @@ MicroSession::MicroSession(
     size_t stack_size,
     size_t word_size,
     bool thumb_mode,
+    bool use_device_timer,
     const std::string& server_addr,
     int port)
     : toolchain_prefix_(toolchain_prefix),
       word_size_(word_size),
       thumb_mode_(thumb_mode),
+      use_device_timer_(use_device_timer),
       batch_args_encoder_(word_size) {
   CHECK(word_size_ == 4 || word_size_ == 8) << "unsupported word size " << word_size_;
   if (comms_method == "host") {
@@ -318,11 +320,22 @@ void MicroSession::FlushTaskQueuePriv() {
   // Check if there was an error during execution.  If so, log it.
   CheckDeviceError();
 
+  if (use_device_timer_) {
+    uint64_t sum = 0;
+    std::vector<uint32_t> times;
+    times.resize(task_queue_.size());
+    low_level_device()->Read(runtime_symbol_map_["utvm_task_times"], times.data(), task_queue_.size() * sizeof(uint32_t));
+    for (uint32_t time : times) {
+      sum += time;
+    }
+    last_batch_time_ += static_cast<double>(sum);
+  } else {
+    last_batch_time_ += std::chrono::duration_cast<std::chrono::duration<double> >
+        (tend - tbegin).count() * 1000;
+  }
+
   batch_args_encoder_.Clear();
   task_queue_.clear();
-
-  last_batch_time_ = std::chrono::duration_cast<std::chrono::duration<double> >
-      (tend - tbegin).count() * 1000;
 }
 
 BinaryInfo MicroSession::LoadBinary(const std::string& binary_path, bool patch_dylib_pointers) {
@@ -594,8 +607,9 @@ TVM_REGISTER_GLOBAL("micro._CreateSession")
     size_t stack_size = args[18];
     size_t word_size = args[19];
     bool thumb_mode = args[20];
-    const std::string& server_addr = args[21];
-    int port = args[22];
+    bool use_device_timer = args[21];
+    const std::string& server_addr = args[22];
+    int port = args[23];
     ObjectPtr<MicroSession> session = make_object<MicroSession>(
         comms_method,
         binary_path,
@@ -618,6 +632,7 @@ TVM_REGISTER_GLOBAL("micro._CreateSession")
         stack_size,
         word_size,
         thumb_mode,
+        use_device_timer,
         server_addr,
         port);
     *rv = Module(session);

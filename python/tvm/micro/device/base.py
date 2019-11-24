@@ -141,17 +141,6 @@ def create_micro_lib_base(
 
         src_paths += dev_src_paths
     elif lib_type == LibType.OPERATOR:
-        #CMSIS_PATH = '/home/lweber/CMSIS_5/CMSIS'
-        #include_paths += [
-        #        f'{CMSIS_PATH}/Core/Include',
-        #        f'{CMSIS_PATH}/DSP/Include',
-        #        f'{CMSIS_PATH}/NN/Include',
-        #        ]
-        #src_paths += glob.glob('/home/lweber/tvm-micro/3rdparty/cmsis/*.c')
-        
-        # TODO gross. we're assuming the first src path is the operator source
-        # and not a 3rd-party lib.
-        
         # create a temporary copy of the operator source, so we can inject the dev lib
         # header without modifying the original.
         temp_src_path = tmp_dir.relpath('temp.c')
@@ -165,6 +154,7 @@ def create_micro_lib_base(
         raise RuntimeError('unknown lib type')
 
     src_paths += [new_in_src_path]
+    # add any src paths required by the operator
     if lib_src_paths is not None:
         src_paths += lib_src_paths
 

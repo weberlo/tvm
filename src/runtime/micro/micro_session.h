@@ -126,6 +126,7 @@ class MicroSession : public ModuleNode {
       size_t stack_size,
       size_t word_size,
       bool thumb_mode,
+      bool use_device_timer,
       const std::string& server_addr,
       int port);
 
@@ -213,8 +214,10 @@ class MicroSession : public ModuleNode {
     return low_level_device_;
   }
 
-  const double GetLastBatchTime() const {
-    return last_batch_time_;
+  const double GetLastBatchTime() {
+    double result = last_batch_time_;
+    last_batch_time_ = 0.0;
+    return result;
   }
 
  private:
@@ -236,6 +239,8 @@ class MicroSession : public ModuleNode {
    * results in more compact binaries.
    */
   bool thumb_mode_;
+  /*! \brief TODO */
+  bool use_device_timer_;
   /*! \brief symbol map for the device runtime */
   SymbolMap runtime_symbol_map_;
   /*! \brief TODO */
