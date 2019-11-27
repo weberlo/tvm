@@ -59,6 +59,7 @@ void *memset(void *s, int c, size_t n) {
     p++;
     n--;
   }
+  return s;
 }
 
 #ifdef __cplusplus

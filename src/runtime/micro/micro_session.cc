@@ -272,23 +272,11 @@ void MicroSession::FlushTaskQueuePriv() {
     prepped_tasks.push_back(T(task));
   }
 
-  std::cout << "  prepped tasks" << std::endl;
-
-  std::cout << "  writing args to "
-    << batch_args_encoder_.start_addr().cast_to<void*>()
-    << " from "
-    << (void*) batch_args_encoder_.data()
-    << " (buf size "
-    << batch_args_encoder_.buf_size()
-    << ")"
-    << std::endl;
   // Flush `args` to device memory.
   low_level_device()->Write(
       batch_args_encoder_.start_addr(),
       reinterpret_cast<void*>(batch_args_encoder_.data()),
       batch_args_encoder_.buf_size());
-
-  std::cout << "  flushed args" << std::endl;
 
   // Flush `tasks` to device memory.
   DevPtr dev_tasks_addr = runtime_symbol_map_["utvm_tasks"];
@@ -296,17 +284,13 @@ void MicroSession::FlushTaskQueuePriv() {
       dev_tasks_addr,
       reinterpret_cast<void*>(prepped_tasks.data()),
       prepped_tasks.size() * sizeof(T));
-  std::cout << "  flushed tasks" << std::endl;
   DevSymbolWrite<uint32_t>(runtime_symbol_map_, "utvm_num_tasks", prepped_tasks.size());
-  std::cout << "  wrote num tasks " << prepped_tasks.size() << std::endl;
 
   DevPtr utvm_init_addr = runtime_symbol_map_["UTVMInit"];
   DevPtr utvm_done_addr = runtime_symbol_map_["UTVMDone"];
   if (thumb_mode_) {
     utvm_init_addr += 1;
   }
-  std::cout << "  UTVMInit loc: " << utvm_init_addr.cast_to<void*>() << std::endl;
-  std::cout << "  UTVMDone loc: " << utvm_done_addr.cast_to<void*>() << std::endl;
 
   std::chrono::time_point<
     std::chrono::high_resolution_clock, std::chrono::nanoseconds> tbegin, tend;
@@ -339,6 +323,7 @@ void MicroSession::FlushTaskQueuePriv() {
 }
 
 BinaryInfo MicroSession::LoadBinary(const std::string& binary_path, bool patch_dylib_pointers) {
+  std::cout << "[MicroSession::LoadBinary]" << std::endl;
   DevMemRegion text_section;
   DevMemRegion rodata_section;
   DevMemRegion data_section;
@@ -352,10 +337,10 @@ BinaryInfo MicroSession::LoadBinary(const std::string& binary_path, bool patch_d
       binary_path, SectionKind::kData, toolchain_prefix_, word_size_);
   bss_section.size = GetSectionSize(
       binary_path, SectionKind::kBss, toolchain_prefix_, word_size_);
-  std::cout << "text size: 0x" << std::hex << text_section.size << std::endl;
-  std::cout << "rodata size: 0x" << std::hex << rodata_section.size << std::endl;
-  std::cout << "data size: 0x" << std::hex << data_section.size << std::endl;
-  std::cout << "bss size: 0x" << std::hex << bss_section.size << std::endl;
+  std::cout << "  text_section.size: " << text_section.size << std::endl;
+  std::cout << "  rodata_section.size: " << rodata_section.size << std::endl;
+  std::cout << "  data_section.size: " << data_section.size << std::endl;
+  std::cout << "  bss_section.size: " << bss_section.size << std::endl;
 
   text_section.start = AllocateInSection(SectionKind::kText, text_section.size);
   rodata_section.start = AllocateInSection(SectionKind::kRodata, rodata_section.size);
@@ -365,10 +350,6 @@ BinaryInfo MicroSession::LoadBinary(const std::string& binary_path, bool patch_d
         data_section.start != nullptr && bss_section.start != nullptr)
       << "not enough space to load module on device";
 
-  std::cout << "text start: " << text_section.start.cast_to<void*>() << std::endl;
-  std::cout << "rodata start: " << rodata_section.start.cast_to<void*>() << std::endl;
-  std::cout << "data start: " << data_section.start.cast_to<void*>() << std::endl;
-  std::cout << "bss start: " << bss_section.start.cast_to<void*>() << std::endl;
   std::string relocated_bin = RelocateBinarySections(
       binary_path,
       word_size_,
@@ -383,13 +364,9 @@ BinaryInfo MicroSession::LoadBinary(const std::string& binary_path, bool patch_d
   std::string data_contents = ReadSection(relocated_bin, SectionKind::kData, toolchain_prefix_);
   std::string bss_contents = ReadSection(relocated_bin, SectionKind::kBss, toolchain_prefix_);
 
-  std::cout << "writing text (size = " << std::dec << text_contents.size() << ")" << std::endl;
   low_level_device_->Write(text_section.start, &text_contents[0], text_section.size);
-  std::cout << "writing rodata (size = " << std::dec << rodata_contents.size() << ")" << std::endl;
   low_level_device_->Write(rodata_section.start, &rodata_contents[0], rodata_section.size);
-  std::cout << "writing data (size = " << std::dec << data_contents.size() << ")" << std::endl;
   low_level_device_->Write(data_section.start, &data_contents[0], data_section.size);
-  std::cout << "writing bss (size = " << std::dec << bss_contents.size() << ")" << std::endl;
   low_level_device_->Write(bss_section.start, &bss_contents[0], bss_section.size);
   SymbolMap symbol_map {relocated_bin, toolchain_prefix_};
 
@@ -411,7 +388,6 @@ BinaryInfo MicroSession::LoadBinary(const std::string& binary_path, bool patch_d
 
 std::tuple<DevPtr, DevPtr> MicroSession::EncoderAppend(
     TargetDataLayoutEncoder* encoder, const TVMArgs& args) {
-  std::cout << "[MicroSession::EncoderAppend(TVMArgs)]" << std::endl;
   const int* type_codes = args.type_codes;
   int num_args = args.num_args;
 
@@ -459,7 +435,6 @@ std::tuple<DevPtr, DevPtr> MicroSession::EncoderAppend(
 
 template <typename T>
 DevPtr MicroSession::EncoderAppend(TargetDataLayoutEncoder* encoder, const TVMArray& arr) {
-  std::cout << "[MicroSession::EncoderAppend(TVMArray)]" << std::endl;
   auto tvm_arr_slot = encoder->Alloc<T>();
   auto shape_slot = encoder->Alloc<int64_t>(arr.ndim);
 
@@ -496,11 +471,17 @@ DevPtr MicroSession::EncoderAppend(TargetDataLayoutEncoder* encoder, const TVMAr
 // messages on the host side.
 void MicroSession::CheckDeviceError() {
   std::cout << "[MicroSession::CheckDeviceError]" << std::endl;
-  int32_t return_code = DevSymbolRead<int32_t>(runtime_symbol_map_, "utvm_return_code");
+  int32_t last_error = DevSymbolRead<int32_t>(runtime_symbol_map_, "utvm_last_error");
 
-  if (return_code) {
+  if (last_error) {
+    if (!use_device_timer_ &&
+        (last_error == UTVM_ERR_TIMER_OVERFLOW ||
+         last_error == UTVM_ERR_TIMER_NOT_IMPLEMENTED)) {
+      // these errors don't matter if we're not using the on-device timer
+      return;
+    }
     LOG(FATAL) << "error during micro function execution:\n"
-               << "  return code: " << std::dec << return_code << std::endl
+               << "  error ID: " << std::dec << last_error << std::endl
                << "  error message: " << " TODO: convert retcodes to err msgs";
   }
 }
@@ -512,9 +493,6 @@ void MicroSession::PatchImplHole(const SymbolMap& symbol_map, const std::string&
   }
   std::ostringstream func_name_underscore;
   func_name_underscore << func_name << "_";
-  std::cout << "patching " << func_name_underscore.str() << " at " <<
-    symbol_map[func_name_underscore.str()].cast_to<void*>() << " with addr " <<
-    runtime_impl_addr.cast_to<void*>() << std::endl;
   if (word_size_ == 4) {
     DevSymbolWrite<uint32_t>(symbol_map, func_name_underscore.str(), runtime_impl_addr.value().val32);
   } else if (word_size_ == 8) {

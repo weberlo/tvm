@@ -1291,6 +1291,7 @@ PackedFunc MicroTimeEvaluator(
       ObjectPtr<MicroSession> session = MicroSession::Current();
       DeviceAPI::Get(ctx)->StreamSync(ctx, nullptr);
       double speed = session->GetLastBatchTime();
+      std::cout << "LAST BATCH TIME WAS " << speed << std::endl;
       os.write(reinterpret_cast<char*>(&speed), sizeof(speed));
     }
     std::string blob = os.str();

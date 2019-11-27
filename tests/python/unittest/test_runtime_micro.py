@@ -27,8 +27,10 @@ from tvm.relay.testing import resnet
 #DEV_CONFIG_A = micro.device.host.default_config()
 #DEV_CONFIG_B = micro.device.host.default_config()
 
-DEV_CONFIG_A = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6666)
-DEV_CONFIG_B = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6667)
+DEV_CONFIG_A = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6668)
+DEV_CONFIG_B = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6669)
+
+# TODO add workspace alloc/free stress test
 
 def relay_micro_build(func, dev_config, params=None):
     """Create a graph runtime module with a micro device context from a Relay function.
@@ -140,7 +142,7 @@ def test_workspace_add():
     func_name = "fadd_two_workspace"
     c_mod = tvm.build(s, [A, C], target="c", name=func_name)
 
-    with micro.Session(DEV_CONFIG_A):
+    with micro.Session(DEV_CONFIG_A) as sess:
         micro_mod = micro.create_micro_mod(c_mod, DEV_CONFIG_A)
         micro_func = micro_mod[func_name]
         ctx = tvm.micro_dev(0)
@@ -351,12 +353,12 @@ def test_inactive_session_use():
 
 
 if __name__ == "__main__":
-    test_alloc()
+    #test_alloc()
     test_add()
     test_workspace_add()
     test_graph_runtime()
     test_conv2d()
-    test_multiple_modules()
-    test_interleave_sessions()
-    test_nested_sessions()
-    test_inactive_session_use()
+    #test_multiple_modules()
+    #test_interleave_sessions()
+    #test_nested_sessions()
+    #test_inactive_session_use()

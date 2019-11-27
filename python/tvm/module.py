@@ -27,7 +27,6 @@ from .contrib import cc as _cc, tar as _tar, util as _util
 
 ProfileResult = namedtuple("ProfileResult", ["mean", "results"])
 
-
 class Module(ModuleBase):
     """Module container of all TVM generated functions"""
 

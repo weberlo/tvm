@@ -38,8 +38,12 @@ enum UTVMReturnCode {
   UTVM_ERR_NOT_FINISHED = -1,
   UTVM_ERR_TIMER_NOT_IMPLEMENTED = -2,
   UTVM_ERR_TIMER_OVERFLOW = -3,
-  UTVM_ERR_NO_ACTIVE_ALLOCS = -4,
-  UTVM_ERR_ALLOC_TOO_LARGE = -5,
+  UTVM_ERR_WS_DOUBLE_FREE = -4,
+  UTVM_ERR_WS_OUT_OF_SPACE = -5,
+  UTVM_ERR_WS_TOO_MANY_ALLOCS = -6,
+  UTVM_ERR_WS_ZERO_SIZE_ALLOC = -7,
+  UTVM_ERR_WS_UNALIGNED_START = -8,
+  UTVM_ERR_WS_UNALIGNED_ALLOC_SIZE = -9,
 };
 
 /*!
@@ -58,13 +62,9 @@ typedef struct {
 
 extern void UTVMInit();
 
-extern void UTVMTimerReset();
-
 extern int32_t UTVMTimerStart();
 
-extern void UTVMTimerStop();
-
-extern uint32_t UTVMTimerRead(int32_t* err);
+extern uint32_t UTVMTimerStop(int32_t* err);
 
 void UTVMMain();
 

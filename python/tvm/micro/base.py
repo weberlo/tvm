@@ -73,7 +73,6 @@ class Session:
         tmp_dir = _util.tempdir()
         runtime_obj_path = tmp_dir.relpath('utvm_runtime.obj')
         self.create_micro_lib(runtime_obj_path, runtime_src_path, LibType.RUNTIME)
-        #input(f'check {runtime_obj_path}: ')
 
         comms_method = config['comms_method']
         if comms_method == 'openocd':
@@ -154,6 +153,7 @@ def _calc_max_workspace_usage(src):
     return max_usage
 
 
+TEMPDIR_REFS = []
 def create_micro_mod(c_mod, dev_config, lib_src_paths=None, lib_include_paths=None):
     """Produces a micro module from a given module.
 

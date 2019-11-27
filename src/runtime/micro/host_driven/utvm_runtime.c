@@ -40,50 +40,61 @@ volatile UTVMTask utvm_tasks[TASK_QUEUE_SIZE] = { };
 volatile uint32_t utvm_num_tasks = 0;
 volatile uint32_t utvm_task_times[TASK_QUEUE_SIZE] = { };
 
-volatile uint32_t utvm_word_size = 0;
-
 // These pointers are patched at load time to point to the workspace section.
 volatile char* utvm_workspace_start = NULL;  // NOLINT(*)
 volatile char* utvm_workspace_end = NULL;    // NOLINT(*)
 volatile char* utvm_workspace_curr = NULL;   // NOLINT(*)
+#define MAX_WS_ALLOCS 10
+volatile char* utvm_alloc_ends[MAX_WS_ALLOCS] = {};   // NOLINT(*)
+volatile uint32_t utvm_alloc_idx = 0;
 // Keep track of how many active allocations there are on the workspace.
 volatile uint32_t utvm_num_active_allocs = 0;
 
-volatile int32_t utvm_return_code = 0;        // NOLINT(*)
+volatile uint32_t utvm_word_size = 0;
+
+volatile int32_t utvm_last_error = 0;        // NOLINT(*)
 
 volatile uint32_t utvm_done = 0;
 
 // Gets called by UTVMInit, after device-specific initialization is finished.
 void UTVMMain() {
   utvm_done = 0;
+  // loss of precision should be fine here, since we only care about the lower bits
+  if (((uint32_t) utvm_workspace_start) % utvm_word_size) {
+    utvm_last_error = UTVM_ERR_WS_UNALIGNED_START;
+    UTVMDone();
+    return;
+  }
   utvm_workspace_curr = utvm_workspace_start;
   utvm_num_active_allocs = 0;
-  utvm_return_code = UTVM_ERR_NOT_FINISHED;
+  utvm_alloc_idx = 0;
+  utvm_last_error = UTVM_ERR_NOT_FINISHED;
   for (uint32_t i = 0; i < utvm_num_tasks; i++) {
     int32_t err = UTVM_ERR_OK;
     utvm_task_times[i] = 0;
-    UTVMTimerReset();
     err = UTVMTimerStart();
     if (err < 0) {
-      utvm_return_code = err;
-      break;
+      utvm_last_error = err;
+      UTVMDone();
+      return;
     }
-    utvm_return_code = utvm_tasks[i].func(
-            (void*) utvm_tasks[i].arg_values,      // NOLINT(*)
-            (void*) utvm_tasks[i].arg_type_codes,  // NOLINT(*)
-            utvm_tasks[i].num_args);
-    UTVMTimerStop();
-    if (utvm_return_code < 0) {
-      break;
-    }
-    utvm_task_times[i] = UTVMTimerRead(&err);
+    err = utvm_tasks[i].func(
+        (void*) utvm_tasks[i].arg_values,      // NOLINT(*)
+        (void*) utvm_tasks[i].arg_type_codes,  // NOLINT(*)
+        utvm_tasks[i].num_args);
     if (err < 0) {
-      utvm_return_code = err;
-      break;
+      UTVMDone();
+      return;
+    }
+    utvm_task_times[i] = UTVMTimerStop(&err);
+    if (err < 0) {
+      utvm_last_error = err;
+      UTVMDone();
+      return;
     }
   }
-  if (utvm_return_code == UTVM_ERR_NOT_FINISHED) {
-    utvm_return_code = UTVM_ERR_OK;
+  if (utvm_last_error == UTVM_ERR_NOT_FINISHED) {
+    utvm_last_error = UTVM_ERR_OK;
   }
   UTVMDone();
 }
@@ -94,20 +105,34 @@ void __attribute__ ((noinline)) UTVMDone() {
   utvm_done = 1;
 }
 
-// TODO(weberlo): extend C codegen to generate UTVM error codes for the failure
-// modes in workspace alloc/free.  They currently return -1 in all cases.
-
 void* TVMBackendAllocWorkspace(int device_type, int device_id, uint64_t size,
                                int dtype_code_hint, int dtype_bits_hint) {
-  // Align up to 8 bytes.
-  utvm_workspace_curr +=
-    (utvm_word_size - ((uintptr_t) utvm_workspace_curr % utvm_word_size)) % utvm_word_size;  // NOLINT(*)
+  if (size == 0) {
+    utvm_last_error = UTVM_ERR_WS_ZERO_SIZE_ALLOC;
+    return NULL;
+  }
+  if (((uint32_t) size) % utvm_word_size) {
+    utvm_last_error = UTVM_ERR_WS_UNALIGNED_ALLOC_SIZE;
+    return NULL;
+  }
+  //// Align up to the target word size.
+  //utvm_workspace_curr +=
+  //  (utvm_word_size - ((uintptr_t) utvm_workspace_curr % utvm_word_size)) % utvm_word_size;  // NOLINT(*)
   if (utvm_workspace_curr + size > utvm_workspace_end) {
     // Out of space in workspace.
+    utvm_last_error = UTVM_ERR_WS_OUT_OF_SPACE;
+    return NULL;
+  }
+  if (utvm_alloc_idx == MAX_WS_ALLOCS - 1) {
+    // Exceeded number of allocs we can keep track of.
+    utvm_last_error = UTVM_ERR_WS_TOO_MANY_ALLOCS;
     return NULL;
   }
   void* ret_ptr = (void*) utvm_workspace_curr;  // NOLINT(*)
   utvm_workspace_curr += size;
+  // store the *end* of the alloc, so we can restore the WS pointer when freeing
+  utvm_alloc_ends[utvm_alloc_idx] = utvm_workspace_curr;
+  utvm_alloc_idx++;
   utvm_num_active_allocs++;
   return ret_ptr;
 }
@@ -118,15 +143,33 @@ int TVMBackendFreeWorkspace(int device_type, int device_id, void* ptr) {
     // Reset allocations and workspace (for future task executions).
     utvm_num_active_allocs = 0;
     utvm_workspace_curr = utvm_workspace_start;
-    return UTVM_ERR_NO_ACTIVE_ALLOCS;
-  } else if (utvm_num_active_allocs == 1) {
-    utvm_num_active_allocs--;
-    // No more allocations.  Reset workspace.
-    utvm_workspace_curr = utvm_workspace_start;
-    return UTVM_ERR_OK;
+    utvm_last_error = UTVM_ERR_WS_DOUBLE_FREE;
+    return -1;
   } else {
     utvm_num_active_allocs--;
-    return UTVM_ERR_OK;
+    if (ptr == utvm_workspace_start) {
+      // it's the first allocation
+      utvm_alloc_ends[utvm_alloc_idx] = NULL;
+    } else {
+      // TODO reverse loop iteration since usually it's the last alloc being freed
+      for (uint32_t i = 0; i < utvm_alloc_idx; i++) {
+        if (utvm_alloc_ends[i] == ptr) {
+          utvm_alloc_ends[i + 1] = NULL;
+          break;
+        }
+      }
+    }
+    while (utvm_alloc_ends[utvm_alloc_idx] == NULL && utvm_alloc_idx > 0) {
+      utvm_alloc_idx--;
+    }
+    if (utvm_alloc_idx == 0) {
+      utvm_workspace_curr = utvm_workspace_start;
+    } else {
+      // TODO could you possibly have utvm_alloc_idx pointing to a NULL entry in this branch?
+      utvm_workspace_curr = utvm_alloc_ends[utvm_alloc_idx];
+      utvm_alloc_idx++;
+    }
+    return 0;
   }
 }
 

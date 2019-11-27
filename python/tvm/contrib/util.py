@@ -24,6 +24,12 @@ try:
 except ImportError:
     fcntl = None
 
+TEMPDIR_REFS = []
+import atexit
+def remove_tmpdirs():
+    for tmpdir, path in TEMPDIR_REFS:
+        shutil.rmtree(path, ignore_errors=True)
+atexit.register(remove_tmpdirs)
 
 class TempDirectory(object):
     """Helper object to manage temp directory during testing.
@@ -36,13 +42,16 @@ class TempDirectory(object):
             self.temp_dir = custom_path
         else:
             self.temp_dir = tempfile.mkdtemp()
+            global TEMPDIR_REFS
+            TEMPDIR_REFS.append((self, self.temp_dir))
         self._rmtree = shutil.rmtree
 
     def remove(self):
         """Remote the tmp dir"""
-        if self.temp_dir:
-            self._rmtree(self.temp_dir, ignore_errors=True)
-            self.temp_dir = None
+        #if self.temp_dir:
+        #    self._rmtree(self.temp_dir, ignore_errors=True)
+        #    self.temp_dir = None
+        pass
 
     def __del__(self):
         self.remove()
