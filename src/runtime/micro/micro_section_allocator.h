@@ -57,18 +57,22 @@ class MicroSectionAllocator {
 
   /*!
    * \brief memory allocator
-   * \param size size of allocated memory in bytes
+   * \param alloc_size size of allocated memory in bytes
    * \return pointer to allocated memory region in section, nullptr if out of space
    */
-  DevPtr Allocate(size_t size) {
-    size_ = UpperAlignValue(size_, 8);
-    CHECK(size_ + size < capacity_)
-        << "cannot alloc " << size << " bytes in section with start_addr " <<
+  DevPtr Allocate(size_t alloc_size) {
+    // TODO hardcoding alignment to 64. should take it as a param
+    //std::cout << "[MicroSectionAllocator::Allocate]" << std::endl;
+    //std::cout << "  hardcoding alignment to 64. should take it as a param" << std::endl;
+    //size_ = UpperAlignValue(size_, word_size_);
+    size_ = UpperAlignValue(size_, 64);
+    CHECK(size_ + alloc_size < capacity_)
+        << "cannot alloc " << alloc_size << " bytes in section with start_addr " <<
         start_addr_.cast_to<void*>();
-    DevPtr alloc_addr = start_addr_ + size_;
-    size_ += size;
-    alloc_map_[alloc_addr.value().val64] = size;
-    return alloc_addr;
+    uint64_t alloc_addr = (start_addr_ + size_).value().val64;
+    alloc_map_[alloc_addr] = alloc_size;
+    size_ += alloc_size;
+    return DevPtr(alloc_addr);
   }
 
   /*!
@@ -77,6 +81,7 @@ class MicroSectionAllocator {
    * \note simple allocator scheme, more complex versions will be implemented later
    */
   void Free(DevPtr addr) {
+    // TODO switch to a better allocation scheme. the utvm runtime has a better one. C'MON!
     CHECK(alloc_map_.find(addr.value().val64) != alloc_map_.end())
       << "freed pointer was never allocated";
     alloc_map_.erase(addr.value().val64);

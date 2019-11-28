@@ -87,7 +87,7 @@ MicroSession::MicroSession(
       word_size_(word_size),
       thumb_mode_(thumb_mode),
       use_device_timer_(use_device_timer),
-      batch_args_encoder_(word_size) {
+      batch_args_encoder_(args_size, word_size) {
   CHECK(word_size_ == 4 || word_size_ == 8) << "unsupported word size " << word_size_;
   if (comms_method == "host") {
     // TODO(weberlo): move checks to python
@@ -230,6 +230,7 @@ MicroSession::~MicroSession() {
 
 void MicroSession::PushToTaskQueue(DevPtr func_ptr, const TVMArgs& args) {
   std::cout << "[MicroSession::PushToTaskQueue]" << std::endl;
+  std::cout << "  pushed func ptr: " << func_ptr.cast_to<void*>() << std::endl;
   if (thumb_mode_) {
     func_ptr += 1;
   }
@@ -388,6 +389,7 @@ BinaryInfo MicroSession::LoadBinary(const std::string& binary_path, bool patch_d
 
 std::tuple<DevPtr, DevPtr> MicroSession::EncoderAppend(
     TargetDataLayoutEncoder* encoder, const TVMArgs& args) {
+  std::cout << "[MicroSession::EncoderAppend(TVMArgs)]" << std::endl;
   const int* type_codes = args.type_codes;
   int num_args = args.num_args;
 
@@ -470,7 +472,6 @@ DevPtr MicroSession::EncoderAppend(TargetDataLayoutEncoder* encoder, const TVMAr
 // TODO(weberlo): switch over entirely to error codes that expand to error
 // messages on the host side.
 void MicroSession::CheckDeviceError() {
-  std::cout << "[MicroSession::CheckDeviceError]" << std::endl;
   int32_t last_error = DevSymbolRead<int32_t>(runtime_symbol_map_, "utvm_last_error");
 
   if (last_error) {
@@ -519,10 +520,19 @@ std::string MicroSession::ReadString(DevPtr str_addr) {
 }
 
 DevPtr MicroSession::AllocateInSection(SectionKind type, size_t size) {
-  return GetAllocator(type)->Allocate(size);
+  DevPtr result = GetAllocator(type)->Allocate(size);
+  if (type == SectionKind::kHeap) {
+    std::cout << "[MicroSession::AllocateInSection]" << std::endl;
+    std::cout << "  allocated dec=" << std::dec << size << " hex=" << (void*) size << " bytes at addr " << result.cast_to<void*>() << std::endl;
+  }
+  return result;
 }
 
 void MicroSession::FreeInSection(SectionKind type, DevPtr addr) {
+  if (type == SectionKind::kHeap) {
+    std::cout << "[MicroSession::FreeInSection]" << std::endl;
+    std::cout << "  freeing alloc at addr " << addr.cast_to<void*>() << std::endl;
+  }
   return GetAllocator(type)->Free(addr);
 }
 

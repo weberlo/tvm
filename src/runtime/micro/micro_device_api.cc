@@ -101,6 +101,7 @@ class MicroDeviceAPI final : public DeviceAPI {
       lld->Write(to_dev_addr, static_cast<void*>(buffer.data()), size);
     } else if (type_from_to == std::make_tuple(kDLMicroDev, kDLCPU)) {
       std::cout << "  reading from device" << std::endl;
+      std::cout << "    num_bytes: " << size << std::endl;
       // Reading from the device.
 
       MicroDevSpace* from_space = static_cast<MicroDevSpace*>(const_cast<void*>(from));
@@ -110,10 +111,13 @@ class MicroDeviceAPI final : public DeviceAPI {
       const std::shared_ptr<LowLevelDevice>& lld = session->low_level_device();
 
       DevPtr from_dev_addr = GetDevLoc(from_space, from_offset);
+      std::cout << "    dev from_addr: " << from_dev_addr.cast_to<void*>() << std::endl;
       void* to_host_ptr = GetHostLoc(to, to_offset);
+      std::cout << "    host to_addr: " << to_host_ptr << std::endl;
       lld->Read(from_dev_addr, to_host_ptr, size);
     } else if (type_from_to == std::make_tuple(kDLCPU, kDLMicroDev)) {
       std::cout << "  writing to device" << std::endl;
+      std::cout << "    num_bytes: " << size << std::endl;
       // Writing to the device.
 
       MicroDevSpace* to_space = static_cast<MicroDevSpace*>(const_cast<void*>(to));
@@ -123,7 +127,9 @@ class MicroDeviceAPI final : public DeviceAPI {
       const std::shared_ptr<LowLevelDevice>& lld = session->low_level_device();
 
       void* from_host_ptr = GetHostLoc(from, from_offset);
+      std::cout << "    host from_addr: " << from_host_ptr << std::endl;
       DevPtr to_dev_addr = GetDevLoc(to_space, to_offset);
+      std::cout << "    dev to_addr: " << to_dev_addr.cast_to<void*>() << std::endl;
       lld->Write(to_dev_addr, from_host_ptr, size);
     } else {
       LOG(FATAL) << "Expect copy from/to micro device or between micro device\n";
@@ -131,6 +137,7 @@ class MicroDeviceAPI final : public DeviceAPI {
   }
 
   void StreamSync(TVMContext ctx, TVMStreamHandle stream) final {
+    std::cout << "[MicroDeviceAPI::StreamSync]" << std::endl;
     MicroSession::Current()->FlushTaskQueue();
   }
 

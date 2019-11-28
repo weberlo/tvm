@@ -97,7 +97,7 @@ def default_config(server_addr, server_port):
             ('rodata', (100, MemConstraint.ABSOLUTE_BYTES)),
             ('data', (100, MemConstraint.ABSOLUTE_BYTES)),
             ('bss', (600, MemConstraint.ABSOLUTE_BYTES)),
-            ('args', (512, MemConstraint.ABSOLUTE_BYTES)),
+            ('args', (1024, MemConstraint.ABSOLUTE_BYTES)),
             ('heap', (50.0, MemConstraint.WEIGHT)),
             ('workspace', (110000, MemConstraint.ABSOLUTE_BYTES)),
             ('stack', (32, MemConstraint.ABSOLUTE_BYTES)),

@@ -52,7 +52,9 @@ def relay_micro_build(func, dev_config, params=None):
         graph runtime module for the target device
     """
     with tvm.build_config(disable_vectorize=True):
-        graph, c_mod, params = relay.build(func, target="c", params=params)
+        with relay.build_config(disabled_pass={"FuseOps"}):
+            graph, c_mod, params = relay.build(func, target="c", params=params)
+    print(c_mod.get_source())
     micro_mod = micro.create_micro_mod(c_mod, dev_config)
     ctx = tvm.micro_dev(0)
     mod = graph_runtime.create(graph, micro_mod, ctx)
@@ -110,14 +112,20 @@ def test_add():
         micro_mod = micro.create_micro_mod(c_mod, DEV_CONFIG_A)
         micro_func = micro_mod[func_name]
         ctx = tvm.micro_dev(0)
-        a = tvm.nd.array(np.random.uniform(size=shape).astype(dtype), ctx)
-        b = tvm.nd.array(np.random.uniform(size=shape).astype(dtype), ctx)
+
+        a_np = np.random.uniform(size=shape).astype(dtype)
+        a = tvm.nd.array(a_np, ctx)
+        b_np = np.random.uniform(size=shape).astype(dtype)
+        b = tvm.nd.array(b_np, ctx)
         c = tvm.nd.array(np.zeros(shape, dtype=dtype), ctx)
-        print(a)
-        print(b)
-        print(c)
         micro_func(a, b, c)
-        print(c)
+
+        # ensure inputs weren't corrupted
+        tvm.testing.assert_allclose(
+                a.asnumpy(), a_np)
+        tvm.testing.assert_allclose(
+                b.asnumpy(), b_np)
+        # ensure output is correct
         tvm.testing.assert_allclose(
                 c.asnumpy(), a.asnumpy() + b.asnumpy())
 
@@ -146,13 +154,15 @@ def test_workspace_add():
         micro_mod = micro.create_micro_mod(c_mod, DEV_CONFIG_A)
         micro_func = micro_mod[func_name]
         ctx = tvm.micro_dev(0)
-        a = tvm.nd.array(np.random.uniform(size=shape).astype(dtype), ctx)
-        print(a)
+        a_np = np.random.uniform(size=shape).astype(dtype)
+        a = tvm.nd.array(a_np, ctx)
         c = tvm.nd.array(np.zeros(shape, dtype=dtype), ctx)
-        print(c)
         micro_func(a, c)
-        print(c)
 
+        # ensure input wasn't corrupted
+        tvm.testing.assert_allclose(
+                a.asnumpy(), a_np)
+        # ensure output is correct
         tvm.testing.assert_allclose(
                 c.asnumpy(), a.asnumpy() + 2.0)
 
@@ -174,11 +184,11 @@ def test_graph_runtime():
         mod = relay_micro_build(func, DEV_CONFIG_A)
 
         x_in = np.random.uniform(size=shape[0]).astype(dtype)
-        print(x_in)
         mod.run(x=x_in)
         result = mod.get_output(0).asnumpy()
-        print(result)
 
+        tvm.testing.assert_allclose(
+                mod.get_input(0).asnumpy(), x_in)
         tvm.testing.assert_allclose(
                 result, x_in * x_in + 1.0)
 
@@ -353,12 +363,12 @@ def test_inactive_session_use():
 
 
 if __name__ == "__main__":
-    #test_alloc()
+    test_alloc()
     test_add()
     test_workspace_add()
     test_graph_runtime()
     test_conv2d()
-    #test_multiple_modules()
-    #test_interleave_sessions()
-    #test_nested_sessions()
-    #test_inactive_session_use()
+    test_multiple_modules()
+    test_interleave_sessions()
+    test_nested_sessions()
+    test_inactive_session_use()

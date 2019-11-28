@@ -105,13 +105,15 @@ void __attribute__ ((noinline)) UTVMDone() {
   utvm_done = 1;
 }
 
+#define ALIGNED_UP(x, word_size) (((word_size) - (((uintptr_t) (x)) % (word_size))) % (word_size))
+
 void* TVMBackendAllocWorkspace(int device_type, int device_id, uint64_t size,
                                int dtype_code_hint, int dtype_bits_hint) {
   if (size == 0) {
     utvm_last_error = UTVM_ERR_WS_ZERO_SIZE_ALLOC;
     return NULL;
   }
-  if (((uint32_t) size) % utvm_word_size) {
+  if (((uintptr_t) size) % utvm_word_size) {
     utvm_last_error = UTVM_ERR_WS_UNALIGNED_ALLOC_SIZE;
     return NULL;
   }
@@ -129,7 +131,7 @@ void* TVMBackendAllocWorkspace(int device_type, int device_id, uint64_t size,
     return NULL;
   }
   void* ret_ptr = (void*) utvm_workspace_curr;  // NOLINT(*)
-  utvm_workspace_curr += size;
+  utvm_workspace_curr = ALIGNED_UP(utvm_workspace_curr + size, utvm_word_size);
   // store the *end* of the alloc, so we can restore the WS pointer when freeing
   utvm_alloc_ends[utvm_alloc_idx] = utvm_workspace_curr;
   utvm_alloc_idx++;

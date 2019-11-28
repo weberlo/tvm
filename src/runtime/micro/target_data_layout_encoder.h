@@ -97,8 +97,8 @@ class TargetDataLayoutEncoder {
    * \brief constructor
    * \param start_addr start address of the encoder in device memory
    */
-  explicit TargetDataLayoutEncoder(size_t word_size)
-      : buf_(std::vector<uint8_t>()), curr_offset_(0), word_size_(word_size) {
+  explicit TargetDataLayoutEncoder(size_t capacity, size_t word_size)
+      : buf_(std::vector<uint8_t>()), curr_offset_(0), capacity_(capacity), word_size_(word_size) {
   }
 
   /*!
@@ -113,6 +113,7 @@ class TargetDataLayoutEncoder {
     if (curr_offset_ + size > buf_.size()) {
       buf_.resize(curr_offset_ + size);
     }
+    CHECK(buf_.size() < capacity_) << "out of space in data encoder";
     size_t slot_start_offset = curr_offset_;
     curr_offset_ += size;
     return Slot<T>(this, slot_start_offset, size, start_addr() + slot_start_offset);
@@ -143,7 +144,6 @@ class TargetDataLayoutEncoder {
    * \brief TODO
    */
   DevPtr start_addr() const {
-    // todo change to check_ne
     CHECK_NE(start_addr_.value().val64, 0) << "start addr uninitialized";
     return start_addr_;
   }
@@ -160,6 +160,8 @@ class TargetDataLayoutEncoder {
   size_t curr_offset_;
   /*! \brief start address of the encoder in device memory */
   DevPtr start_addr_;
+  /*! \brief TODO */
+  size_t capacity_;
   /*! \brief number of bytes in a word on the target device */
   size_t word_size_;
 };
