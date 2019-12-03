@@ -159,6 +159,7 @@ def create(func_name, args, target, target_host=None, template_key=None):
         The compilation target
     target_host: Target, optional
         The compilation target for host side
+    template_key: TODO docs
 
     Returns
     -------

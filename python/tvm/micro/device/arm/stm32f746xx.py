@@ -92,14 +92,14 @@ def default_config(server_addr, server_port):
     return {
         'device_id': DEVICE_ID,
         'toolchain_prefix': TOOLCHAIN_PREFIX,
-        'mem_layout': gen_mem_layout(BASE_ADDR, AVAILABLE_MEM, WORD_SIZE, OrderedDict([
-            ('text', (7500, MemConstraint.ABSOLUTE_BYTES)),
+        'mem_layout': gen_mem_layout(OrderedDict([
+            ('text', (10000, MemConstraint.ABSOLUTE_BYTES)),
             ('rodata', (100, MemConstraint.ABSOLUTE_BYTES)),
             ('data', (100, MemConstraint.ABSOLUTE_BYTES)),
             ('bss', (600, MemConstraint.ABSOLUTE_BYTES)),
-            ('args', (1024, MemConstraint.ABSOLUTE_BYTES)),
+            ('args', (4096, MemConstraint.ABSOLUTE_BYTES)),
             ('heap', (50.0, MemConstraint.WEIGHT)),
-            ('workspace', (110000, MemConstraint.ABSOLUTE_BYTES)),
+            ('workspace', (2048, MemConstraint.ABSOLUTE_BYTES)),
             ('stack', (32, MemConstraint.ABSOLUTE_BYTES)),
         ])),
         'word_size': WORD_SIZE,
@@ -116,7 +116,13 @@ class MemConstraint(Enum):
     WEIGHT = 1
 
 
-def gen_mem_layout(base_addr, available_mem, word_size, section_constraints):
+def gen_mem_layout(section_constraints):
+    return _gen_mem_layout(BASE_ADDR, AVAILABLE_MEM, WORD_SIZE, section_constraints)
+
+
+# TODO move to base namespace
+def _gen_mem_layout(base_addr, available_mem, word_size, section_constraints):
+    assert isinstance(section_constraints, OrderedDict), 'section constraints must be an OrderedDict'
     print('[gen_mem_layout]')
     byte_sum = sum(map(itemgetter(0), filter(lambda x: x[1] == MemConstraint.ABSOLUTE_BYTES, section_constraints.values())))
     weight_sum = sum(map(itemgetter(0), filter(lambda x: x[1] == MemConstraint.WEIGHT, section_constraints.values())))

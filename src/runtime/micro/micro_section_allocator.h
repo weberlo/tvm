@@ -64,8 +64,8 @@ class MicroSectionAllocator {
     // TODO hardcoding alignment to 64. should take it as a param
     //std::cout << "[MicroSectionAllocator::Allocate]" << std::endl;
     //std::cout << "  hardcoding alignment to 64. should take it as a param" << std::endl;
-    //size_ = UpperAlignValue(size_, word_size_);
-    size_ = UpperAlignValue(size_, 64);
+    //size_ = UpperAlignValue(size_, 64);
+    size_ = UpperAlignValue(size_, word_size_);
     CHECK(size_ + alloc_size < capacity_)
         << "cannot alloc " << alloc_size << " bytes in section with start_addr " <<
         start_addr_.cast_to<void*>();

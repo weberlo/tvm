@@ -520,10 +520,13 @@ std::string MicroSession::ReadString(DevPtr str_addr) {
 }
 
 DevPtr MicroSession::AllocateInSection(SectionKind type, size_t size) {
+  if (type == SectionKind::kHeap) {
+    std::cout << "[MicroSession::AllocateInSection(Heap)]" << std::endl;
+    std::cout << "  allocating " << std::dec << size << " hex=" << (void*) size << " bytes" << std::endl;
+  }
   DevPtr result = GetAllocator(type)->Allocate(size);
   if (type == SectionKind::kHeap) {
-    std::cout << "[MicroSession::AllocateInSection]" << std::endl;
-    std::cout << "  allocated dec=" << std::dec << size << " hex=" << (void*) size << " bytes at addr " << result.cast_to<void*>() << std::endl;
+    std::cout << "  allocated at addr " << result.cast_to<void*>() << std::endl;
   }
   return result;
 }

@@ -105,7 +105,7 @@ void __attribute__ ((noinline)) UTVMDone() {
   utvm_done = 1;
 }
 
-#define ALIGNED_UP(x, word_size) (((word_size) - (((uintptr_t) (x)) % (word_size))) % (word_size))
+#define ALIGNED_UP(x, word_size) ((((word_size) - (((uintptr_t) (x)) % (word_size))) % (word_size)) + (x))
 
 void* TVMBackendAllocWorkspace(int device_type, int device_id, uint64_t size,
                                int dtype_code_hint, int dtype_bits_hint) {
@@ -151,25 +151,24 @@ int TVMBackendFreeWorkspace(int device_type, int device_id, void* ptr) {
     utvm_num_active_allocs--;
     if (ptr == utvm_workspace_start) {
       // it's the first allocation
-      utvm_alloc_ends[utvm_alloc_idx] = NULL;
+      utvm_alloc_ends[0] = NULL;
     } else {
       // TODO reverse loop iteration since usually it's the last alloc being freed
-      for (uint32_t i = 0; i < utvm_alloc_idx; i++) {
+      for (uint32_t i = utvm_alloc_idx - 1; i >= 0; i--) {
         if (utvm_alloc_ends[i] == ptr) {
           utvm_alloc_ends[i + 1] = NULL;
           break;
         }
       }
     }
-    while (utvm_alloc_ends[utvm_alloc_idx] == NULL && utvm_alloc_idx > 0) {
+    while (utvm_alloc_idx > 0 && utvm_alloc_ends[utvm_alloc_idx - 1] == NULL) {
       utvm_alloc_idx--;
     }
     if (utvm_alloc_idx == 0) {
       utvm_workspace_curr = utvm_workspace_start;
     } else {
       // TODO could you possibly have utvm_alloc_idx pointing to a NULL entry in this branch?
-      utvm_workspace_curr = utvm_alloc_ends[utvm_alloc_idx];
-      utvm_alloc_idx++;
+      utvm_workspace_curr = utvm_alloc_ends[utvm_alloc_idx - 1];
     }
     return 0;
   }

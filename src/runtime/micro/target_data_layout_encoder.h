@@ -179,6 +179,7 @@ TargetDataLayoutEncoder::Slot<T>::Slot(TargetDataLayoutEncoder* parent,
 
 template <typename T>
 TargetDataLayoutEncoder::Slot<T>::~Slot() {
+  // TODO this can mask the exception thrown by slot allocation... even though that doesn't make sense.
   CHECK(curr_offset_ == size_) << "unwritten space in slot";
 }
 

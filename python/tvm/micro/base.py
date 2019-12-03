@@ -134,6 +134,7 @@ class Session:
 
 
 def _calc_max_workspace_usage(src):
+    # TODO factor in alignment to the calculation (alloc sizes will be aligned up to the word size)
     import re
     alloc_re = re.compile(r'.*void\* (.*) = TVMBackendAllocWorkspace\(.+, .+, \(uint64_t\)(.+), .+, .+\).*')
     free_re = re.compile(r'.*if \(TVMBackendFreeWorkspace\(.+, .+, (.+)\) != 0\) {.*')
