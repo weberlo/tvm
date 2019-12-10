@@ -140,6 +140,7 @@ void* TVMBackendAllocWorkspace(int device_type, int device_id, uint64_t size,
 }
 
 int TVMBackendFreeWorkspace(int device_type, int device_id, void* ptr) {
+  // TODO add dev type check
   if (utvm_num_active_allocs == 0) {
     TVMAPISetLastError("free called with no active workspace allocations");
     // Reset allocations and workspace (for future task executions).
@@ -176,6 +177,7 @@ int TVMBackendFreeWorkspace(int device_type, int device_id, void* ptr) {
 
 void TVMAPISetLastError(const char* msg) { }
 
+/*
 void *memset(void *s, int c, size_t n) {
   char *p = s;
   while (n > 0) {
@@ -185,6 +187,7 @@ void *memset(void *s, int c, size_t n) {
   }
   return s;
 }
+*/
 
 #ifdef __cplusplus
 }  // TVM_EXTERN_C

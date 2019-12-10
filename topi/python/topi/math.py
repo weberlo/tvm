@@ -404,9 +404,9 @@ def clip(x, a_min, a_max):
     """
     def _compute(*indices):
         value = x(*indices)
-        const_min = tvm.const(a_min, value.dtype)
-        const_max = tvm.const(a_max, value.dtype)
-        return tvm.max(tvm.min(value, const_max), const_min)
+        #const_min = tvm.const(a_min, value.dtype)
+        #const_max = tvm.const(a_max, value.dtype)
+        return tvm.max(tvm.min(value, a_max), a_min)
     return tvm.compute(x.shape, _compute)
 
 

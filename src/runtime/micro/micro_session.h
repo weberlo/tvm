@@ -220,6 +220,12 @@ class MicroSession : public ModuleNode {
     return result;
   }
 
+  const double GetLastBatchCycles() {
+    double result = last_batch_cycles_;
+    last_batch_cycles_ = 0.0;
+    return result;
+  }
+
  private:
   /*! \brief low-level device pointer */
   std::shared_ptr<LowLevelDevice> low_level_device_;
@@ -251,6 +257,8 @@ class MicroSession : public ModuleNode {
   TargetDataLayoutEncoder batch_args_encoder_;
   /*! \brief TODO fukn hack */
   double last_batch_time_;
+  /*! \brief TODO fukn hack */
+  double last_batch_cycles_;
 
   /*!
    * \brief patches a function pointer in this module to an implementation

@@ -317,6 +317,15 @@ void MicroSession::FlushTaskQueuePriv() {
   } else {
     last_batch_time_ += std::chrono::duration_cast<std::chrono::duration<double> >
         (tend - tbegin).count() * 1000;
+    // TODO fukn hack
+    uint64_t sum = 0;
+    std::vector<uint32_t> times;
+    times.resize(task_queue_.size());
+    low_level_device()->Read(runtime_symbol_map_["utvm_task_times"], times.data(), task_queue_.size() * sizeof(uint32_t));
+    for (uint32_t time : times) {
+      sum += time;
+    }
+    last_batch_cycles_ += static_cast<double>(sum);
   }
 
   batch_args_encoder_.Clear();
@@ -568,6 +577,10 @@ PackedFunc MicroSession::GetFunction(
   } else if (name == "get_last_batch_time") {
     return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
       *rv = this->GetLastBatchTime();
+    });
+  } else if (name == "get_last_batch_cycles") {
+    return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
+      *rv = this->GetLastBatchCycles();
     });
   } else {
     return PackedFunc();

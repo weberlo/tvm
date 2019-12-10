@@ -53,13 +53,34 @@ void TVMAPISetLastError(const char* msg) {
 }
 
 void *memset(void *s, int c, size_t n) {
-  char *p = s;
+  char *p = (char*) s;
   while (n > 0) {
     *p = (char) c;
     p++;
     n--;
   }
   return s;
+}
+
+void *memmove(void *to, const void *from, size_t n) {
+  void *temp = TVMBackendAllocWorkspace(1, 1, (uint64_t) size, 2, 8);
+  if (temp == NULL) {
+    return NULL;
+  }
+
+  char *to_pp = (char*) to;
+  const char *from_pp = (char*) from;
+  for (size_t i = 0; i < n; i++) {
+    temp[i] = from_pp[i];
+  }
+  for (size_t i = 0; i < n; i++) {
+    to_pp[i] = temp[i];
+  }
+
+  if (TVMBackendFreeWorkspace(1, (uint64_t) 1, temp) != 0) {
+    return NULL;
+  }
+  return to;
 }
 
 #ifdef __cplusplus

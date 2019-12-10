@@ -113,9 +113,10 @@ def create_micro_lib_base(
         '-Wextra',
         '--pedantic',
         '-c',
-        '-Os',
         # TODO(weberlo): make a debug flag
         #'-O0',
+        '-O2',
+        #'-Os',
         '-g',
         '-nostartfiles',
         '-nodefaultlibs',
@@ -169,6 +170,7 @@ def create_micro_lib_base(
         assert curr_obj_path not in prereq_obj_paths
         prereq_obj_paths.append(curr_obj_path)
         curr_compile_cmd = base_compile_cmd + [src_path, '-o', curr_obj_path]
+        # TODO make compilation fail if there are any warnings
         run_cmd(curr_compile_cmd)
 
     ld_cmd = [f'{toolchain_prefix}ld', '-relocatable']

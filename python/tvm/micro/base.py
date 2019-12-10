@@ -112,6 +112,7 @@ class Session:
         self._enter = self.module['enter']
         self._exit = self.module['exit']
         self.get_last_batch_time = self.module['get_last_batch_time']
+        self.get_last_batch_cycles = self.module['get_last_batch_cycles']
 
     def _check_system(self):
         """Check if the user's system is supported by MicroTVM.
