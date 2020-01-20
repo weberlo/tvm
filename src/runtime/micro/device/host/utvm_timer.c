@@ -35,11 +35,7 @@ int32_t UTVMTimerStart() {
   return UTVM_ERR_OK;
 }
 
-void UTVMTimerStop() { }
-
-void UTVMTimerReset() { }
-
-uint32_t UTVMTimerRead(int32_t* err) {
+uint32_t UTVMTimerStop(int32_t* err) {
   *err = UTVM_ERR_OK;
   return 0;
 }

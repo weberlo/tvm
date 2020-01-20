@@ -34,8 +34,8 @@ def conv2d_nhwc_python(a_np, w_np, stride, padding):
     stride : int or a list/tuple of two ints
         Stride size, or [stride_height, stride_width]
 
-    padding : int or str
-        Padding size, or ['VALID', 'SAME']
+    padding : int or str or a list/tuple of two ints
+        Padding size, or ['VALID', 'SAME'], or [pad_height, pad_width]
 
     Returns
     -------
@@ -50,6 +50,8 @@ def conv2d_nhwc_python(a_np, w_np, stride, padding):
         stride_h, stride_w = stride
     if isinstance(padding, int):
         pad_h = pad_w = padding * 2
+    elif isinstance(padding, (list, tuple)):
+        pad_h, pad_w = padding[0] * 2, padding[1] * 2
     elif padding == 'VALID':
         pad_h = 0
         pad_w = 0

@@ -27,7 +27,7 @@ WORD_SIZE = 4
 #
 # [Device Memory Layout]
 #   RAM   (rwx) : START = 0x20000000, LENGTH = 320K
-#   FLASH (rx)  : START = 0x8000000,  LENGTH = 1024K
+#   Flash (rx)  : START = 0x8000000,  LENGTH = 1024K
 #
 BASE_ADDR = 0x20000000
 AVAILABLE_MEM = 320000
@@ -103,13 +103,14 @@ def default_config(server_addr, server_port):
         #    ('stack', (32, MemConstraint.ABSOLUTE_BYTES)),
         #])),
         'mem_layout': gen_mem_layout(OrderedDict([
-            ('text', (14000, MemConstraint.ABSOLUTE_BYTES)),
+            ('text', (18000, MemConstraint.ABSOLUTE_BYTES)),
             ('rodata', (100, MemConstraint.ABSOLUTE_BYTES)),
             ('data', (100, MemConstraint.ABSOLUTE_BYTES)),
             ('bss', (600, MemConstraint.ABSOLUTE_BYTES)),
             ('args', (4096, MemConstraint.ABSOLUTE_BYTES)),
             ('heap', (100.0, MemConstraint.WEIGHT)),
-            ('workspace', (5000, MemConstraint.ABSOLUTE_BYTES)),
+            #('workspace', (132000, MemConstraint.ABSOLUTE_BYTES)),
+            ('workspace', (13000, MemConstraint.ABSOLUTE_BYTES)),
             ('stack', (32, MemConstraint.ABSOLUTE_BYTES)),
         ])),
         'word_size': WORD_SIZE,

@@ -24,25 +24,30 @@
 #include <tvm/packed_func_ext.h>
 #include <vector>
 #include <string>
-#include "codegen_c_host.h"
+#include "codegen_c_arm.h"
 #include "build_common.h"
+
+// TODO update names/docs to reflect this is for µTVM and Cortex-M4 and Cortex-M7 (DSP-enabled boards)
 
 namespace tvm {
 namespace codegen {
 
-CodeGenCHost::CodeGenCHost() {
+CodeGenCArm::CodeGenCArm() {
   module_name_ = GetUniqueName("__tvm_module_ctx");
 }
 
-void CodeGenCHost::Init(bool output_ssa, bool emit_asserts) {
+void CodeGenCArm::Init(bool output_ssa, bool emit_asserts) {
   emit_asserts_ = emit_asserts;
   decl_stream << "#include \"tvm/runtime/c_runtime_api.h\"\n";
   decl_stream << "#include \"tvm/runtime/c_backend_api.h\"\n";
+  decl_stream << "#include <cmsis_gcc.h>\n";
+  decl_stream << "#include <arm_math.h>\n";
+  decl_stream << "#include <arm_nnsupportfunctions.h>\n";
   decl_stream << "extern void* " << module_name_ << " = NULL;\n";
   CodeGenC::Init(output_ssa);
 }
 
-void CodeGenCHost::AddFunction(LoweredFunc f) {
+void CodeGenCArm::AddFunction(LoweredFunc f) {
   // clear previous generated state.
   this->InitFuncState(f);
   // reserve keywords
@@ -93,11 +98,11 @@ void CodeGenCHost::AddFunction(LoweredFunc f) {
   this->stream << "}\n\n";
 }
 
-std::string CodeGenCHost::Finish() {
+std::string CodeGenCArm::Finish() {
   return CodeGenC::Finish();
 }
 
-void CodeGenCHost::PrintType(Type t, std::ostream& os) {  // NOLINT(*)
+void CodeGenCArm::PrintType(Type t, std::ostream& os) {  // NOLINT(*)
   int lanes = t.lanes();
   if (t.is_handle()) {
     CHECK_EQ(lanes, 1)
@@ -110,7 +115,7 @@ void CodeGenCHost::PrintType(Type t, std::ostream& os) {  // NOLINT(*)
   bool fail = false;
   if (t.is_float()) {
     switch (t.bits()) {
-      case 16:
+      case 16: LOG(FATAL) << "half-precision floating point not supported on Cortex-M series";
         os << "half";
         break;
       case 32: os << "float"; break;
@@ -143,7 +148,7 @@ void CodeGenCHost::PrintType(Type t, std::ostream& os) {  // NOLINT(*)
   LOG(FATAL) << "Cannot convert type " << t << " to C type";
 }
 
-void CodeGenCHost::VisitExpr_(const Broadcast* op, std::ostream& os) {   // NOLINT(*)
+void CodeGenCArm::VisitExpr_(const Broadcast* op, std::ostream& os) {   // NOLINT(*)
   std::string v = PrintExpr(op->value);
   os << "((";
   PrintType(op->type, os);
@@ -155,7 +160,7 @@ void CodeGenCHost::VisitExpr_(const Broadcast* op, std::ostream& os) {   // NOLI
   os << "))";
 }
 
-void CodeGenCHost::PrintGetFuncFromBackend(const std::string& func_name,
+void CodeGenCArm::PrintGetFuncFromBackend(const std::string& func_name,
                                            const std::string& packed_func_name) {
   this->PrintIndent();
   this->stream << "if (" << packed_func_name << " == NULL) {\n";
@@ -175,7 +180,7 @@ void CodeGenCHost::PrintGetFuncFromBackend(const std::string& func_name,
   this->stream << "}\n";
 }
 
-void CodeGenCHost::PrintFuncCall(const std::string& packed_func_name, int num_args) {
+void CodeGenCArm::PrintFuncCall(const std::string& packed_func_name, int num_args) {
   this->PrintIndent();
   std::string ret_val = GetUniqueName("ret_val");
   std::string ret_type_code = GetUniqueName("ret_type_code");
@@ -195,7 +200,7 @@ void CodeGenCHost::PrintFuncCall(const std::string& packed_func_name, int num_ar
   this->stream << "}\n";
 }
 
-void CodeGenCHost::VisitExpr_(const Call *op, std::ostream& os) { // NOLINT(*)
+void CodeGenCArm::VisitExpr_(const Call *op, std::ostream& os) { // NOLINT(*)
   if (op->is_intrinsic(intrinsic::tvm_stack_alloca)) {
     std::string stack_name = GetUniqueName("stack");
     const std::string& type = op->args[0].as<StringImm>()->value;
@@ -238,7 +243,7 @@ void CodeGenCHost::VisitExpr_(const Call *op, std::ostream& os) { // NOLINT(*)
   }
 }
 
-void CodeGenCHost::VisitStmt_(const AssertStmt *op) { // NOLINT(*)
+void CodeGenCArm::VisitStmt_(const AssertStmt *op) { // NOLINT(*)
   if (emit_asserts_) {
     std::string cond = PrintExpr(op->condition);
     PrintIndent();
@@ -255,16 +260,16 @@ void CodeGenCHost::VisitStmt_(const AssertStmt *op) { // NOLINT(*)
   this->PrintStmt(op->body);
 }
 
-void CodeGenCHost::VisitExpr_(const Min *op, std::ostream& os) {  // NOLINT(*)
+void CodeGenCArm::VisitExpr_(const Min *op, std::ostream& os) {  // NOLINT(*)
   PrintTernaryCondExpr(op, "<", os);
 }
 
-void CodeGenCHost::VisitExpr_(const Max *op, std::ostream& os) {  // NOLINT(*)
+void CodeGenCArm::VisitExpr_(const Max *op, std::ostream& os) {  // NOLINT(*)
   PrintTernaryCondExpr(op, ">", os);
 }
 
 template <typename T>
-inline void CodeGenCHost::PrintTernaryCondExpr(const T* op,
+inline void CodeGenCArm::PrintTernaryCondExpr(const T* op,
                                            const char* compare,
                                            std::ostream& os) {  // NOLINT(*)
   std::ostringstream temp_a;
@@ -278,11 +283,11 @@ inline void CodeGenCHost::PrintTernaryCondExpr(const T* op,
      << "? (" << a_id << ") : (" << b_id << "))";
 }
 
-runtime::Module BuildCHost(Array<LoweredFunc> funcs) {
+runtime::Module BuildCArm(Array<LoweredFunc> funcs) {
   using tvm::runtime::Registry;
   bool output_ssa = false;
   bool emit_asserts = false;
-  CodeGenCHost cg;
+  CodeGenCArm cg;
   cg.Init(output_ssa, emit_asserts);
   for (LoweredFunc f : funcs) {
     cg.AddFunction(f);
@@ -291,9 +296,9 @@ runtime::Module BuildCHost(Array<LoweredFunc> funcs) {
   return CSourceModuleCreate(code, "c");
 }
 
-//TVM_REGISTER_API("codegen.build_c")
-//.set_body([](TVMArgs args, TVMRetValue* rv) {
-//    *rv = BuildCHost(args[0]);
-//  });
+TVM_REGISTER_API("codegen.build_c")
+.set_body([](TVMArgs args, TVMRetValue* rv) {
+    *rv = BuildCArm(args[0]);
+  });
 }  // namespace codegen
 }  // namespace tvm

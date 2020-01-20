@@ -63,7 +63,8 @@ void *memset(void *s, int c, size_t n) {
 }
 
 void *memmove(void *to, const void *from, size_t n) {
-  void *temp = TVMBackendAllocWorkspace(1, 1, (uint64_t) size, 2, 8);
+  // TODO will need to factor memmove calls into workspace size calculation
+  char *temp = (char*) TVMBackendAllocWorkspace(1, 1, (uint64_t) n, 2, 8);
   if (temp == NULL) {
     return NULL;
   }
@@ -77,7 +78,7 @@ void *memmove(void *to, const void *from, size_t n) {
     to_pp[i] = temp[i];
   }
 
-  if (TVMBackendFreeWorkspace(1, (uint64_t) 1, temp) != 0) {
+  if (TVMBackendFreeWorkspace(1, (uint64_t) 1, (void*) temp) != 0) {
     return NULL;
   }
   return to;

@@ -137,8 +137,8 @@ class Session:
 def _calc_max_workspace_usage(src):
     # TODO factor in alignment to the calculation (alloc sizes will be aligned up to the word size)
     import re
-    alloc_re = re.compile(r'.*void\* (.*) = TVMBackendAllocWorkspace\(.+, .+, \(uint64_t\)(.+), .+, .+\).*')
-    free_re = re.compile(r'.*if \(TVMBackendFreeWorkspace\(.+, .+, (.+)\) != 0\) {.*')
+    alloc_re = re.compile(r'.*\* ?(.+) = (\(.+\))? TVMBackendAllocWorkspace\(.+, .+, \(uint64_t\)(.+), .+, .+\).*')
+    free_re = re.compile(r'.*if \(TVMBackendFreeWorkspace\(.+, .+, (\(void\*\))? (.+)\) != 0\) {.*')
     max_usage = 0
     alloc_map = {}
     for line in src.split('\n'):
@@ -146,12 +146,13 @@ def _calc_max_workspace_usage(src):
             continue
         match = alloc_re.match(line)
         if match is not None:
-            alloc_map[match.group(1)] = int(match.group(2))
+            alloc_map[match.group(1)] = int(match.group(3))
             max_usage = max(max_usage, sum(alloc_map.values()))
         else:
             match = free_re.match(line)
             if match is not None:
-                del alloc_map[match.group(1)]
+                print(alloc_map)
+                del alloc_map[match.group(2)]
     return max_usage
 
 
@@ -232,10 +233,13 @@ def cross_compiler(dev_config, lib_type, lib_src_paths=None, lib_include_paths=N
 
         # check that workspace allocations don't exceed available workspace memory
         with open(src_path) as f:
-            max_ws_usage = _calc_max_workspace_usage(f.read())
+            src_contents = f.read()
+            max_ws_usage = _calc_max_workspace_usage(src_contents)
             available_mem = mem_layout['workspace']['size']
             if max_ws_usage > available_mem:
                 raise RuntimeError(f'workspace allocations in library ({max_ws_usage}) exceed available memory ({available_mem})')
+            import time
+            time.sleep(3.0)
 
         create_micro_lib(obj_path, src_path, lib_type, options, lib_src_paths=lib_src_paths)
     return _cc.cross_compiler(compile_func, output_format='obj')
