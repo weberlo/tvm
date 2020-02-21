@@ -373,7 +373,7 @@ def generic_func(fdefault):
         return _do_reg
 
     def dispatch_func(func, *args, **kwargs):
-        """The wrapped dispath function"""
+        """The wrapped dispatch function"""
         target = current_target()
         if target is None:
             return func(*args, **kwargs)

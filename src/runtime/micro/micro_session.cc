@@ -109,80 +109,112 @@ MicroSession::MicroSession(
       << "base address not aligned to " << word_size_ << " bytes";
     DevPtr curr_addr = DevPtr(reinterpret_cast<std::uintptr_t>(base_addr));
 
-    section_allocators_[0] = std::make_shared<MicroSectionAllocator>(DevMemRegion {
+    section_allocators_[0] = std::make_shared<MicroSectionAllocator>(
+      "text",
+      DevMemRegion {
       .start = curr_addr,
       .size = text_size,
-    }, word_size_);
+      }, word_size_);
     curr_addr += text_size;
-    section_allocators_[1] = std::make_shared<MicroSectionAllocator>(DevMemRegion {
-      .start = curr_addr,
-      .size = rodata_size,
-    }, word_size_);
+    section_allocators_[1] = std::make_shared<MicroSectionAllocator>(
+      "rodata",
+      DevMemRegion {
+        .start = curr_addr,
+        .size = rodata_size,
+      }, word_size_);
     curr_addr += rodata_size;
-    section_allocators_[2] = std::make_shared<MicroSectionAllocator>(DevMemRegion {
-      .start = curr_addr,
-      .size = data_size,
-    }, word_size_);
+    section_allocators_[2] = std::make_shared<MicroSectionAllocator>(
+      "data",
+      DevMemRegion {
+        .start = curr_addr,
+        .size = data_size,
+      }, word_size_);
     curr_addr += data_size;
-    section_allocators_[3] = std::make_shared<MicroSectionAllocator>(DevMemRegion {
-      .start = curr_addr,
-      .size = bss_size,
-    }, word_size_);
+    section_allocators_[3] = std::make_shared<MicroSectionAllocator>(
+      "bss",
+      DevMemRegion {
+        .start = curr_addr,
+        .size = bss_size,
+      }, word_size_);
     curr_addr += bss_size;
-    section_allocators_[4] = std::make_shared<MicroSectionAllocator>(DevMemRegion {
-      .start = curr_addr,
-      .size = args_size,
-    }, word_size_);
+    section_allocators_[4] = std::make_shared<MicroSectionAllocator>(
+      "args",
+      DevMemRegion {
+        .start = curr_addr,
+        .size = args_size,
+      }, word_size_);
     curr_addr += args_size;
-    section_allocators_[5] = std::make_shared<MicroSectionAllocator>(DevMemRegion {
-      .start = curr_addr,
-      .size = heap_size,
-    }, word_size_);
+    section_allocators_[5] = std::make_shared<MicroSectionAllocator>(
+      "heap",
+      DevMemRegion {
+        .start = curr_addr,
+        .size = heap_size,
+      }, word_size_);
     curr_addr += heap_size;
-    section_allocators_[6] = std::make_shared<MicroSectionAllocator>(DevMemRegion {
-      .start = curr_addr,
-      .size = workspace_size,
-    }, word_size_);
+    section_allocators_[6] = std::make_shared<MicroSectionAllocator>(
+      "workspace",
+      DevMemRegion {
+        .start = curr_addr,
+        .size = workspace_size,
+      }, word_size_);
     curr_addr += workspace_size;
-    section_allocators_[7] = std::make_shared<MicroSectionAllocator>(DevMemRegion {
-      .start = curr_addr,
-      .size = stack_size,
-    }, word_size_);
+    section_allocators_[7] = std::make_shared<MicroSectionAllocator>(
+      "stack",
+      DevMemRegion {
+        .start = curr_addr,
+        .size = stack_size,
+      }, word_size_);
     curr_addr += stack_size;
   } else if (comms_method == "openocd") {
     low_level_device_ = OpenOCDLowLevelDeviceCreate(server_addr, port);
-    section_allocators_[0] = std::make_shared<MicroSectionAllocator>(DevMemRegion {
-      .start = DevPtr(text_start),
-      .size = text_size,
-    }, word_size_);
-    section_allocators_[1] = std::make_shared<MicroSectionAllocator>(DevMemRegion {
-      .start = DevPtr(rodata_start),
-      .size = rodata_size,
-    }, word_size_);
-    section_allocators_[2] = std::make_shared<MicroSectionAllocator>(DevMemRegion {
-      .start = DevPtr(data_start),
-      .size = data_size,
-    }, word_size_);
-    section_allocators_[3] = std::make_shared<MicroSectionAllocator>(DevMemRegion {
-      .start = DevPtr(bss_start),
-      .size = bss_size,
-    }, word_size_);
-    section_allocators_[4] = std::make_shared<MicroSectionAllocator>(DevMemRegion {
-      .start = DevPtr(args_start),
-      .size = args_size,
-    }, word_size_);
-    section_allocators_[5] = std::make_shared<MicroSectionAllocator>(DevMemRegion {
-      .start = DevPtr(heap_start),
-      .size = heap_size,
-    }, word_size_);
-    section_allocators_[6] = std::make_shared<MicroSectionAllocator>(DevMemRegion {
-      .start = DevPtr(workspace_start),
-      .size = workspace_size,
-    }, word_size_);
-    section_allocators_[7] = std::make_shared<MicroSectionAllocator>(DevMemRegion {
-      .start = DevPtr(stack_start),
-      .size = stack_size,
-    }, word_size_);
+    section_allocators_[0] = std::make_shared<MicroSectionAllocator>(
+      "text",
+      DevMemRegion {
+        .start = DevPtr(text_start),
+        .size = text_size,
+      }, word_size_);
+    section_allocators_[1] = std::make_shared<MicroSectionAllocator>(
+      "rodata",
+      DevMemRegion {
+        .start = DevPtr(rodata_start),
+        .size = rodata_size,
+      }, word_size_);
+    section_allocators_[2] = std::make_shared<MicroSectionAllocator>(
+      "data",
+      DevMemRegion {
+        .start = DevPtr(data_start),
+        .size = data_size,
+      }, word_size_);
+    section_allocators_[3] = std::make_shared<MicroSectionAllocator>(
+      "bss",
+      DevMemRegion {
+        .start = DevPtr(bss_start),
+        .size = bss_size,
+      }, word_size_);
+    section_allocators_[4] = std::make_shared<MicroSectionAllocator>(
+      "args",
+      DevMemRegion {
+        .start = DevPtr(args_start),
+        .size = args_size,
+      }, word_size_);
+    section_allocators_[5] = std::make_shared<MicroSectionAllocator>(
+      "heap",
+      DevMemRegion {
+        .start = DevPtr(heap_start),
+        .size = heap_size,
+      }, word_size_);
+    section_allocators_[6] = std::make_shared<MicroSectionAllocator>(
+      "workspace",
+      DevMemRegion {
+        .start = DevPtr(workspace_start),
+        .size = workspace_size,
+      }, word_size_);
+    section_allocators_[7] = std::make_shared<MicroSectionAllocator>(
+      "stack",
+      DevMemRegion {
+        .start = DevPtr(stack_start),
+        .size = stack_size,
+      }, word_size_);
   } else {
     LOG(FATAL) << "unsupported micro low-level device";
   }
@@ -296,10 +328,10 @@ void MicroSession::FlushTaskQueuePriv() {
   std::chrono::time_point<
     std::chrono::high_resolution_clock, std::chrono::nanoseconds> tbegin, tend;
   tbegin = std::chrono::high_resolution_clock::now();
-  //std::cout << "  do execution things: ";
-  //char tmp;
-  //std::cin >> tmp;
-  low_level_device()->Execute(utvm_init_addr, utvm_done_addr);
+  std::cout << "  do execution things: ";
+  char tmp;
+  std::cin >> tmp;
+  // low_level_device()->Execute(utvm_init_addr, utvm_done_addr);
   tend = std::chrono::high_resolution_clock::now();
 
   // Check if there was an error during execution.  If so, log it.
@@ -490,9 +522,44 @@ void MicroSession::CheckDeviceError() {
       // these errors don't matter if we're not using the on-device timer
       return;
     }
+    std::string err_msg;
+    switch(last_error) {
+      case UTVM_ERR_NOT_FINISHED:
+        err_msg = "execution timed out";
+        break;
+      case UTVM_ERR_TIMER_NOT_IMPLEMENTED:
+        err_msg = "timer is not implemented for the target device";
+        break;
+      case UTVM_ERR_TIMER_OVERFLOW:
+        // TODO this should be remedied by using interrupts to accumulate the
+        // timer into a larger datatype (ARM timers are only 24 bits)
+        err_msg = "timer overflowed during execution";
+        break;
+      case UTVM_ERR_WS_DOUBLE_FREE:
+        err_msg = "free called with no active workspace allocations";
+        break;
+      case UTVM_ERR_WS_OUT_OF_SPACE:
+        err_msg = "ran out of space in workspace section";
+        break;
+      case UTVM_ERR_WS_TOO_MANY_ALLOCS:
+        err_msg = "exceeded number of allocs the runtime can keep track of";
+        break;
+      case UTVM_ERR_WS_ZERO_SIZE_ALLOC:
+        err_msg = "attempt to allocate scratchpad of size zero";
+        break;
+      case UTVM_ERR_WS_UNALIGNED_START:
+        err_msg = "start of workspace section is not word-aligned";
+        break;
+      case UTVM_ERR_WS_UNALIGNED_ALLOC_SIZE:
+        err_msg = "scratchpad allocation size is not a multiple of the word size";
+        break;
+      default:
+        err_msg = "unknown error code";
+        break;
+    }
     LOG(FATAL) << "error during micro function execution:\n"
                << "  error ID: " << std::dec << last_error << std::endl
-               << "  error message: " << " TODO: convert retcodes to err msgs";
+               << "  error message: " << err_msg;
   }
 }
 
@@ -574,10 +641,12 @@ PackedFunc MicroSession::GetFunction(
     return PackedFunc([sptr_to_self](TVMArgs args, TVMRetValue* rv) {
       MicroSession::ExitWithScope();
     });
+    // TODO add a `clear_batch_timer` func
   } else if (name == "get_last_batch_time") {
     return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
       *rv = this->GetLastBatchTime();
     });
+    // TODO remove this func
   } else if (name == "get_last_batch_cycles") {
     return PackedFunc([sptr_to_self, this](TVMArgs args, TVMRetValue* rv) {
       *rv = this->GetLastBatchCycles();

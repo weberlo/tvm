@@ -173,6 +173,8 @@ def create_micro_mod(c_mod, dev_config, lib_src_paths=None, lib_include_paths=No
     print('[create_micro_mod]')
     temp_dir = _util.tempdir()
     lib_obj_path = temp_dir.relpath('dev_lib.obj')
+    # TODO use dev config to dispatch on the type of C codegen to run through
+    # (e.g., CodeGenCArm, CodeGenCHost, CodeGenCRiscV)
     c_mod.export_library(
             lib_obj_path,
             fcompile=cross_compiler(
@@ -238,8 +240,6 @@ def cross_compiler(dev_config, lib_type, lib_src_paths=None, lib_include_paths=N
             available_mem = mem_layout['workspace']['size']
             if max_ws_usage > available_mem:
                 raise RuntimeError(f'workspace allocations in library ({max_ws_usage}) exceed available memory ({available_mem})')
-            import time
-            time.sleep(3.0)
 
         create_micro_lib(obj_path, src_path, lib_type, options, lib_src_paths=lib_src_paths)
     return _cc.cross_compiler(compile_func, output_format='obj')

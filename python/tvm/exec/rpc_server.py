@@ -20,6 +20,7 @@ from __future__ import absolute_import
 
 import argparse
 import ast
+import json
 import multiprocessing
 import sys
 import logging
@@ -118,6 +119,7 @@ if __name__ == "__main__":
                         help='JSON config file for the target device (if using MicroTVM)')
     parser.add_argument('--utvm-dev-id', type=str,
                         help='Unique ID for the target device (if using MicroTVM)')
+    # TODO add an example of what these args look like
     parser.add_argument('--utvm-dev-config-args', type=str,
                         help=('Python list of literals required to generate a default'
                               ' MicroTVM config (if --utvm-dev-id is specified)'))

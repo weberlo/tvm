@@ -1290,9 +1290,9 @@ PackedFunc MicroTimeEvaluator(
       }
       ObjectPtr<MicroSession> session = MicroSession::Current();
       DeviceAPI::Get(ctx)->StreamSync(ctx, nullptr);
-      double speed = session->GetLastBatchTime();
-      std::cout << "LAST BATCH TIME WAS " << speed << std::endl;
-      os.write(reinterpret_cast<char*>(&speed), sizeof(speed));
+      double time_per_batch = session->GetLastBatchTime() / number;
+      std::cout << "LAST AVERAGE BATCH TIME WAS " << time_per_batch << std::endl;
+      os.write(reinterpret_cast<char*>(&time_per_batch), sizeof(time_per_batch));
     }
     std::string blob = os.str();
     TVMByteArray arr;
