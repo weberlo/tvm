@@ -159,7 +159,11 @@ def tvm_callback_get_section_size(binary_path, section_name, toolchain_prefix):
         # padding for most cases, but symbols can be arbitrarily large, so this
         # isn't bulletproof.
         return section_size + 32
-    return section_size
+    # TODO remove this arbitrary addition once we figure out why section sizes
+    # are being undercalculated.
+    # maybe stop relying on `*size` to give us the size and instead read the
+    # section with `*objcopy` and count the bytes.
+    return section_size + 8
 
 
 @register_func('tvm_callback_relocate_binary')

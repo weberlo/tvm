@@ -115,8 +115,8 @@ def create_micro_lib_base(
         '-c',
         # TODO(weberlo): make a debug flag
         # '-O0',
-        # '-O2',
-        '-Os',
+        '-O2',
+        # '-Os',
         '-g',
         '-nostartfiles',
         '-nodefaultlibs',

@@ -69,11 +69,11 @@ void *memmove(void *to, const void *from, size_t n) {
     return NULL;
   }
 
-  char *to_pp = (char*) to;
   const char *from_pp = (char*) from;
   for (size_t i = 0; i < n; i++) {
     temp[i] = from_pp[i];
   }
+  char *to_pp = (char*) to;
   for (size_t i = 0; i < n; i++) {
     to_pp[i] = temp[i];
   }
@@ -81,6 +81,7 @@ void *memmove(void *to, const void *from, size_t n) {
   if (TVMBackendFreeWorkspace(1, (uint64_t) 1, (void*) temp) != 0) {
     return NULL;
   }
+
   return to;
 }
 
