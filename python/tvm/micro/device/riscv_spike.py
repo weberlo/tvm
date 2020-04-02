@@ -27,7 +27,7 @@ DEFAULT_SECTION_CONSTRAINTS = {
     'text': (18000, MemConstraint.ABSOLUTE_BYTES),
     'rodata': (128, MemConstraint.ABSOLUTE_BYTES),
     'data': (128, MemConstraint.ABSOLUTE_BYTES),
-    'bss': (600, MemConstraint.ABSOLUTE_BYTES),
+    'bss': (2048, MemConstraint.ABSOLUTE_BYTES),
     'args': (4096, MemConstraint.ABSOLUTE_BYTES),
     'heap': (100.0, MemConstraint.WEIGHT),
     'workspace': (64000, MemConstraint.ABSOLUTE_BYTES),

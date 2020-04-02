@@ -69,7 +69,7 @@ class MicroSectionAllocator {
     size_ = UpperAlignValue(size_, word_size_);
     CHECK(size_ + alloc_size < capacity_)
         << "cannot alloc " << alloc_size << " bytes in " << section_name_ <<
-        " section (start_addr =" << start_addr_.cast_to<void*>() << ")";
+        " section (start_addr=" << start_addr_.cast_to<void*>() << ")";
     uint64_t alloc_addr = (start_addr_ + size_).value().val64;
     alloc_map_[alloc_addr] = alloc_size;
     size_ += alloc_size;

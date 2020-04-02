@@ -33,6 +33,9 @@ extern "C" {
 #include <tvm/runtime/c_runtime_api.h>
 #include <tvm/runtime/c_backend_api.h>
 
+/*!
+ * \brief TODO
+ */
 enum UTVMReturnCode {
   UTVM_ERR_OK = 0,
   UTVM_ERR_NOT_FINISHED = -1,
@@ -60,14 +63,29 @@ typedef struct {
   int32_t num_args;
 } UTVMTask;
 
+/*!
+ * \brief TODO
+ */
 extern void UTVMInit();
 
+/*!
+ * \brief TODO
+ */
 extern int32_t UTVMTimerStart();
 
+/*!
+ * \brief TODO
+ */
 extern uint32_t UTVMTimerStop(int32_t* err);
 
+/*!
+ * \brief TODO
+ */
 void UTVMMain();
 
+/*!
+ * \brief TODO
+ */
 void UTVMDone();
 
 // GCC -O3 begins to inject memset and memmove calls, so we provide impls in

@@ -35,6 +35,7 @@ extern "C" {
 
 #include "utvm_runtime.h"
 
+// TODO move defines into header
 #define TASK_QUEUE_SIZE 20
 volatile UTVMTask utvm_tasks[TASK_QUEUE_SIZE] = { };
 volatile uint32_t utvm_num_tasks = 0;
@@ -45,14 +46,14 @@ volatile char* utvm_workspace_start = NULL;  // NOLINT(*)
 volatile char* utvm_workspace_end = NULL;    // NOLINT(*)
 volatile char* utvm_workspace_curr = NULL;   // NOLINT(*)
 #define MAX_WS_ALLOCS 10
-volatile char* utvm_alloc_ends[MAX_WS_ALLOCS] = {};   // NOLINT(*)
+volatile char* utvm_alloc_ends[MAX_WS_ALLOCS] = {};  // NOLINT(*)
 volatile uint32_t utvm_alloc_idx = 0;
 // Keep track of how many active allocations there are on the workspace.
 volatile uint32_t utvm_num_active_allocs = 0;
 
 volatile uint32_t utvm_word_size = 0;
 
-volatile int32_t utvm_last_error = 0;        // NOLINT(*)
+volatile int32_t utvm_last_error = 0;  // NOLINT(*)
 
 volatile uint32_t utvm_done = 0;
 
