@@ -17,10 +17,22 @@
 """Compilation and config definitions for Spike, a RISC-V functional ISA simulator"""
 from collections import OrderedDict
 
-from . import create_micro_lib_base, register_device
+from . import create_micro_lib_base, register_device, gen_mem_layout, MemConstraint
 
 DEVICE_ID = 'riscv_spike'
 TOOLCHAIN_PREFIX = 'riscv64-unknown-elf-'
+WORD_SIZE = 8
+
+DEFAULT_SECTION_CONSTRAINTS = {
+    'text': (18000, MemConstraint.ABSOLUTE_BYTES),
+    'rodata': (128, MemConstraint.ABSOLUTE_BYTES),
+    'data': (128, MemConstraint.ABSOLUTE_BYTES),
+    'bss': (600, MemConstraint.ABSOLUTE_BYTES),
+    'args': (4096, MemConstraint.ABSOLUTE_BYTES),
+    'heap': (100.0, MemConstraint.WEIGHT),
+    'workspace': (64000, MemConstraint.ABSOLUTE_BYTES),
+    'stack': (32, MemConstraint.ABSOLUTE_BYTES),
+}
 
 def create_micro_lib(obj_path, src_path, lib_type, options=None, lib_src_paths=None):
     """Wrapper over `create_micro_lib_base` to add device-specific options
@@ -42,8 +54,6 @@ def create_micro_lib(obj_path, src_path, lib_type, options=None, lib_src_paths=N
     lib_src_paths : Optional[List[str]]
         TODO
     """
-    if isinstance(src_paths, str):
-        src_paths = [src_paths]
     create_micro_lib_base(
         obj_path,
         src_path,
@@ -55,8 +65,8 @@ def create_micro_lib(obj_path, src_path, lib_type, options=None, lib_src_paths=N
         )
 
 
-def default_config(base_addr, server_addr, server_port):
-    """Generates a default configuration for Spike
+def generate_config(base_addr, available_mem, server_addr, server_port, section_constraints=None):
+    """Generates a configuration for Spike
 
     Parameters
     ----------
@@ -69,57 +79,31 @@ def default_config(base_addr, server_addr, server_port):
     server_port : int
         port of OpenOCD server to connect to
 
+    TODO correct type annotation?
+    section_constraints: Optional[Dict[str, Tuple[Number, MemConstraint]]]
+        TODO
+
     Return
     ------
     config : Dict[str, Any]
         MicroTVM config dict for this device
     """
-    res = {
+    if section_constraints is None:
+        section_constraints = DEFAULT_SECTION_CONSTRAINTS
+    return {
         'device_id': DEVICE_ID,
         'toolchain_prefix': TOOLCHAIN_PREFIX,
-        'mem_layout': OrderedDict([
-            ('text', {
-                'size': 20480,
-            }),
-            ('rodata', {
-                'size': 20480,
-            }),
-            ('data', {
-                'size': 768,
-            }),
-            ('bss', {
-                'size': 768,
-            }),
-            ('args', {
-                'size': 1280,
-            }),
-            ('heap', {
-                'size': 262144,
-            }),
-            ('workspace', {
-                'size': 20480,
-            }),
-            ('stack', {
-                'size': 80,
-            }),
-        ]),
-        'word_size': 8,
+        'mem_layout': gen_mem_layout(base_addr, available_mem, WORD_SIZE, section_constraints),
+        'word_size': WORD_SIZE,
         'thumb_mode': False,
         'use_device_timer': False,
         'comms_method': 'openocd',
         'server_addr': server_addr,
         'server_port': server_port,
     }
-    # generate section start addresses from the given `base_addr`
-    curr_offset = 0
-    mem_layout = res['mem_layout']
-    for region_dict in mem_layout.values():
-        region_dict['start'] = base_addr + curr_offset
-        curr_offset += region_dict['size']
-    return res
 
 
 register_device(DEVICE_ID, {
     'create_micro_lib': create_micro_lib,
-    'default_config': default_config,
+    'generate_config': generate_config,
 })

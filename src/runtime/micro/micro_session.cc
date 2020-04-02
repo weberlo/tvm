@@ -233,8 +233,6 @@ MicroSession::MicroSession(
   batch_args_encoder_.set_start_addr(args_start_addr);
 
   runtime_symbol_map_ = LoadBinary(binary_path, false).symbol_map;
-  std::cout << runtime_symbol_map_["UTVMMain"].cast_to<void*>() << std::endl;
-  std::cout << runtime_symbol_map_["utvm_tasks"].cast_to<void*>() << std::endl;
 
   // Patch pointers to define the bounds of the workspace section and the word
   // size (for allocation alignment).

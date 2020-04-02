@@ -17,12 +17,14 @@
 """Base definitions for MicroTVM config"""
 import glob
 import os
+from enum import Enum
 from pathlib import Path
+from operator import itemgetter
 
 from tvm.contrib import util as _util
 from tvm.contrib.binutil import run_cmd
 from tvm._ffi.libinfo import find_include_path
-from tvm.micro import LibType, get_micro_host_driven_dir, get_micro_device_dir
+from tvm.micro import DEVICE_SECTIONS, LibType, get_micro_host_driven_dir, get_micro_device_dir
 
 _DEVICE_REGISTRY = {}
 
@@ -42,6 +44,9 @@ def register_device(device_id, device_funcs):
     _DEVICE_REGISTRY[device_id] = device_funcs
 
 
+# TODO i hate this api.
+#        dev_funcs = tvm.micro.device.get_device_funcs(config['device_id'])
+#  just look at this shit -----------^
 def get_device_funcs(device_id):
     """Get compilation and config generation functions for device
 
@@ -77,7 +82,7 @@ def create_micro_lib_base(
     out_obj_path : str
         path to generated object file
 
-    in_src_path : List[str]
+    in_src_path : str
         path to source file
 
     toolchain_prefix : str
@@ -177,6 +182,50 @@ def create_micro_lib_base(
     ld_cmd += prereq_obj_paths
     ld_cmd += ['-o', out_obj_path]
     run_cmd(ld_cmd)
+
+
+# TODO we shouldn't need an enum for this. too much bureaucracy.
+class MemConstraint(Enum):
+    """Represents a constraint on the device's memory layout"""
+    ABSOLUTE_BYTES = 0
+    WEIGHT = 1
+
+
+def gen_mem_layout(base_addr, available_mem, word_size, section_constraints):
+    print('[gen_mem_layout]')
+    byte_sum = sum(map(itemgetter(0), filter(lambda x: x[1] == MemConstraint.ABSOLUTE_BYTES, section_constraints.values())))
+    weight_sum = sum(map(itemgetter(0), filter(lambda x: x[1] == MemConstraint.WEIGHT, section_constraints.values())))
+    assert byte_sum <= available_mem
+    available_weight_mem = available_mem - byte_sum
+
+    res = {}
+    curr_addr = base_addr
+    for section in DEVICE_SECTIONS:
+        (val, cons_type) = section_constraints[section]
+        if cons_type == MemConstraint.ABSOLUTE_BYTES:
+            assert val % word_size == 0, f'constraint {val} for {section} section is not word-aligned'
+            size = val
+            res[section] = {
+                'start': curr_addr,
+                'size': size,
+            }
+        else:
+            size = int((val / weight_sum) * available_weight_mem)
+            size = (size // word_size) * word_size
+            res[section] = {
+                'start': curr_addr,
+                'size': size,
+            }
+        curr_addr += size
+
+    print('  result mem layout:')
+    for section in DEVICE_SECTIONS:
+        start = res[section]['start']
+        size = res[section]['size']
+        print(f'    {section}: start={start:x}, size={size}')
+    # import pprint
+    # pprint.pprint(res)
+    return res
 
 
 def _get_device_source_dir(device_id):

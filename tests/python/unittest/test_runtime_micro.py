@@ -23,14 +23,20 @@ from tvm import relay
 import tvm.micro as micro
 from tvm.relay.testing import resnet
 
-# Use the host emulated micro device.
-#DEV_CONFIG_A = micro.device.host.default_config()
-#DEV_CONFIG_B = micro.device.host.default_config()
+# # Use the host emulated micro device.
+# DEV_CONFIG_A = micro.device.host.generate_config()
+# DEV_CONFIG_B = micro.device.host.generate_config()
+# TARGET = 'c -device=micro_dev'
 
-DEV_CONFIG_A = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6668)
-DEV_CONFIG_B = micro.device.arm.stm32f746xx.default_config('127.0.0.1', 6669)
+BASE_ADDR = 0x10000000
+AVAILABLE_MEM = 0x20000
+DEV_CONFIG_A = micro.device.riscv_spike.generate_config(BASE_ADDR, AVAILABLE_MEM, '127.0.0.1', 6666)
+DEV_CONFIG_B = micro.device.riscv_spike.generate_config(BASE_ADDR, AVAILABLE_MEM, '127.0.0.1', 6667)
+TARGET = 'c -device=micro_dev'
 
-# TODO add workspace alloc/free stress test
+# DEV_CONFIG_A = micro.device.arm.stm32f746xx.generate_config('127.0.0.1', 6666)
+# DEV_CONFIG_B = micro.device.arm.stm32f746xx.generate_config('127.0.0.1', 6667)
+# TARGET = 'c -device=micro_dev'
 
 def relay_micro_build(func, dev_config, params=None):
     """Create a graph runtime module with a micro device context from a Relay function.
@@ -40,8 +46,8 @@ def relay_micro_build(func, dev_config, params=None):
     func : relay.Function
         function to compile
 
-    dev_config : TODO
-        TODO
+    dev_config : Dict[str, Any]
+        session configuration for the target device
 
     params : dict
         input parameters that do not change during inference
@@ -51,9 +57,10 @@ def relay_micro_build(func, dev_config, params=None):
     mod : tvm.module.Module
         graph runtime module for the target device
     """
-    with tvm.build_config(disable_vectorize=True):
-        with relay.build_config(disabled_pass={"FuseOps"}):
-            graph, c_mod, params = relay.build(func, target="c", params=params)
+    disable_vectorize = tvm.build_config(disable_vectorize=True)
+    disable_fusion = relay.build_config(disabled_pass={'FuseOps'})
+    with disable_vectorize, disable_fusion:
+        graph, c_mod, params = relay.build(func, target=TARGET, params=params)
     print(c_mod.get_source())
     micro_mod = micro.create_micro_mod(c_mod, dev_config)
     ctx = tvm.micro_dev(0)
@@ -62,18 +69,20 @@ def relay_micro_build(func, dev_config, params=None):
     return mod
 
 
-def reset_gdbinit():
-    if 'server_port' not in DEV_CONFIG_A:
-        return
-    with open('/home/lweber/gdb-conf/.gdbinit', 'w') as f:
-        gdb_port = DEV_CONFIG_A['server_port'] - 3333
-        gdbinit_contents = (
-f"""layout asm
+GDB_INIT_TEMPLATE = """
+layout asm
 target remote localhost:{gdb_port}
 set $pc = UTVMInit
 break UTVMDone
-""")
-        f.write(gdbinit_contents)
+"""
+
+def reset_gdbinit():
+    if 'server_port' not in DEV_CONFIG_A:
+        return
+    gdb_init_dir = os.environ['MICRO_GDB_INIT_DIR']
+    with open(f'{gdb_init_dir}/.gdbinit', 'w') as f:
+        gdb_port = DEV_CONFIG_A['server_port'] - 3333
+        f.write(GDB_INIT_TEMPLATE.format(gdb_port=gdb_port))
 
 
 def test_alloc():
@@ -362,13 +371,42 @@ def test_inactive_session_use():
                 add_result, np_tensor_a + 1.0)
 
 
+# TODO add workspace alloc/free stress test
+
 if __name__ == "__main__":
     test_alloc()
+    print()
+    print('finished alloc test')
+    input('[press enter to continue]')
     test_add()
+    print()
+    print('finished add test')
+    input('[press enter to continue]')
     test_workspace_add()
+    print()
+    print('finished workspace add test')
+    input('[press enter to continue]')
     test_graph_runtime()
+    print()
+    print('finished graph runtime test')
+    input('[press enter to continue]')
     test_conv2d()
+    print()
+    print('finished conv2d test')
+    input('[press enter to continue]')
     test_multiple_modules()
+    print()
+    print('finished multiple modules test')
+    input('[press enter to continue]')
     test_interleave_sessions()
+    print()
+    print('finished interleaved sessions test')
+    input('[press enter to continue]')
     test_nested_sessions()
+    print()
+    print('finished nested sessions test')
+    input('[press enter to continue]')
     test_inactive_session_use()
+    print()
+    print('finished use inactive session test')
+    input('[press enter to continue]')

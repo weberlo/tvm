@@ -30,6 +30,7 @@
 namespace tvm {
 namespace codegen {
 
+// TODO rename to CodeGenCMicro?
 CodeGenCHost::CodeGenCHost() {
   module_name_ = GetUniqueName("__tvm_module_ctx");
 }
@@ -291,9 +292,9 @@ runtime::Module BuildCHost(Array<LoweredFunc> funcs) {
   return CSourceModuleCreate(code, "c");
 }
 
-//TVM_REGISTER_API("codegen.build_c")
-//.set_body([](TVMArgs args, TVMRetValue* rv) {
-//    *rv = BuildCHost(args[0]);
-//  });
+TVM_REGISTER_API("codegen.build_c")
+.set_body([](TVMArgs args, TVMRetValue* rv) {
+   *rv = BuildCHost(args[0]);
+ });
 }  // namespace codegen
 }  // namespace tvm

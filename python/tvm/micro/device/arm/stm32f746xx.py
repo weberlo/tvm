@@ -14,12 +14,8 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""Compilation and config definitions for ARM STM32F746XX devices"""
-from collections import OrderedDict
-from enum import Enum
-from operator import itemgetter
-
-from .. import create_micro_lib_base, register_device
+"""Compilation and config definitions for Arm STM32F746XX devices"""
+from .. import create_micro_lib_base, register_device, gen_mem_layout, MemConstraint
 
 DEVICE_ID = 'arm.stm32f746xx'
 TOOLCHAIN_PREFIX = 'arm-none-eabi-'
@@ -31,8 +27,18 @@ WORD_SIZE = 4
 #
 BASE_ADDR = 0x20000000
 AVAILABLE_MEM = 320000
+DEFAULT_SECTION_CONSTRAINTS = {
+    'text': (18000, MemConstraint.ABSOLUTE_BYTES),
+    'rodata': (100, MemConstraint.ABSOLUTE_BYTES),
+    'data': (100, MemConstraint.ABSOLUTE_BYTES),
+    'bss': (600, MemConstraint.ABSOLUTE_BYTES),
+    'args': (4096, MemConstraint.ABSOLUTE_BYTES),
+    'heap': (100.0, MemConstraint.WEIGHT),
+    'workspace': (64000, MemConstraint.ABSOLUTE_BYTES),
+    'stack': (32, MemConstraint.ABSOLUTE_BYTES),
+}
 
-def create_micro_lib(obj_path, src_paths, lib_type, options=None, lib_src_paths=None):
+def create_micro_lib(obj_path, src_path, lib_type, options=None, lib_src_paths=None):
     """Wrapper over `create_micro_lib_base` to add device-specific options
 
     Parameters
@@ -70,11 +76,11 @@ def create_micro_lib(obj_path, src_paths, lib_type, options=None, lib_src_paths=
         '-DARM_MATH_DSP',
         ]
     create_micro_lib_base(
-        obj_path, src_paths, TOOLCHAIN_PREFIX, DEVICE_ID, lib_type, options=options, lib_src_paths=lib_src_paths)
+        obj_path, src_path, TOOLCHAIN_PREFIX, DEVICE_ID, lib_type, options=options, lib_src_paths=lib_src_paths)
 
 
-def default_config(server_addr, server_port):
-    """Generates a default configuration for ARM STM32F746XX devices
+def generate_config(server_addr, server_port, section_constraints=None):
+    """Generates a configuration for Arm STM32F746XX devices
 
     Parameters
     ----------
@@ -84,36 +90,31 @@ def default_config(server_addr, server_port):
     server_port : int
         port of OpenOCD server to connect to
 
+    TODO correct type annotation?
+    section_constraints: Optional[Dict[str, Tuple[Number, MemConstraint]]]
+        TODO
+
     Return
     ------
     config : Dict[str, Any]
         MicroTVM config dict for this device
     """
+    #'mem_layout': gen_mem_layout(OrderedDict([
+    #    ('text', (10000, MemConstraint.ABSOLUTE_BYTES)),
+    #    ('rodata', (100, MemConstraint.ABSOLUTE_BYTES)),
+    #    ('data', (100, MemConstraint.ABSOLUTE_BYTES)),
+    #    ('bss', (600, MemConstraint.ABSOLUTE_BYTES)),
+    #    ('args', (4096, MemConstraint.ABSOLUTE_BYTES)),
+    #    ('heap', (50.0, MemConstraint.WEIGHT)),
+    #    ('workspace', (2048, MemConstraint.ABSOLUTE_BYTES)),
+    #    ('stack', (32, MemConstraint.ABSOLUTE_BYTES)),
+    #])),
+    if section_constraints is None:
+        section_constraints = DEFAULT_SECTION_CONSTRAINTS
     return {
         'device_id': DEVICE_ID,
         'toolchain_prefix': TOOLCHAIN_PREFIX,
-        #'mem_layout': gen_mem_layout(OrderedDict([
-        #    ('text', (10000, MemConstraint.ABSOLUTE_BYTES)),
-        #    ('rodata', (100, MemConstraint.ABSOLUTE_BYTES)),
-        #    ('data', (100, MemConstraint.ABSOLUTE_BYTES)),
-        #    ('bss', (600, MemConstraint.ABSOLUTE_BYTES)),
-        #    ('args', (4096, MemConstraint.ABSOLUTE_BYTES)),
-        #    ('heap', (50.0, MemConstraint.WEIGHT)),
-        #    ('workspace', (2048, MemConstraint.ABSOLUTE_BYTES)),
-        #    ('stack', (32, MemConstraint.ABSOLUTE_BYTES)),
-        #])),
-        'mem_layout': gen_mem_layout(OrderedDict([
-            ('text', (18000, MemConstraint.ABSOLUTE_BYTES)),
-            ('rodata', (100, MemConstraint.ABSOLUTE_BYTES)),
-            ('data', (100, MemConstraint.ABSOLUTE_BYTES)),
-            ('bss', (600, MemConstraint.ABSOLUTE_BYTES)),
-            ('args', (4096, MemConstraint.ABSOLUTE_BYTES)),
-            ('heap', (100.0, MemConstraint.WEIGHT)),
-            #('workspace', (132000, MemConstraint.ABSOLUTE_BYTES)),
-            # ('workspace', (13000, MemConstraint.ABSOLUTE_BYTES)),
-            ('workspace', (64000, MemConstraint.ABSOLUTE_BYTES)),
-            ('stack', (32, MemConstraint.ABSOLUTE_BYTES)),
-        ])),
+        'mem_layout': gen_mem_layout(BASE_ADDR, AVAILABLE_MEM, WORD_SIZE, section_constraints),
         'word_size': WORD_SIZE,
         'thumb_mode': True,
         'use_device_timer': False,
@@ -123,51 +124,7 @@ def default_config(server_addr, server_port):
     }
 
 
-class MemConstraint(Enum):
-    ABSOLUTE_BYTES = 0
-    WEIGHT = 1
-
-
-def gen_mem_layout(section_constraints):
-    return _gen_mem_layout(BASE_ADDR, AVAILABLE_MEM, WORD_SIZE, section_constraints)
-
-
-# TODO move to base namespace
-def _gen_mem_layout(base_addr, available_mem, word_size, section_constraints):
-    assert isinstance(section_constraints, OrderedDict), 'section constraints must be an OrderedDict'
-    print('[gen_mem_layout]')
-    byte_sum = sum(map(itemgetter(0), filter(lambda x: x[1] == MemConstraint.ABSOLUTE_BYTES, section_constraints.values())))
-    weight_sum = sum(map(itemgetter(0), filter(lambda x: x[1] == MemConstraint.WEIGHT, section_constraints.values())))
-    assert byte_sum <= available_mem
-    available_weight_mem = available_mem - byte_sum
-
-    res = {}
-    curr_addr = base_addr
-    for section, (val, cons_type) in section_constraints.items():
-        print(section, val, cons_type)
-        if cons_type == MemConstraint.ABSOLUTE_BYTES:
-            assert val % word_size == 0
-            size = val
-            res[section] = {
-                'start': curr_addr,
-                'size': size,
-            }
-        else:
-            size = int((val / weight_sum) * available_weight_mem)
-            size = (size // word_size) * word_size
-            res[section] = {
-                'start': curr_addr,
-                'size': size,
-            }
-        curr_addr += size
-
-    import pprint
-    print('  result mem layout:')
-    pprint.pprint(res)
-    return res
-
-
 register_device(DEVICE_ID, {
     'create_micro_lib': create_micro_lib,
-    'default_config': default_config,
+    'generate_config': generate_config,
 })

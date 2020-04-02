@@ -16,7 +16,9 @@
 # under the License.
 """Device-specific configuration for MicroTVM"""
 
-from .base import register_device, get_device_funcs, create_micro_lib_base
+from .base import register_device, get_device_funcs
+from .base import create_micro_lib_base
+from .base import gen_mem_layout, MemConstraint
 from . import host
 from . import arm
 from . import riscv_spike

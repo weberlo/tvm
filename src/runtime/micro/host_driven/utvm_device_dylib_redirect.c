@@ -33,6 +33,7 @@ extern "C" {
 #include <stdint.h>
 #include <stddef.h>
 
+// TODO compiler errors say volatile qualifier is discarded. should we just get rid of em?
 volatile void *(*TVMBackendAllocWorkspace_)(int, int, uint64_t, int, int) =
     (void *(*)(int, int, uint64_t, int, int)) NULL;
 volatile int (*TVMBackendFreeWorkspace_)(int, int, void*) = (int (*)(int, int, void*)) NULL;

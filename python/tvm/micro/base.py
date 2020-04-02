@@ -27,6 +27,19 @@ from tvm.contrib import util as _util
 from tvm.contrib import cc as _cc
 from .._ffi.function import _init_api
 
+# all sections that comprise a device's memory layout, in order from lowest
+# starting address to highest
+DEVICE_SECTIONS = [
+    'text',
+    'rodata',
+    'data',
+    'bss',
+    'args',
+    'heap',
+    'workspace',
+    'stack',
+]
+
 class LibType(Enum):
     """Enumeration of library types that can be compiled and loaded onto a device"""
     # library to be used as a MicroTVM runtime
@@ -60,7 +73,6 @@ class Session:
 
         # grab a binutil instance from the ID in the config
         dev_funcs = tvm.micro.device.get_device_funcs(config['device_id'])
-        self.create_micro_lib = dev_funcs['create_micro_lib']
         self.toolchain_prefix = config['toolchain_prefix']
         self.mem_layout = config['mem_layout']
         self.word_size = config['word_size']
@@ -72,7 +84,7 @@ class Session:
         runtime_src_path = os.path.join(get_micro_host_driven_dir(), 'utvm_runtime.c')
         tmp_dir = _util.tempdir()
         runtime_obj_path = tmp_dir.relpath('utvm_runtime.obj')
-        self.create_micro_lib(runtime_obj_path, runtime_src_path, LibType.RUNTIME)
+        dev_funcs['create_micro_lib'](runtime_obj_path, runtime_src_path, LibType.RUNTIME)
 
         comms_method = config['comms_method']
         if comms_method == 'openocd':
@@ -84,6 +96,7 @@ class Session:
         else:
             raise RuntimeError(f'unknown communication method: f{self.comms_method}')
 
+        assert all(map(lambda sec: sec in self.mem_layout, DEVICE_SECTIONS)), 'not all sections have an assigned memory layout'
         self.module = _CreateSession(
             comms_method,
             runtime_obj_path,
@@ -157,13 +170,22 @@ def _calc_max_workspace_usage(src):
 
 
 TEMPDIR_REFS = []
-def create_micro_mod(c_mod, dev_config, lib_src_paths=None, lib_include_paths=None):
+def create_micro_mod(c_mod, dev_config, lib_src_paths=None, lib_headers=None, lib_include_paths=None):
     """Produces a micro module from a given module.
 
     Parameters
     ----------
     c_mod : tvm.module.Module
         module with "c" as its target backend
+
+    lib_src_paths: TODO
+        TODO
+
+    lib_headers: TODO
+        TODO
+
+    lib_include_paths: TODO
+        TODO
 
     Return
     ------
@@ -181,12 +203,13 @@ def create_micro_mod(c_mod, dev_config, lib_src_paths=None, lib_include_paths=No
                 dev_config,
                 LibType.OPERATOR,
                 lib_src_paths=lib_src_paths,
+                lib_headers=lib_headers,
                 lib_include_paths=lib_include_paths))
     micro_mod = tvm.module.load(lib_obj_path)
     return micro_mod
 
 
-def cross_compiler(dev_config, lib_type, lib_src_paths=None, lib_include_paths=None):
+def cross_compiler(dev_config, lib_type, lib_src_paths=None, lib_headers=None, lib_include_paths=None):
     """Create a cross compile function that wraps `create_lib` for a `Binutil` instance.
 
     For use in `tvm.module.Module.export_library`.
@@ -199,6 +222,15 @@ def cross_compiler(dev_config, lib_type, lib_src_paths=None, lib_include_paths=N
 
     lib_type : micro.LibType
         whether to compile a MicroTVM runtime or operator library
+
+    lib_src_paths: TODO
+        TODO
+
+    lib_headers: TODO
+        e.g., `['cmsis_gcc.h', 'arm_math.h']`
+
+    lib_include_paths: TODO
+        TODO
 
     Return
     ------
@@ -214,6 +246,8 @@ def cross_compiler(dev_config, lib_type, lib_src_paths=None, lib_include_paths=N
       fcompile = tvm.micro.cross_compiler('arm.stm32f746xx', LibType.OPERATOR)
       c_mod.export_library('dev_lib.obj', fcompile=fcompile)
     """
+    assert (lib_headers is None) == (lib_include_paths is None), 'must specify both `lib_headers` and `lib_include_paths` or neither'
+
     if lib_src_paths is None:
         lib_src_paths = []
     if lib_include_paths is None:
@@ -240,6 +274,14 @@ def cross_compiler(dev_config, lib_type, lib_src_paths=None, lib_include_paths=N
             available_mem = mem_layout['workspace']['size']
             if max_ws_usage > available_mem:
                 raise RuntimeError(f'workspace allocations in library ({max_ws_usage}) exceed available memory ({available_mem})')
+        # inject headers into new source path, if requested
+        if lib_headers:
+            headers_to_inject = '\n'.join(map(lambda s: f'#include <{s}>', lib_headers)) + '\n'
+            new_src_contents = headers_to_inject + src_contents
+            tmp_dir = _util.tempdir()
+            src_path = tmp_dir.relpath(os.path.basename(src_path))
+            with open(src_path, 'w') as f:
+                f.write(new_src_contents)
 
         create_micro_lib(obj_path, src_path, lib_type, options, lib_src_paths=lib_src_paths)
     return _cc.cross_compiler(compile_func, output_format='obj')
