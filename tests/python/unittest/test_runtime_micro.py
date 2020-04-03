@@ -28,20 +28,20 @@ from tvm.relay.testing import resnet
 # DEV_CONFIG_B = micro.device.host.generate_config()
 # TARGET = 'c -device=micro_dev'
 
-# TODO why do spike examples have memory that starts at 0x10000000, but you
-# should set the base addr as 0x10010000? should somehow help the user to be
-# aware of that.
-# are there always 0x10000 bytes reserved at the beginning of the address space?
-BASE_ADDR = 0x10010000
+# # TODO why do spike examples have memory that starts at 0x10000000, but you
+# # should set the base addr as 0x10010000? should somehow help the user to be
+# # aware of that.
+# # are there always 0x10000 bytes reserved at the beginning of the address space?
+# BASE_ADDR = 0x10010000
 
-AVAILABLE_MEM = 0x200000
-DEV_CONFIG_A = micro.device.riscv_spike.generate_config(BASE_ADDR, AVAILABLE_MEM, '127.0.0.1', 6666)
-DEV_CONFIG_B = micro.device.riscv_spike.generate_config(BASE_ADDR, AVAILABLE_MEM, '127.0.0.1', 6667)
-TARGET = 'c -device=micro_dev'
-
-# DEV_CONFIG_A = micro.device.arm.stm32f746xx.generate_config('127.0.0.1', 6666)
-# DEV_CONFIG_B = micro.device.arm.stm32f746xx.generate_config('127.0.0.1', 6667)
+# AVAILABLE_MEM = 0x200000
+# DEV_CONFIG_A = micro.device.riscv_spike.generate_config(BASE_ADDR, AVAILABLE_MEM, '127.0.0.1', 6666)
+# DEV_CONFIG_B = micro.device.riscv_spike.generate_config(BASE_ADDR, AVAILABLE_MEM, '127.0.0.1', 6667)
 # TARGET = 'c -device=micro_dev'
+
+DEV_CONFIG_A = micro.device.arm.stm32f746xx.generate_config('127.0.0.1', 6666)
+DEV_CONFIG_B = micro.device.arm.stm32f746xx.generate_config('127.0.0.1', 6667)
+TARGET = 'c -device=micro_dev'
 
 def relay_micro_build(func, dev_config, params=None):
     """Create a graph runtime module with a micro device context from a Relay function.
@@ -379,10 +379,10 @@ def test_inactive_session_use():
 # TODO add workspace alloc/free stress test
 
 if __name__ == "__main__":
-    # test_alloc()
-    # print()
-    # print('finished alloc test')
-    # input('[press enter to continue]')
+    test_alloc()
+    print()
+    print('finished alloc test')
+    input('[press enter to continue]')
     test_add()
     print()
     print('finished add test')

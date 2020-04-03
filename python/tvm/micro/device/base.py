@@ -124,10 +124,10 @@ def create_micro_lib_base(
         # '-Os',
         '-g',
         '-nostartfiles',
-        # '-nodefaultlibs',
-        # '-nostdlib',
-        # '-fdata-sections',
-        # '-ffunction-sections',
+        '-nodefaultlibs',
+        '-nostdlib',
+        '-fdata-sections',
+        '-ffunction-sections',
         ]
     if options is not None:
         base_compile_cmd += options
