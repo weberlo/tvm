@@ -169,6 +169,24 @@ def tvm_callback_get_section_size(binary_path, section_name, toolchain_prefix):
     return section_size + 8
 
 
+def _add_gdbinit_symbol_file(rel_obj_path, text_start):
+    gdb_init_dir = os.environ['MICRO_GDB_INIT_DIR']
+    gdb_init_path = f'{gdb_init_dir}/.gdbinit'
+    with open(gdb_init_path, 'r') as f:
+        gdbinit_contents = f.read().split('\n')
+
+    new_contents = []
+    found_target = False
+    for line in gdbinit_contents:
+        new_contents.append(line)
+        if line.startswith('target') or line.startswith('attach'):
+            new_contents.append(f'add-symbol-file {rel_obj_path} {text_start}')
+            found_target = True
+    assert found_target
+    with open(gdb_init_path, 'w') as f:
+        f.write('\n'.join(new_contents))
+
+
 @register_func('tvm_callback_relocate_binary')
 def tvm_callback_relocate_binary(
         binary_path,
@@ -212,6 +230,8 @@ def tvm_callback_relocate_binary(
     rel_bin : bytearray
         the relocated binary
     """
+    print('[binutil.tvm_callback_relocate_binary]')
+    print(f'  orig bin path: {binary_path}')
     assert text_start < rodata_start < data_start < bss_start < stack_end
     stack_pointer_init = stack_end - word_size
     ld_script_contents = ''
@@ -229,18 +249,9 @@ def tvm_callback_relocate_binary(
 
     tmp_dir = util.tempdir()
     rel_obj_path = tmp_dir.relpath('relocated.obj')
+    print(f'  reloc bin path: {rel_obj_path}')
 
-    gdb_init_dir = os.environ['MICRO_GDB_INIT_DIR']
-    gdb_init_path = f'{gdb_init_dir}/.gdbinit'
-    with open(gdb_init_path, 'r') as f:
-        gdbinit_contents = f.read().split('\n')
-    new_contents = []
-    for line in gdbinit_contents:
-        new_contents.append(line)
-        if line.startswith('target'):
-            new_contents.append(f'add-symbol-file {rel_obj_path}')
-    with open(gdb_init_path, 'w') as f:
-        f.write('\n'.join(new_contents))
+    _add_gdbinit_symbol_file(rel_obj_path, text_start)
 
     rel_ld_script_path = tmp_dir.relpath('relocate.lds')
     with open(rel_ld_script_path, 'w') as f:

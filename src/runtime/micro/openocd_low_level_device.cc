@@ -89,7 +89,7 @@ class OpenOCDLowLevelDevice final : public LowLevelDevice {
     }
 
     {
-      socket_.cmd_builder() << "ocd_echo $output";
+      socket_.cmd_builder() << "return $output";
       socket_.SendCommand();
       const std::string& reply = socket_.last_reply();
 

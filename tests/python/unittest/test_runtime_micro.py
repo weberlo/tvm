@@ -23,25 +23,24 @@ from tvm import relay
 import tvm.micro as micro
 from tvm.relay.testing import resnet
 
-# # Use the host emulated micro device.
-# DEV_CONFIG_A = micro.device.host.generate_config()
-# DEV_CONFIG_B = micro.device.host.generate_config()
-# TARGET = 'c -device=micro_dev'
+# Use the host emulated micro device.
+DEV_CONFIG_A = micro.device.host.generate_config()
+DEV_CONFIG_B = micro.device.host.generate_config()
+TARGET = 'c -device=micro_dev'
 
 # # TODO why do spike examples have memory that starts at 0x10000000, but you
 # # should set the base addr as 0x10010000? should somehow help the user to be
 # # aware of that.
 # # are there always 0x10000 bytes reserved at the beginning of the address space?
 # BASE_ADDR = 0x10010000
-
 # AVAILABLE_MEM = 0x200000
 # DEV_CONFIG_A = micro.device.riscv_spike.generate_config(BASE_ADDR, AVAILABLE_MEM, '127.0.0.1', 6666)
 # DEV_CONFIG_B = micro.device.riscv_spike.generate_config(BASE_ADDR, AVAILABLE_MEM, '127.0.0.1', 6667)
 # TARGET = 'c -device=micro_dev'
 
-DEV_CONFIG_A = micro.device.arm.stm32f746xx.generate_config('127.0.0.1', 6666)
-DEV_CONFIG_B = micro.device.arm.stm32f746xx.generate_config('127.0.0.1', 6667)
-TARGET = 'c -device=micro_dev'
+# DEV_CONFIG_A = micro.device.arm.stm32f746xx.generate_config('127.0.0.1', 6666)
+# DEV_CONFIG_B = micro.device.arm.stm32f746xx.generate_config('127.0.0.1', 6667)
+# TARGET = 'c -device=micro_dev'
 
 def relay_micro_build(func, dev_config, params=None):
     """Create a graph runtime module with a micro device context from a Relay function.
@@ -74,6 +73,13 @@ def relay_micro_build(func, dev_config, params=None):
     return mod
 
 
+GDB_INIT_HOST_TEMPLATE = """
+layout asm
+attach {pid}
+break UTVMInit
+break UTVMDone
+"""
+
 GDB_INIT_TEMPLATE = """
 layout asm
 target remote localhost:{gdb_port}
@@ -81,13 +87,18 @@ set $pc = UTVMInit
 break UTVMDone
 """
 
+import os
+
 def reset_gdbinit():
-    if 'server_port' not in DEV_CONFIG_A:
-        return
     gdb_init_dir = os.environ['MICRO_GDB_INIT_DIR']
     with open(f'{gdb_init_dir}/.gdbinit', 'w') as f:
-        gdb_port = DEV_CONFIG_A['server_port'] - 3333
-        f.write(GDB_INIT_TEMPLATE.format(gdb_port=gdb_port))
+        if 'server_port' in DEV_CONFIG_A:
+            gdb_port = DEV_CONFIG_A['server_port'] - 3333
+            f.write(GDB_INIT_TEMPLATE.format(gdb_port=gdb_port))
+        else:
+            stream = os.popen('ps -ef | grep lweber | grep "python3.*tests/python/unittest/test_runtime_micro.py" | grep -v "grep" | awk \'{ print $2 }\'')
+            pid = int(stream.read().strip())
+            f.write(GDB_INIT_HOST_TEMPLATE.format(pid=pid))
 
 
 def test_alloc():
@@ -379,10 +390,10 @@ def test_inactive_session_use():
 # TODO add workspace alloc/free stress test
 
 if __name__ == "__main__":
-    test_alloc()
-    print()
-    print('finished alloc test')
-    input('[press enter to continue]')
+    # test_alloc()
+    # print()
+    # print('finished alloc test')
+    # input('[press enter to continue]')
     test_add()
     print()
     print('finished add test')

@@ -327,8 +327,9 @@ void MicroSession::FlushTaskQueuePriv() {
     std::chrono::high_resolution_clock, std::chrono::nanoseconds> tbegin, tend;
   tbegin = std::chrono::high_resolution_clock::now();
   // std::cout << "  do execution things: ";
-  // char tmp;
-  // std::cin >> tmp;
+  std::cout << "  prep yo GDB: ";
+  char tmp;
+  std::cin >> tmp;
   low_level_device()->Execute(utvm_init_addr, utvm_done_addr);
   tend = std::chrono::high_resolution_clock::now();
 

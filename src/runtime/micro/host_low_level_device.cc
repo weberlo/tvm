@@ -62,10 +62,14 @@ class HostLowLevelDevice final : public LowLevelDevice {
   }
 
   void Read(DevPtr addr, void* buf, size_t num_bytes) {
+    CHECK(addr.value().val64 >= (std::uintptr_t) base_addr_) << "attempt to read before beginning of device memory";
+    CHECK(addr.value().val64 + num_bytes < (std::uintptr_t) (base_addr_ + size_)) << "attempt to read past end of device memory";
     std::memcpy(buf, addr.cast_to<void*>(), num_bytes);
   }
 
   void Write(DevPtr addr, const void* buf, size_t num_bytes) {
+    CHECK(addr.value().val64 >= (std::uintptr_t) base_addr_) << "attempt to write before beginning of device memory";
+    CHECK(addr.value().val64 + num_bytes < (std::uintptr_t) (base_addr_ + size_)) << "attempt to write past end of device memory";
     std::memcpy(addr.cast_to<void*>(), buf, num_bytes);
   }
 
