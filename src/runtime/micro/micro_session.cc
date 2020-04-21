@@ -327,7 +327,6 @@ void MicroSession::FlushTaskQueuePriv() {
     std::chrono::high_resolution_clock, std::chrono::nanoseconds> tbegin, tend;
   tbegin = std::chrono::high_resolution_clock::now();
   // std::cout << "  do execution things: ";
-  // std::cout << "  prep yo GDB: ";
   // char tmp;
   // std::cin >> tmp;
   low_level_device()->Execute(utvm_init_addr, utvm_done_addr);
@@ -394,10 +393,10 @@ BinaryInfo MicroSession::LoadBinary(const std::string& binary_path, bool patch_d
   std::string relocated_bin = RelocateBinarySections(
       binary_path,
       word_size_,
-      text_section.start,
-      rodata_section.start,
-      data_section.start,
-      bss_section.start,
+      text_section,
+      rodata_section,
+      data_section,
+      bss_section,
       GetAllocator(SectionKind::kStack)->max_addr(),
       toolchain_prefix_);
   std::string text_contents = ReadSection(relocated_bin, SectionKind::kText, toolchain_prefix_);

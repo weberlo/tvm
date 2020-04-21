@@ -53,10 +53,10 @@ const char* SectionToString(SectionKind section) {
 std::string RelocateBinarySections(
     const std::string& binary_path,
     size_t word_size,
-    DevPtr text_start,
-    DevPtr rodata_start,
-    DevPtr data_start,
-    DevPtr bss_start,
+    DevMemRegion text_region,
+    DevMemRegion rodata_region,
+    DevMemRegion data_region,
+    DevMemRegion bss_region,
     DevPtr stack_end,
     const std::string& toolchain_prefix) {
   const auto* f = Registry::Get("tvm_callback_relocate_binary");
@@ -64,10 +64,14 @@ std::string RelocateBinarySections(
     << "Require tvm_callback_relocate_binary to exist in registry";
   std::string relocated_bin = (*f)(binary_path,
                                    word_size,
-                                   text_start.cast_to<uint64_t>(),
-                                   rodata_start.cast_to<uint64_t>(),
-                                   data_start.cast_to<uint64_t>(),
-                                   bss_start.cast_to<uint64_t>(),
+                                   text_region.start.cast_to<uint64_t>(),
+                                   text_region.size,
+                                   rodata_region.start.cast_to<uint64_t>(),
+                                   rodata_region.size,
+                                   data_region.start.cast_to<uint64_t>(),
+                                   data_region.size,
+                                   bss_region.start.cast_to<uint64_t>(),
+                                   bss_region.size,
                                    stack_end.cast_to<uint64_t>(),
                                    toolchain_prefix);
   return relocated_bin;

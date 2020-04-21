@@ -24,53 +24,18 @@ from ..api import register_func
 # TODO does this file still belong in `contrib`. is it too µTVM-specific?
 
 # TODO shouldn't need so many `ALIGN` directives
-RELOCATION_LD_SCRIPT_TEMPLATE = """
-/* linker symbol for use in UTVMInit */
-_utvm_stack_pointer_init = 0x{stack_pointer_init:x};
-
-SECTIONS
-{{
-  . = 0x{text_start:x};
+SECTION_LD_TEMPLATE = """
+  . = 0x{section_start:x};
   . = ALIGN({word_size});
-  .text :
+  .{section_name} :
   {{
     . = ALIGN({word_size});
-    KEEP(*(.text))
-    KEEP(*(.text*))
+    KEEP(*(.{section_name}))
+    KEEP(*(.{section_name}*))
     . = ALIGN({word_size});
   }}
-
-  . = 0x{rodata_start:x};
-  . = ALIGN({word_size});
-  .rodata :
-  {{
-    . = ALIGN({word_size});
-    KEEP(*(.rodata))
-    KEEP(*(.rodata*))
-    . = ALIGN({word_size});
-  }}
-
-  . = 0x{data_start:x};
-  . = ALIGN({word_size});
-  .data :
-  {{
-    . = ALIGN({word_size});
-    KEEP(*(.data))
-    KEEP(*(.data*))
-    . = ALIGN({word_size});
-  }}
-
-  . = 0x{bss_start:x};
-  . = ALIGN({word_size});
-  .bss :
-  {{
-    . = ALIGN({word_size});
-    KEEP(*(.bss))
-    KEEP(*(.bss*))
-    . = ALIGN({word_size});
-  }}
-}}
 """
+
 
 def run_cmd(cmd):
     """Runs `cmd` in a subprocess and awaits its completion.
@@ -109,7 +74,7 @@ def tvm_callback_get_section_size(binary_path, section_name, toolchain_prefix):
         path of the binary file
 
     section_name : str
-        name of section
+        name of section (e.g., 'text', 'rodata', etc.)
 
     toolchain_prefix : str
         prefix for binary names in target compiler toolchain
@@ -160,13 +125,18 @@ def tvm_callback_get_section_size(binary_path, section_name, toolchain_prefix):
         #
         # If this is the case, then 32 just happens to be a safe amount of
         # padding for most cases, but symbols can be arbitrarily large, so this
-        # isn't bulletproof.
+        # fix isn't bulletproof.
         return section_size + 32
     # TODO remove this arbitrary addition once we figure out why section sizes
     # are being undercalculated.
     # maybe stop relying on `*size` to give us the size and instead read the
     # section with `*objcopy` and count the bytes.
-    return section_size + 8
+
+    # NOTE even though removing the `+ 8` padding fixed the host, it could
+    # still be required for RISC-V, for whatever reason. just keep that in mind
+    # when you're looking through the git diff, pal.
+    # return section_size + 8
+    return section_size
 
 
 def _add_gdbinit_symbol_file(rel_obj_path, text_start):
@@ -192,9 +162,13 @@ def tvm_callback_relocate_binary(
         binary_path,
         word_size,
         text_start,
+        text_size,
         rodata_start,
+        rodata_size,
         data_start,
+        data_size,
         bss_start,
+        bss_size,
         stack_end,
         toolchain_prefix):
     """Relocates sections in the binary to new addresses
@@ -207,15 +181,19 @@ def tvm_callback_relocate_binary(
     word_size : int
         word size on the target machine
 
+    TODO update
     text_start : int
         text section address
 
+    TODO update
     rodata_start : int
         rodata section address
 
+    TODO update
     data_start : int
         data section address
 
+    TODO update
     bss_start : int
         bss section address
 
@@ -239,13 +217,27 @@ def tvm_callback_relocate_binary(
     # TODO is this line even necessary?
     if 'riscv' in toolchain_prefix:
         ld_script_contents += 'OUTPUT_ARCH( "riscv" )\n\n'
-    ld_script_contents += RELOCATION_LD_SCRIPT_TEMPLATE.format(
-        word_size=word_size,
-        text_start=text_start,
-        rodata_start=rodata_start,
-        data_start=data_start,
-        bss_start=bss_start,
-        stack_pointer_init=stack_pointer_init)
+
+    # export linker symbol for use in UTVMInit
+    ld_script_contents += f'_utvm_stack_pointer_init = 0x{stack_pointer_init:x};\n\n'
+
+    ld_script_contents += 'SECTIONS {'
+    sections = [
+        ('text', text_start, text_size),
+        ('rodata', rodata_start, rodata_size),
+        ('data', data_start, data_size),
+        ('bss', bss_start, bss_size),
+    ]
+    for (name, start, size) in sections:
+        print(f'  {(name, start, size)}')
+        if size == 0:
+            continue
+        ld_script_contents += SECTION_LD_TEMPLATE.format(
+            section_start=start,
+            section_name=name,
+            word_size=word_size
+            )
+    ld_script_contents += '}'
 
     tmp_dir = util.tempdir()
     rel_obj_path = tmp_dir.relpath('relocated.obj')
@@ -253,9 +245,11 @@ def tvm_callback_relocate_binary(
 
     _add_gdbinit_symbol_file(rel_obj_path, text_start)
 
+    input(ld_script_contents)
     rel_ld_script_path = tmp_dir.relpath('relocate.lds')
     with open(rel_ld_script_path, 'w') as f:
         f.write(ld_script_contents)
+
     run_cmd([
         '{}ld'.format(toolchain_prefix),
         binary_path,

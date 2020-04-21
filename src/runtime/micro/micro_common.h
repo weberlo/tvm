@@ -231,9 +231,13 @@ const char* SectionToString(SectionKind section);
  * \brief links binary by repositioning section addresses
  * \param binary_name input binary filename
  * \param word_size word size on the target machine
+ TODO UPDATE
  * \param text_start text section address
+ TODO UPDATE
  * \param rodata_start rodata section address
+ TODO UPDATE
  * \param data_start data section address
+ TODO UPDATE
  * \param bss_start bss section address
  * \param stack_end stack section end address
  * \param toolchain_prefix prefix of compiler toolchain to use
@@ -242,10 +246,10 @@ const char* SectionToString(SectionKind section);
 std::string RelocateBinarySections(
     const std::string& binary_path,
     size_t word_size,
-    DevPtr text_start,
-    DevPtr rodata_start,
-    DevPtr data_start,
-    DevPtr bss_start,
+    DevMemRegion text_region,
+    DevMemRegion rodata_region,
+    DevMemRegion data_region,
+    DevMemRegion bss_region,
     DevPtr stack_end,
     const std::string& toolchain_prefix);
 

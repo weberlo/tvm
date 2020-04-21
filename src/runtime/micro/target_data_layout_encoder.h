@@ -76,9 +76,9 @@ class TargetDataLayoutEncoder {
 
     /*!
      * \brief returns number of bytes allocated for this slot
-     * \return size of this slot
+     * \return capacity of this slot
      */
-    size_t size();
+    size_t capacity();
 
    private:
     /*! \brief pointer to parent encoder */
@@ -87,8 +87,8 @@ class TargetDataLayoutEncoder {
     size_t start_offset_;
     /*! \brief current offset relative to the start offset of this slot */
     size_t curr_offset_;
-    /*! \brief size (in bytes) of the memory region allocated for this slot */
-    size_t size_;
+    /*! \brief capacity (in bytes) of the memory region allocated for this slot */
+    size_t capacity_;
     /*! \brief start address of the slot in the device's memory */
     DevPtr start_addr_;
   };
@@ -169,25 +169,29 @@ class TargetDataLayoutEncoder {
 template <typename T>
 TargetDataLayoutEncoder::Slot<T>::Slot(TargetDataLayoutEncoder* parent,
                                        size_t start_offset,
-                                       size_t size,
+                                       size_t capacity,
                                        DevPtr start_addr)
     : parent_(parent),
       start_offset_(start_offset),
       curr_offset_(0),
-      size_(size),
+      capacity_(capacity),
       start_addr_(start_addr) {}
 
 template <typename T>
 TargetDataLayoutEncoder::Slot<T>::~Slot() {
   // TODO this can mask the exception thrown by slot allocation... even though that doesn't make sense.
-  CHECK(curr_offset_ == size_) << "unwritten space in slot";
+  if (curr_offset_ != capacity_) {
+    LOG(WARNING) << "unwritten space in slot ("
+      << "curr offset = " << curr_offset_ << ", "
+      << "capacity = " << capacity_;
+  }
 }
 
 template <typename T>
 void TargetDataLayoutEncoder::Slot<T>::WriteArray(const T* arr, size_t num_elems) {
   if (num_elems == 0) return;
   size_t size = sizeof(T) * num_elems;
-  CHECK(curr_offset_ + size <= size_) << "not enough space in slot";
+  CHECK(curr_offset_ + size <= capacity_) << "not enough space in slot";
   uint8_t* curr_ptr = &(parent_->data())[start_offset_ + curr_offset_];
   std::memcpy(curr_ptr, arr, size);
   curr_offset_ += size;
@@ -204,8 +208,8 @@ DevPtr TargetDataLayoutEncoder::Slot<T>::start_addr() {
 }
 
 template <typename T>
-size_t TargetDataLayoutEncoder::Slot<T>::size() {
-  return size_;
+size_t TargetDataLayoutEncoder::Slot<T>::capacity() {
+  return capacity_;
 }
 
 }  // namespace runtime

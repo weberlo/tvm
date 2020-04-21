@@ -23,20 +23,20 @@ from tvm import relay
 import tvm.micro as micro
 from tvm.relay.testing import resnet
 
-# Use the host emulated micro device.
-DEV_CONFIG_A = micro.device.host.generate_config()
-DEV_CONFIG_B = micro.device.host.generate_config()
-TARGET = 'c -device=micro_dev'
-
-# # TODO why do spike examples have memory that starts at 0x10000000, but you
-# # should set the base addr as 0x10010000? should somehow help the user to be
-# # aware of that.
-# # are there always 0x10000 bytes reserved at the beginning of the address space?
-# BASE_ADDR = 0x10010000
-# AVAILABLE_MEM = 0x200000
-# DEV_CONFIG_A = micro.device.riscv_spike.generate_config(BASE_ADDR, AVAILABLE_MEM, '127.0.0.1', 6666)
-# DEV_CONFIG_B = micro.device.riscv_spike.generate_config(BASE_ADDR, AVAILABLE_MEM, '127.0.0.1', 6667)
+# # Use the host emulated micro device.
+# DEV_CONFIG_A = micro.device.host.generate_config()
+# DEV_CONFIG_B = micro.device.host.generate_config()
 # TARGET = 'c -device=micro_dev'
+
+# TODO why do spike examples have memory that starts at 0x10000000, but you
+# should set the base addr as 0x10010000? should somehow help the user to be
+# aware of that.
+# are there always 0x10000 bytes reserved at the beginning of the address space?
+BASE_ADDR = 0x10010000
+AVAILABLE_MEM = 0x200000
+DEV_CONFIG_A = micro.device.riscv_spike.generate_config(BASE_ADDR, AVAILABLE_MEM, '127.0.0.1', 6666)
+DEV_CONFIG_B = micro.device.riscv_spike.generate_config(BASE_ADDR, AVAILABLE_MEM, '127.0.0.1', 6667)
+TARGET = 'c -device=micro_dev'
 
 # DEV_CONFIG_A = micro.device.arm.stm32f746xx.generate_config('127.0.0.1', 6666)
 # DEV_CONFIG_B = micro.device.arm.stm32f746xx.generate_config('127.0.0.1', 6667)
@@ -96,9 +96,7 @@ def reset_gdbinit():
             gdb_port = DEV_CONFIG_A['server_port'] - 3333
             f.write(GDB_INIT_TEMPLATE.format(gdb_port=gdb_port))
         else:
-            stream = os.popen('ps -ef | grep lweber | grep "python3.*tests/python/unittest/test_runtime_micro.py" | grep -v "grep" | awk \'{ print $2 }\'')
-            pid = int(stream.read().strip())
-            f.write(GDB_INIT_HOST_TEMPLATE.format(pid=pid))
+            f.write(GDB_INIT_HOST_TEMPLATE.format(pid=os.getpid()))
 
 
 def test_alloc():
@@ -118,7 +116,7 @@ def test_add():
     """Test a module which performs addition."""
     if not tvm.module.enabled("micro_dev"):
         return
-    shape = (1024,)
+    shape = (32,)
     dtype = "float32"
 
     reset_gdbinit()

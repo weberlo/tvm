@@ -76,8 +76,8 @@ def init_utvm(args):
             dev_config = json.load(dev_conf_file)
     else:
         dev_config_args = ast.literal_eval(args.utvm_dev_config_args)
-        default_config_func = micro.device.get_device_funcs(args.utvm_dev_id)['default_config']
-        dev_config = default_config_func(*dev_config_args)
+        gen_config_func = micro.device.get_device_funcs(args.utvm_dev_id)['generate_config']
+        dev_config = gen_config_func(*dev_config_args)
 
     if args.utvm_dev_config or args.utvm_dev_id:
         # add MicroTVM overrides
