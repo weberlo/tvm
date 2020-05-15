@@ -37,11 +37,13 @@ namespace codegen {
 
 CodeGenCHost::CodeGenCHost() { module_name_ = GetUniqueName("__tvm_module_ctx"); }
 
-void CodeGenCHost::Init(bool output_ssa, bool emit_asserts) {
+void CodeGenCHost::Init(bool output_ssa, bool emit_asserts, const std::string& target_str) {
   emit_asserts_ = emit_asserts;
   declared_globals_.clear();
+  decl_stream << "// tvm target: " << target_str << "\n";
   decl_stream << "#include \"tvm/runtime/c_runtime_api.h\"\n";
   decl_stream << "#include \"tvm/runtime/c_backend_api.h\"\n";
+  decl_stream << "#include <math.h>\n";
   decl_stream << "void* " << module_name_ << " = NULL;\n";
   CodeGenC::Init(output_ssa);
 }
@@ -301,10 +303,11 @@ void CodeGenCHost::GenerateCrtSystemLib() {
 runtime::Module BuildCHost(IRModule mod, const std::string& target_str) {
   using tvm::runtime::Registry;
   bool output_ssa = false;
-  bool emit_asserts = false;
+  // TODO(weberlo) make configurable
+  bool emit_asserts = true;
   CodeGenCHost cg;
   auto target = Target::Create(target_str);
-  cg.Init(output_ssa, emit_asserts);
+  cg.Init(output_ssa, emit_asserts, target_str);
 
   for (auto kv : mod->functions) {
     CHECK(kv.second->IsInstance<PrimFuncNode>()) << "CodegenCHost: Can only take PrimFunc";
@@ -312,15 +315,17 @@ runtime::Module BuildCHost(IRModule mod, const std::string& target_str) {
     cg.AddFunction(f);
   }
 
+  bool is_micro_runtime = false;
   if (target->GetAttr<Bool>("system-lib").value_or(Bool(false))) {
     CHECK_EQ(target->GetAttr<String>("runtime").value_or(""), "c")
         << "c target only supports generating C runtime SystemLibs";
     cg.GenerateFuncRegistry();
     cg.GenerateCrtSystemLib();
+    is_micro_runtime = true;
   }
 
   std::string code = cg.Finish();
-  return CSourceModuleCreate(code, "c");
+  return CSourceModuleCreate(code, "c", "", {}, is_micro_runtime);
 }
 
 TVM_REGISTER_GLOBAL("target.build.c").set_body([](TVMArgs args, TVMRetValue* rv) {

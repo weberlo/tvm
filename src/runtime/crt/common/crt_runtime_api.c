@@ -126,7 +126,7 @@ static TVMModuleHandle EncodeModuleHandle(tvm_module_index_t module_index) {
   return (TVMModuleHandle)((uintptr_t)(module_index | 0x8000));
 }
 
-static int TVMModCreateFromCModule(const TVMModule* mod, TVMModuleHandle* out_handle) {
+static int _TVMModCreateFromCModule(const TVMModule* mod, TVMModuleHandle* out_handle) {
   tvm_module_index_t idx;
 
   for (idx = 0; idx < TVM_CRT_MAX_REGISTERED_MODULES; idx++) {
@@ -160,7 +160,7 @@ int SystemLibraryCreate(TVMValue* args, int* type_codes, int num_args, TVMValue*
 
   if (system_lib_handle == kTVMModuleHandleUninitialized) {
     system_lib = TVMSystemLibEntryPoint();
-    if (TVMModCreateFromCModule(system_lib, &system_lib_handle) != 0) {
+    if (_TVMModCreateFromCModule(system_lib, &system_lib_handle) != 0) {
       TVMAPIErrorf("error registering system lib");
       return -1;
     }
@@ -168,6 +168,102 @@ int SystemLibraryCreate(TVMValue* args, int* type_codes, int num_args, TVMValue*
 
   ret_val[0].v_handle = system_lib_handle;
   ret_type_codes[0] = kTVMModuleHandle;
+  return 0;
+}
+
+// NOTE this define is not configurable; it encodes information about the time
+// eval func signature
+#define NUM_TIME_EVAL_BOILERPLATE_ARGS 8
+
+// TODO(weberlo) move to crt_config.h?
+#define MAX_TIME_EVAL_REPEAT 10
+static TVMByteArray g_utvm_time_eval_result;
+
+int RPCTimeEvaluator(
+    TVMValue* args, int* type_codes,
+    int num_args,
+    TVMValue* ret_val, int* ret_type_code) {
+  ret_val[0].v_handle = NULL;
+  ret_type_code[0] = kTVMNullptr;
+  if (num_args < NUM_TIME_EVAL_BOILERPLATE_ARGS) {
+    TVMAPIErrorf("not enough args");
+    return -1;
+  }
+  if (type_codes[0] != kTVMOpaqueHandle ||
+      type_codes[1] != kTVMModuleHandle ||
+      type_codes[2] != kTVMStr ||
+      type_codes[3] != kTVMContext ||
+      type_codes[4] != kTVMArgInt ||
+      type_codes[5] != kTVMArgInt ||
+      type_codes[6] != kTVMArgInt ||
+      type_codes[7] != kTVMStr) {
+    TVMAPIErrorf("one or more invalid arg types");
+    return -1;
+  }
+
+  TVMModuleHandle mod = (TVMModuleHandle) args[1].v_handle;
+  const char* name = args[2].v_str;
+  TVMContext ctx = args[3].v_ctx;
+  int number = args[4].v_int64;
+  int repeat = args[5].v_int64;
+  int min_repeat_us = (/* min_repeat_ms */ args[6].v_int64) * 1000;
+  // NOTE we ignore the preprocessing function, as it is currently unimpled in µTVM
+  // const char* f_preproc = args[7].v_str;
+
+  TVMFunctionHandle func_to_time;
+  int ret_code = TVMModGetFunction(mod, name, /* query_imports */ 0, &func_to_time);
+  if (ret_code != 0) {
+    return ret_code;
+  }
+
+  // TODO(weberlo) should *really* rethink needing to return doubles
+  if (repeat > MAX_TIME_EVAL_REPEAT) {
+    TVMAPIErrorf("repeat greater than %d not allowed", MAX_TIME_EVAL_REPEAT);
+    return -1;
+  }
+  size_t data_size = sizeof(double) * repeat + 1;
+  g_utvm_time_eval_result.size = data_size;
+  for (int i = 0; i < repeat; i++) {
+    double repeat_res_us = 0.0;
+    int exec_count = 0;
+    // do-while structure ensures we run even when `min_repeat_ms` isn't set (i.e., is 0).
+    do {
+      ret_code = TVMPlatformTimerStart();
+      if (ret_code != 0) {
+        TVMAPIErrorf("failed to start platform timer");
+        return ret_code;
+      }
+
+      for (int j = 0; j < number; j++) {
+        ret_code = TVMFuncCall(
+          func_to_time,
+          &(args[NUM_TIME_EVAL_BOILERPLATE_ARGS]),
+          &(type_codes[NUM_TIME_EVAL_BOILERPLATE_ARGS]),
+          num_args - NUM_TIME_EVAL_BOILERPLATE_ARGS,
+          ret_val, ret_type_code);
+        if (ret_code != 0) {
+          return ret_code;
+        }
+      }
+      exec_count += number;
+
+      double curr_res_us;
+      ret_code = TVMPlatformTimerStop(&curr_res_us);
+      if (ret_code != 0) {
+        TVMAPIErrorf("failed to stop platform timer");
+        return ret_code;
+      }
+      repeat_res_us += curr_res_us;
+
+    } while (repeat_res_us < min_repeat_us);
+    double mean_exec_ms = repeat_res_us / (1000.0 * exec_count);
+    ((double*) g_utvm_time_eval_result.data)[i] = mean_exec_ms;
+  }
+  // insert null terminator byte
+  ((double*) g_utvm_time_eval_result.data)[g_utvm_time_eval_result.size - 1] = 0;
+
+  *ret_type_code = kTVMBytes;
+  ret_val->v_handle = &g_utvm_time_eval_result;
   return 0;
 }
 
@@ -193,7 +289,7 @@ static int DecodeFunctionHandle(TVMFunctionHandle handle, tvm_module_index_t* mo
     return -1;
   }
 
-  *function_index = ((uint32_t)((uintptr_t)handle)) & ~0x8000;
+  *function_index = ((uint32_t) ((uintptr_t)handle)) & ~0x8000;
   *module_index = unvalidated_module_index;
   return 0;
 }
@@ -319,7 +415,19 @@ tvm_crt_error_t TVMInitializeRuntime() {
     registered_modules[idx] = NULL;
   }
 
+  if (sizeof(double) != 8) {
+    TVMAPIErrorf("fp64 not supported on this platform");
+    return -1;
+  }
+  g_utvm_time_eval_result.data = vmalloc(MAX_TIME_EVAL_REPEAT*sizeof(double) + 1);
+  g_utvm_time_eval_result.size = 0;
+
   error = TVMFuncRegisterGlobal("runtime.SystemLib", &SystemLibraryCreate, 0);
+  if (error != 0) {
+    return error;
+  }
+
+  error = TVMFuncRegisterGlobal("runtime.RPCTimeEvaluator", &RPCTimeEvaluator, 0);
   if (error != 0) {
     return error;
   }

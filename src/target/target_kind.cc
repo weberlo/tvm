@@ -371,6 +371,8 @@ TVM_REGISTER_TARGET_KIND("c")
     .add_attr_option<String>("model")
     .add_attr_option<Bool>("system-lib")
     .add_attr_option<String>("runtime")
+    .add_attr_option<String>("mcpu")
+    .add_attr_option<String>("mfpu")
     .set_default_keys({"cpu"})
     .set_device_type(kDLCPU);
 

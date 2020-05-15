@@ -24,6 +24,9 @@
 #ifndef TVM_RUNTIME_CRT_CONFIG_H_
 #define TVM_RUNTIME_CRT_CONFIG_H_
 
+/*! Log level of the CRT runtime */
+#define TVM_CRT_LOG_LEVEL TVM_CRT_LOG_LEVEL_DEBUG
+
 /*! Support low-level debugging in MISRA-C runtime */
 #define TVM_CRT_DEBUG 0
 
@@ -32,14 +35,24 @@
 /*! Maximum supported arguments in generated functions */
 #define TVM_CRT_MAX_ARGS 10
 /*! Maximum supported string length in dltype, e.g. "int8", "int16", "float32" */
-#define TVM_CRT_STRLEN_DLTYPE 10
+#define TVM_CRT_MAX_DLTYPE_STRLEN 10
+/*! Maximum supported string length in function names */
+#define TVM_CRT_MAX_FUNCTION_NAME_STRLEN 80
 /*! Maximum supported string length in function names */
 #define TVM_CRT_STRLEN_NAME 80
 
 /*!
  * \brief Log memory pool size for virtual memory allocation
+ */
+#define TVM_CRT_MAX_PAGES 4096
+
+/*! \brief Page size for virtual memory allocation.
  *
  * Here is a list of possible choices:
+ * * use 12 for 4 KiB memory space
+ * * use 13 for 8 KiB memory space
+ * * use 14 for 16 KiB memory space
+ * * use 15 for 32 KiB memory space
  * * use 16 for 64 KiB memory space
  * * use 17 for 128 KiB memory space
  * * use 18 for 256 KiB memory space
@@ -54,6 +67,7 @@
  * * use 27 for 128 MiB memory space
  * * use 28 for 256 MiB memory space
  */
+<<<<<<< HEAD:apps/bundle_deploy/crt_config/crt_config.h
 #define TVM_CRT_LOG_VIRT_MEM_SIZE 24
 
 /*! \brief Page size for virtual memory allocation */
@@ -64,5 +78,11 @@
 
 /*! Size of the global function registry, in bytes. */
 #define TVM_CRT_GLOBAL_FUNC_REGISTRY_SIZE_BYTES 200
+=======
+#define TVM_CRT_PAGE_BITS 12
+>>>>>>> bf422163c... checkpoint:apps/bundle_deploy/runtime.c
+
+/*! \brief DLDataType for the return value from strlen */
+#define TVM_CRT_STRLEN_DLTYPE 10
 
 #endif  // TVM_RUNTIME_CRT_CONFIG_H_

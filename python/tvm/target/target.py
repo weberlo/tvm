@@ -170,6 +170,29 @@ def intel_graphics(model='unknown', options=None):
     return _ffi_api.TargetCreate("opencl", *opts)
 
 
+def micro(hardware='unknown', options=None):
+    """Returns a microTVM target.
+
+    Parameters
+    ----------
+    hardware : str
+        Canonically identifies the target device; typicaly one of cortex-mX, or a specific SoC model
+        when that model has been tested to work with microTVM.
+    options : str or list of str
+        Additional options
+    """
+    trans_table = {
+        "stm32f746xx": ["-device=stm32f746xx", "-mcpu=cortex-m7", "-mfpu=fpuv5-sp-d16", "-keys=micro-runtime"],
+        "nrf5340": ["-device=nrf5340", "-mcpu=cortex-m33", "-mfpu=fpv5-sp-d16", "-keys=micro-runtime"],
+        "x86-64": ["-mcpu=x86-64", "-keys=micro-runtime"],
+    }
+    opts = _merge_opts(trans_table[hardware], options)
+
+    # NOTE: in the future, the default micro target will be LLVM except when
+    # external dependencies are present.
+    return _ffi_api.TargetCreate("c", *opts)
+
+
 def arm_cpu(model='unknown', options=None):
     """Returns a ARM CPU target.
     This function will also download pre-tuned op parameters when there is none.

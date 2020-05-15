@@ -43,6 +43,7 @@ typedef struct TVMModule {
 const TVMModule* TVMSystemLibEntryPoint(void);
 
 #ifdef __cplusplus
-}
+}  // extern "C"
 #endif
+
 #endif  // TVM_RUNTIME_CRT_MODULE_H_

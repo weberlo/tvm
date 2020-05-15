@@ -22,6 +22,7 @@ These functions are responsible for building the tvm module, uploading it to
 remote devices, recording the running time costs, and checking the correctness of the output.
 """
 
+import contextlib
 import logging
 import shutil
 import os
@@ -78,9 +79,15 @@ class LocalBuilder(Builder):
         If is 'default', use default build function
         If is 'ndk', use function for android ndk
         If is callable, use it as custom build function, expect lib_format field.
+    do_fork: bool, optional
+        If True, fork() before executing build jobs. If `build_func` is stateful, or if running on a
+        system that does not support fork after initialization (e.g. cuda runtime, cudnn), this may
+        not be desirable. If `build_func` does not appear to be retaining state between builds, set
+        to False.
     """
-    def __init__(self, timeout=10, n_parallel=None, build_func='default'):
-        super(LocalBuilder, self).__init__(timeout, n_parallel)
+    def __init__(self, timeout=10, n_parallel=None, build_kwargs=None, build_func='default',
+                 do_fork=True):
+        super(LocalBuilder, self).__init__(timeout, n_parallel, build_kwargs=build_kwargs)
 
         if isinstance(build_func, str):
             if build_func == 'default':
@@ -90,7 +97,8 @@ class LocalBuilder(Builder):
             else:
                 raise ValueError("Invalid build_func" + build_func)
         self.build_func = _WrappedBuildFunc(build_func)
-        self.executor = LocalExecutor(timeout=timeout)
+        # self.build_func = _wrap_build_func(build_func)
+        self.executor = LocalExecutor(timeout=timeout, do_fork=do_fork)
         self.tmp_dir = tempfile.mkdtemp()
 
     def build(self, measure_inputs):
@@ -191,7 +199,7 @@ class RPCRunner(Runner):
                  key, host, port, priority=1,
                  timeout=10, n_parallel=None,
                  number=4, repeat=3, min_repeat_ms=0, cooldown_interval=0.1,
-                 check_correctness=False, enable_cpu_cache_flush=False):
+                 check_correctness=False, enable_cpu_cache_flush=False,  code_loader=None):
         super(RPCRunner, self).__init__(timeout, n_parallel)
 
         self.key = key
@@ -209,6 +217,7 @@ class RPCRunner(Runner):
         self.enable_cpu_cache_flush = enable_cpu_cache_flush
         self.check_correctness = check_correctness
         self.cooldown_interval = cooldown_interval
+        self.code_loader = code_loader
 
         self.executor = LocalExecutor()
 
@@ -252,14 +261,18 @@ class RPCRunner(Runner):
 
             if 'cuda' in self.task.target.keys:
                 kwargs["cuda_arch"] = "sm_" + "".join(ctx.compute_version.split('.'))
-        if self.task.target.device_name == 'micro_dev':
-            kwargs.setdefault('build_option', {})['tir.disable_vectorize'] = True
 
         return kwargs
 
     def run(self, measure_inputs, build_results):
         results = []
-        remote_args = (self.key, self.host, self.port, self.priority, self.timeout)
+        remote_kw = dict(
+            device_key=self.key,
+            host=self.host,
+            port=self.port,
+            priority=self.priority,
+            timeout=self.timeout,
+        )
 
         for i in range(0, len(measure_inputs), self.n_parallel):
             futures = []
@@ -272,10 +285,11 @@ class RPCRunner(Runner):
                                            self.repeat,
                                            self.min_repeat_ms,
                                            self.cooldown_interval,
-                                           remote_args,
+                                           remote_kw,
                                            self.ref_input,
                                            self.ref_output,
-                                           self.enable_cpu_cache_flush)
+                                           self.enable_cpu_cache_flush,
+                                           self.code_loader)
                 futures.append(ret)
 
             for future in futures:
@@ -331,14 +345,15 @@ class LocalRunner(RPCRunner):
     def __init__(self,
                  timeout=10,
                  number=4, repeat=3, min_repeat_ms=0, cooldown_interval=0.1,
-                 check_correctness=False, enable_cpu_cache_flush=False):
+                 check_correctness=False, enable_cpu_cache_flush=False, code_loader=None):
         super(LocalRunner, self).__init__('', None, None, 0,
                                           timeout=timeout, n_parallel=1,
                                           number=number, repeat=repeat,
                                           min_repeat_ms=min_repeat_ms,
                                           cooldown_interval=cooldown_interval,
                                           check_correctness=check_correctness,
-                                          enable_cpu_cache_flush=enable_cpu_cache_flush)
+                                          enable_cpu_cache_flush=enable_cpu_cache_flush,
+                                          code_loader=code_loader)
         self.tracker = None
         self.server = None
 
@@ -373,6 +388,7 @@ def _build_func_common(measure_input, check_gpu=None, cuda_arch=None, build_opti
             raise InstantiationError(config.errors)
 
         opts = build_option or {}
+        print('build opt', opts)
         if check_gpu:  # Add verify pass to filter out invalid configs in advance.
             opts["tir.add_lower_pass"] = [(2, gpu_verify_pass(**check_gpu))]
         if cuda_arch:
@@ -432,13 +448,37 @@ class _WrappedBuildFunc():
             func, arg_info = _build_func_common(measure_input, **kwargs)
             func.export_library(filename, self.build_func)
         except Exception as e:  # pylint: disable=broad-except
+            logging.debug('builder raised exception', exc_info=True)
             return BuildResult(None, None, e, time.time() - tic)
         return BuildResult(filename, arg_info, None, time.time() - tic)
 
+@contextlib.contextmanager
+def default_code_loader(remote_kw, build_result):
+    remote = request_remote(**remote_kw)
+
+    # Program the FPGA every single time when targeting VTA
+    if hasattr(measure_input.target, 'device_name') and \
+       measure_input.target.device_name == 'vta':
+        # pylint: disable=import-outside-toplevel
+        from vta import program_fpga, reconfig_runtime
+        program_fpga(remote, None)
+        reconfig_runtime(remote)
+    remote.upload(build_result.filename)
+    try:
+        yield remote, remote.load_module(os.path.split(build_result.filename)[1])
+
+    finally:
+        # clean up remote files
+        remote.remove(build_result.filename)
+        remote.remove(os.path.splitext(build_result.filename)[0] + '.so')
+        remote.remove('')
+
+
+
 def run_through_rpc(measure_input, build_result,
                     number, repeat, min_repeat_ms, cooldown_interval,
-                    remote_args, ref_input=None, ref_output=None,
-                    enable_cpu_cache_flush=False):
+                    remote_kw, ref_input=None, ref_output=None,
+                    enable_cpu_cache_flush=False, code_loader=None):
     """Run a generated library through rpc
 
     Parameters
@@ -465,8 +505,8 @@ def run_through_rpc(measure_input, build_result,
         will be automatically increased.
     cooldown_interval: float
         The cool down interval between two measurements
-    remote_args: Tuple
-        The argument for request_remote
+    remote_kw: Dict
+        Keyword args for request_remote, passed to `code_loader`.
     ref_input: List of np.ndarray
         The reference input used for checking correctness
     ref_output: List of np.ndarray
@@ -484,45 +524,39 @@ def run_through_rpc(measure_input, build_result,
     tic = time.time()
     errno = MeasureErrorNo.NO_ERROR
     try:
-        # upload built module
-        remote = request_remote(*remote_args)
-        # Program the FPGA every single time when targeting VTA
-        if hasattr(measure_input.target, 'device_name') and \
-            measure_input.target.device_name == 'vta':
-            # pylint: disable=import-outside-toplevel
-            from vta import program_fpga, reconfig_runtime
-            program_fpga(remote, None)
-            reconfig_runtime(remote)
-        remote.upload(build_result.filename)
-        func = remote.load_module(os.path.split(build_result.filename)[1])
-        ctx = remote.context(str(measure_input.target), 0)
+        print('code loader', code_loader)
+        with code_loader(remote_kw, build_result) as (remote, mod):
+            ctx = remote.context(str(measure_input.target), 0)
 
-        # Limitation:
-        # We can not get PackFunction directly in the remote mode as it is wrapped
-        # under the std::function. We could lift the restriction later once we fold
-        # the PackedFunc as an object. Currently, we pass function name to work
-        # around it.
-        f_prepare = 'cache_flush_cpu_non_first_arg' if enable_cpu_cache_flush else ''
-        time_f = func.time_evaluator(
-            func.entry_name, ctx, number=number, repeat=repeat, min_repeat_ms=min_repeat_ms,
-            f_preproc=f_prepare)
+            # Limitation:
+            # We can not get PackFunction directly in the remote mode as it is wrapped
+            # under the std::function. We could lift the restriction later once we fold
+            # the PackedFunc as an object. Currently, we pass function name to work
+            # around it.
+            f_prepare = 'cache_flush_cpu_non_first_arg' if enable_cpu_cache_flush else ''
 
-        # set input
-        if ref_input:
-            args = [nd.array(x, ctx=ctx) for x in ref_input]
-        else:
-            # create empty arrays on the remote device and copy them once.
-            # This can avoid some memory issues that make the measurement results unreliable.
-            args = [nd.empty(x[0], dtype=x[1], ctx=ctx) for x in build_result.arg_info]
-            args = [nd.array(x, ctx=ctx) for x in args]
-            ctx.sync()
+            # TODO(weberlo) generate functions named '__tvm_main__' (i.e.,
+            # mod.entry_name), so we don't need to hack in 'default_function'
+            # below.
 
-        costs = time_f(*args).results
+            # time_f = mod.time_evaluator(
+            #     mod.entry_name, ctx, number=number, repeat=repeat, min_repeat_ms=min_repeat_ms,
+            #     f_preproc=f_prepare)
+            time_f = mod.time_evaluator(
+                'default_function', ctx, number=number, repeat=repeat, min_repeat_ms=min_repeat_ms,
+                f_preproc=f_prepare)
 
-        # clean up remote files
-        remote.remove(build_result.filename)
-        remote.remove(os.path.splitext(build_result.filename)[0] + '.so')
-        remote.remove('')
+            # set input
+            if ref_input:
+                args = [nd.array(x, ctx=ctx) for x in ref_input]
+            else:
+                # create empty arrays on the remote device and copy them once.
+                # This can avoid some memory issues that make the measurement results unreliable.
+                args = [nd.empty(x[0], dtype=x[1], ctx=ctx) for x in build_result.arg_info]
+                args = [nd.array(x, ctx=ctx) for x in args]
+                ctx.sync()
+
+            costs = time_f(*args).results
 
         if len(costs) > 2:  # remove largest and smallest value to reduce variance
             costs = list(costs)

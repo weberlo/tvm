@@ -56,7 +56,7 @@ class TempDirectory(object):
     @classmethod
     def _get_debug_parent_dir(cls):
         if cls._DEBUG_PARENT_DIR is None:
-            all_parents = f'{tempfile.gettempdir()}/tvm-debug-mode-tempdirs'
+            all_parents = os.path.realpath(f'{tempfile.gettempdir()}/tvm-debug-mode-tempdirs')
             if not os.path.isdir(all_parents):
                 os.makedirs(all_parents)
             cls._DEBUG_PARENT_DIR = tempfile.mkdtemp(
@@ -100,7 +100,10 @@ class TempDirectory(object):
                 self.temp_dir = f'{parent_dir}/{self._increment_num_tempdir_created():05d}'
                 os.mkdir(self.temp_dir)
             else:
-                self.temp_dir = tempfile.mkdtemp()
+                # NOTE: on Mac OS X, mkdtemp() tends to create directories inside a symlink. This
+                # can cause confusion downstream if the symlink is resolved out of the path and
+                # relative paths are computed. Resolve the symlink now to avoid confusion.
+                self.temp_dir = os.path.realpath(tempfile.mkdtemp())
 
         if not self._created_with_keep_for_debug:
             self.TEMPDIRS.add(self.temp_dir)
@@ -244,3 +247,25 @@ def which(exec_name):
         if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
             return full_path
     return None
+
+
+def find_available_filename(candidate):
+    """Find an available (i.e. non-existent) filename similar to candidate.
+
+    Parameters
+    ----------
+    candidate : str
+        A candidate filename. The returned filename will be based off this, with an
+        integer suffix appended to the root if needed.
+
+    Returns
+    -------
+    str :
+        A non-existent filename.
+    """
+    root, ext = os.path.splitext(candidate)
+    n = 0
+    while os.path.exists(candidate):
+        candidate = f'{root}-{n}.{ext}'
+        n += 1
+    return candidate

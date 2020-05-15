@@ -277,7 +277,7 @@ int TVMGraphRuntimeGraphAttr_Load(TVMGraphRuntimeGraphAttr* attr, JSONReader* re
       }
       reader->BeginArray(reader);
       while (reader->NextArrayItem(reader)) {
-        attr->storage_id = vrealloc(attr->storage_id, sizeof(uint32_t) * (storage_id_count + 1));
+        attr->storage_id = vrealloc(attr->storage_id, sizeof(unsigned int) * (storage_id_count + 1));
         reader->ReadUnsignedInteger(reader, &(attr->storage_id[storage_id_count]));
         storage_id_count++;
       }
@@ -316,12 +316,15 @@ int TVMGraphRuntimeGraphAttr_Load(TVMGraphRuntimeGraphAttr* attr, JSONReader* re
         attr->ndim = vrealloc(attr->ndim, sizeof(attr->ndim[0]) * (shape_count + 1));
         reader->BeginArray(reader);
         int64_t* attr_shape_ptr = attr->shape + shape_count * TVM_CRT_MAX_NDIM;
-        reader->ReadInteger(reader, attr_shape_ptr + 0);
+        long json_int;
+        reader->ReadInteger(reader, &json_int);
+        attr_shape_ptr[0] = json_int;
         uint32_t ndim = 1;
         if (reader->NextArrayItem(reader)) {
           for (ndim = 1; ndim < TVM_CRT_MAX_NDIM; ndim++) {
             if (reader->NextArrayItem(reader)) {
-              reader->ReadInteger(reader, attr_shape_ptr + ndim);
+              reader->ReadInteger(reader, &json_int);
+              attr_shape_ptr[ndim] = json_int;
             } else {
               break;
             }
@@ -387,11 +390,11 @@ int TVMGraphRuntimeGraphAttr_Load(TVMGraphRuntimeGraphAttr* attr, JSONReader* re
           status = -1;
           break;
         }
-        uint32_t* temp = 0;
+        unsigned int* temp = 0;
         uint32_t temp_count = 0;
         reader->BeginArray(reader);
         while (reader->NextArrayItem(reader)) {
-          temp = vrealloc(temp, sizeof(uint32_t) * (temp_count + 1));
+          temp = vrealloc(temp, sizeof(unsigned int) * (temp_count + 1));
           reader->ReadUnsignedInteger(reader, &(temp[temp_count]));
           temp_count++;
         }
@@ -405,7 +408,7 @@ int TVMGraphRuntimeGraphAttr_Load(TVMGraphRuntimeGraphAttr* attr, JSONReader* re
           status = -1;
           break;
         }
-        uint32_t temp;
+        unsigned int temp;
         reader->ReadUnsignedInteger(reader, &temp);
       } else {
         fprintf(stderr, "cannot skip graph attr %s", key);
@@ -480,8 +483,8 @@ int TVMGraphRuntime_Load(TVMGraphRuntime* runtime, JSONReader* reader) {
       reader->BeginArray(reader);
       while (reader->NextArrayItem(reader)) {
         runtime->input_nodes =
-            vrealloc(runtime->input_nodes, sizeof(uint32_t) * (runtime->input_nodes_count + 1));
-        uint32_t* node = runtime->input_nodes + runtime->input_nodes_count;
+            vrealloc(runtime->input_nodes, sizeof(unsigned int) * (runtime->input_nodes_count + 1));
+        unsigned int* node = runtime->input_nodes + runtime->input_nodes_count;
         reader->ReadUnsignedInteger(reader, node);
         runtime->input_nodes_count++;
       }
@@ -490,9 +493,9 @@ int TVMGraphRuntime_Load(TVMGraphRuntime* runtime, JSONReader* reader) {
       reader->BeginArray(reader);
       while (reader->NextArrayItem(reader)) {
         runtime->node_row_ptr =
-            vrealloc(runtime->node_row_ptr, sizeof(uint32_t) * (runtime->node_row_ptr_count + 1));
+            vrealloc(runtime->node_row_ptr, sizeof(unsigned int) * (runtime->node_row_ptr_count + 1));
         uint32_t count = runtime->node_row_ptr_count;
-        uint32_t* node = runtime->node_row_ptr + count;
+        unsigned int* node = runtime->node_row_ptr + count;
         reader->ReadUnsignedInteger(reader, node);
         runtime->node_row_ptr_count++;
       }

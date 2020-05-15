@@ -45,8 +45,8 @@ typedef struct TVMOpParam {
 // Graph attribute
 typedef struct TVMGraphRuntimeGraphAttr {
   uint32_t storage_num_not_alloctaed;
-  uint32_t* storage_id;
-  uint32_t* device_index;
+  unsigned int* storage_id;
+  unsigned int* device_index;
   char* dltype;  // "int8", "int16", "float32"
   uint32_t dltype_count;
   int64_t* shape;
