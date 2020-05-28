@@ -110,9 +110,13 @@ runtime::Module SourceModuleCreate(std::string code, std::string fmt) {
 class CSourceModuleNode : public runtime::ModuleNode {
  public:
   CSourceModuleNode(const std::string& code, const std::string& fmt, const std::string& symbol,
-                    const Array<String>& const_vars)
-      : code_(code), fmt_(fmt), symbol_(symbol), const_vars_(const_vars) {}
-  const char* type_key() const { return "c"; }
+                    const Array<String>& const_vars, const bool is_micro_runtime)
+      : code_(code), fmt_(fmt), symbol_(symbol), const_vars_(const_vars),
+        is_micro_runtime_(is_micro_runtime) {}
+
+  const char* type_key() const {
+    return is_micro_runtime ? "micro-c" : "c";
+  }
 
   PackedFunc GetFunction(const std::string& name, const ObjectPtr<Object>& sptr_to_self) final {
     if (name == "get_symbol") {
@@ -147,9 +151,9 @@ class CSourceModuleNode : public runtime::ModuleNode {
 };
 
 runtime::Module CSourceModuleCreate(const String& code, const String& fmt, const String& symbol,
-                                    const Array<String>& const_vars) {
+                                    const Array<String>& const_vars, const bool is_micro_runtime) {
   auto n = make_object<CSourceModuleNode>(code.operator std::string(), fmt.operator std::string(),
-                                          symbol.operator std::string(), const_vars);
+                                          symbol.operator std::string(), const_vars, is_micro_runtime);
   return runtime::Module(n);
 }
 
