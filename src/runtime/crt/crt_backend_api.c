@@ -23,6 +23,7 @@
 #include <string.h>
 #include <tvm/runtime/c_backend_api.h>
 #include <tvm/runtime/crt/memory.h>
+#include "packed_func.h"
 
 #include "packed_func.h"
 
