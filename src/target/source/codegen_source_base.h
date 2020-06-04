@@ -142,7 +142,9 @@ runtime::Module SourceModuleCreate(std::string code, std::string fmt);
  */
 runtime::Module CSourceModuleCreate(const String& code, const String& fmt,
                                     const String& symbol = "",
-                                    const Array<String>& const_vars = {});
+                                    const Array<String>& const_vars = {},
+                                    bool is_micro_runtime = false
+);
 
 /*!
  * \brief Wrap the submodules in a metadata module.

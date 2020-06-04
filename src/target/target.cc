@@ -125,7 +125,7 @@ std::unordered_set<std::string> TargetNode::GetLibs() const {
 }
 
 bool TargetNode::is_micro_runtime() const {
-  return keys_array.find("micro-runtime") != keys_array.end();
+  return std::find(keys_array.begin(), keys_array.end(), "micro-runtime") != keys_array.end();
 }
 
 const std::string& TargetNode::str() const {
