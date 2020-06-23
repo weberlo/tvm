@@ -21,10 +21,10 @@ import tvm
 from tvm.runtime import Object
 
 from . import _quantize
+from . import _force_quantize
 from ._calibrate import calibrate
 from .. import expr as _expr
 from .. import transform as _transform
-
 
 class QAnnotateKind(object):
     """Denote the kind of annotation field, corresponding
@@ -59,7 +59,7 @@ class QConfig(Object):
 
     Note
     ----
-    This object is backed by node system in C++, with arguments that can be
+    This object is backed by the object system in C++, with arguments that can be
     exchanged between python and C++.
 
     Do not construct directly, use qconfig instead.
@@ -72,6 +72,7 @@ class QConfig(Object):
         "nbit_input": 8,
         "nbit_weight": 8,
         "nbit_activation": 32,
+        # means conv input, i think
         "dtype_input": "int8",
         "dtype_weight": "int8",
         "dtype_activation": "int32",
@@ -85,6 +86,9 @@ class QConfig(Object):
         "debug_enabled_ops": None,
         "rounding": "UPWARD",
         "calibrate_chunk_by": -1,
+        # NOTE LOGANNNNN
+        "allowed_dtypes": None,
+        "partition_result": False,
     }
 
     # pylint: disable=no-member
@@ -346,7 +350,9 @@ def quantize(mod, params=None, dataset=None):
         calibrate(dataset), opt_level=1,
         name="QuantizeCalibrate")
     quant_passes = [partition(),
+                    tvm.transform.PrintIR("post-partition"),
                     annotate(),
+                    tvm.transform.PrintIR("post-annotation"),
                     calibrate_pass]
     if not current_qconfig().do_simulation:
         quant_passes.append(realize())
@@ -358,5 +364,18 @@ def quantize(mod, params=None, dataset=None):
                                                   "QuantizeRealize"]):
         with quantize_context():
             mod = quantize_seq(mod)
+
+    if current_qconfig().allowed_dtypes is not None:
+        pre_mod, mid_mod, post_mod = _force_quantize.partition_quantized(
+            mod, current_qconfig().allowed_dtypes)
+        # TODO change to enum for conversion mode (SINGLE_MODULE (include
+        # conversions in module), CHOPPED (exclude conversions from
+        # module), PARTITIONED (split quantize, inner network, and
+        # dequantize into separate modules))
+        if current_qconfig().partition_result:
+            # TODO change docs ret type to union
+            return pre_mod, mid_mod, post_mod
+        else:
+            return mid_mod
 
     return mod

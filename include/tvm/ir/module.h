@@ -357,7 +357,7 @@ TVM_DLL String PrettyPrint(const ObjectRef& node);
  * \sa PrettyPrint.
  * \return The text representation.
  */
-TVM_DLL String AsText(const ObjectRef& node, bool show_meta_data = true,
+TVM_DLL String AsText(const ObjectRef& node, bool show_meta_data = false,
                       runtime::TypedPackedFunc<String(ObjectRef)> annotate = nullptr);
 }  // namespace tvm
 #endif  // TVM_IR_MODULE_H_

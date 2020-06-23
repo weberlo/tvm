@@ -125,7 +125,9 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
       p->stream << "do_simulation==" << op->do_simulation << ", ";
       p->stream << "round_for_shift==" << op->round_for_shift << ", ";
       p->stream << "debug_enabled_ops==" << op->debug_enabled_ops << ", ";
-      p->stream << "rounding==" << op->rounding;
+      p->stream << "rounding==" << op->rounding << ", ";
+      p->stream << "allowed_dtypes==" << op->allowed_dtypes << ", ";
+      p->stream << "partition_result==" << op->partition_result;
       p->stream << ")";
     });
 
