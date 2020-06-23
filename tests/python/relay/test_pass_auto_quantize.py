@@ -122,26 +122,40 @@ def gen_rand_tvm(tt, low, high):
     return tvm.nd.array(gen_rand_np(tt, low, high), ctx=tvm.cpu(0))
 
 
-def verify(mod, params):
+def get_param_type(func, name):
+    for param in func.params:
+        if param.name_hint == name:
+            return param.checked_type
+
+
+def verify(mod, params, allowed_dtypes, should_fail):
     # TODO is the `with qconfig` shit even a good idea? why can't it just be a
     # config dict passed to `quantize`?
     base_cfg = {
       'calibrate_mode': 'global_scale',
       'global_scale': 8.0,
       'nbit_activation': 8,
-      'dtype_activation': "int8",
       'skip_conv_layers': [],
       'skip_dense_layers': False,
+      'dtype_activation': "int8",
       'dtype_input': "int8",
       'dtype_weight': "int8",
+      'partition_result': True,
     }
     with relay.quantize.qconfig(**base_cfg):
         full_mod = relay.quantize.quantize(mod, params)
+
     with relay.quantize.qconfig(
             **base_cfg,
-            allowed_dtypes=['int8'],
-            partition_result=True):
-        pre_mod, mid_mod, post_mod = relay.quantize.quantize(mod, params)
+            allowed_dtypes=allowed_dtypes):
+        try:
+            pre_mod, mid_mod, post_mod = relay.quantize.quantize(mod, params)
+            if should_fail:
+                assert False, 'test should have failed'
+        except RuntimeError as e:
+            if not should_fail:
+                assert False, f'test should not have failed, but failed with:\n{e}'
+            return
 
     pre_func = pre_mod['main']
     mid_func = mid_mod['main']
@@ -164,7 +178,7 @@ def verify(mod, params):
     ))
     dequantized_outputs = sb.let('dequantized_outputs', relay.Call(
         fused_mod.get_global_var('dequantize_outputs'),
-        # TODO quit assuming we'll only have a single output?
+        # TODO relax assumption that we only have a single output?
         [quantized_outputs]
     ))
     sb.ret(dequantized_outputs)
@@ -191,16 +205,37 @@ def test_cifar10():
     import os
     onnx_model = onnx.load(os.path.dirname(os.path.abspath(__file__)) + '/cifar10.onnx')
     mod, params = relay.frontend.from_onnx(onnx_model, {"data": (1, 3, 32, 32)})
-    verify(mod, params)
+    verify(mod, params,
+        allowed_dtypes=['int8'],
+        should_fail=True)
+    verify(mod, params,
+        allowed_dtypes=['int8', 'float32'],
+        should_fail=False)
 
 
-def get_param_type(func, name):
-    for param in func.params:
-        if param.name_hint == name:
-            return param.checked_type
+def test_add():
+    # TODO The quantization pass should be patched, so larger ops aren't
+    # required to initiate quantization.  For example, in this test case, `add`
+    # is quantizable, but currently only `conv2d` and `dense` trigger
+    # quantization.
+    func = relay.fromtext("""
+    v0.0.4
+    fn (%x: Tensor[(10, 10), float32],
+        %y: Tensor[(10, 10), float32]) {
+      add(%x, %y)
+    }
+    """)
+    mod = tvm.IRModule.from_expr(func)
+    params = {}
+    verify(mod, params,
+        allowed_dtypes=['int8'],
+        should_fail=True)
+    verify(mod, params,
+        allowed_dtypes=['int8', 'float32'],
+        should_fail=False)
 
 
-def test_conv_quant():
+def test_conv2d():
     func = relay.fromtext("""
     v0.0.4
     fn (%x: Tensor[(1, 4, 16, 16), float32],
@@ -216,12 +251,17 @@ def test_conv_quant():
     params = {
         'w': gen_rand_tvm(weight_ty, 0, 1)
     }
-    verify(mod, params)
+    verify(mod, params,
+        allowed_dtypes=['int8'],
+        should_fail=False)
+    verify(mod, params,
+        allowed_dtypes=['int8', 'float32'],
+        should_fail=False)
 
 
 @pytest.mark.xfail(raises=RuntimeError)
 def test_start_with_unquantizable():
-    # start with avgpool, since it isn't currently supported
+    # NOTE avgpool isn't currently supported
     func = relay.fromtext("""
     v0.0.4
     fn (%x: Tensor[(1, 4, 16, 16), float32],
@@ -238,24 +278,12 @@ def test_start_with_unquantizable():
     params = {
         'w': gen_rand_tvm(weight_ty, 0, 1)
     }
-    verify(mod, params)
-
-
-# TODO with respect to partitioning, what should we do in cases where the
-# function is so small the quantizer doesn't quantize anything?
-# TODO it *should* be able to quantize a single `add`. might need to patch
-# it so it can
-def test_add_quant():
-    func = relay.fromtext("""
-    v0.0.4
-    fn (%x: Tensor[(10, 10), float32],
-        %y: Tensor[(10, 10), float32]) {
-      add(%x, %y)
-    }
-    """)
-    mod = tvm.IRModule.from_expr(func)
-    params = {}
-    verify(mod, params)
+    verify(mod, params,
+        allowed_dtypes=['int8'],
+        should_fail=True)
+    verify(mod, params,
+        allowed_dtypes=['int8', 'float32'],
+        should_fail=False)
 
 
 def test_multiple_arg_conversions():
@@ -284,7 +312,12 @@ def test_multiple_arg_conversions():
         'w1': gen_rand_tvm(w1_ty, 0, 1),
         'w2': gen_rand_tvm(w2_ty, 0, 1),
     }
-    verify(mod, params)
+    verify(mod, params,
+        allowed_dtypes=['int8'],
+        should_fail=False)
+    verify(mod, params,
+        allowed_dtypes=['int8', 'float32'],
+        should_fail=False)
 
 
 if __name__ == "__main__":
@@ -295,11 +328,7 @@ if __name__ == "__main__":
     test_calibrate_memory_bound()
 
     test_cifar10()
-    test_conv_quant()
+    test_add()
+    test_conv2d()
     test_start_with_unquantizable()
-    test_add_quant()
     test_multiple_arg_conversions()
-
-    # TODO add test that includes float32 in allowed_dtypes, and ensure every
-    # test doesn't throw an exception
-    assert False, 'TODO add tests that play with config knobs more'

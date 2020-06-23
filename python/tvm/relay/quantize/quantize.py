@@ -365,14 +365,14 @@ def quantize(orig_mod, params=None, dataset=None):
 
     allowed_dtypes = current_qconfig().allowed_dtypes
     if allowed_dtypes is not None:
-        offending_ops = _dtype_restrict.collect_offending_ops(mod, allowed_dtypes)
-        if offending_ops:
+        unquantized_ops = _dtype_restrict.collect_unquantized_ops(mod, allowed_dtypes)
+        if unquantized_ops:
             mod_str = '  ' + str(orig_mod).replace('\n', '\n  ')
             raise RuntimeError(
-                f'found unquantizable ops `{offending_ops}` in given module (shown below):\n'
+                f'found unquantizable ops `{unquantized_ops}` in given module (shown below):\n'
                 + mod_str)
 
-        pre_mod, mid_mod, post_mod = _dtype_restrict.partition_quantized(mod)
+        pre_mod, mid_mod, post_mod = _dtype_restrict.partition_quantized(mod, allowed_dtypes)
         # TODO change to enum for conversion mode (SINGLE_MODULE (include
         # conversions in module), CHOPPED (exclude conversions from
         # module), PARTITIONED (split quantize, inner network, and
