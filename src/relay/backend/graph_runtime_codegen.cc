@@ -348,6 +348,7 @@ class GraphRuntimeCodegen : public backend::MemoizedExprTranslator<std::vector<G
       LOG(FATAL) << "Operators should be transformed away; try applying"
                  << "the fuse_ops transformation to the expression.";
     } else if (op->op.as<GlobalVarNode>()) {
+      // TODO should be able to inline the function the global var points to
       LOG(FATAL) << "Not implemented";
     } else if (op->op.as<FunctionNode>()) {
       func = GetRef<Function>(op->op.as<FunctionNode>());
