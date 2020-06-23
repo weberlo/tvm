@@ -128,7 +128,11 @@ def get_param_type(func, name):
             return param.checked_type
 
 
-def verify(mod, params, allowed_dtypes, should_fail):
+def verify_partition(mod, params, specs):
+    for allowed_dtypes, should_fail in specs:
+        _verify_partition(mod, params, allowed_dtypes, should_fail)
+
+def _verify_partition(mod, params, allowed_dtypes, should_fail):
     # TODO is the `with qconfig` shit even a good idea? why can't it just be a
     # config dict passed to `quantize`?
     base_cfg = {
@@ -140,13 +144,13 @@ def verify(mod, params, allowed_dtypes, should_fail):
       'dtype_activation': "int8",
       'dtype_input': "int8",
       'dtype_weight': "int8",
-      'partition_result': True,
     }
     with relay.quantize.qconfig(**base_cfg):
         full_mod = relay.quantize.quantize(mod, params)
 
     with relay.quantize.qconfig(
             **base_cfg,
+            partition_result=True,
             allowed_dtypes=allowed_dtypes):
         try:
             pre_mod, mid_mod, post_mod = relay.quantize.quantize(mod, params)
@@ -200,20 +204,17 @@ def verify(mod, params, allowed_dtypes, should_fail):
 
 # TODO remove this test before upstreaming
 @pytest.mark.xfail(raises=RuntimeError)
-def test_cifar10():
+def test_cifar10_dtype_restrict():
     import onnx
     import os
     onnx_model = onnx.load(os.path.dirname(os.path.abspath(__file__)) + '/cifar10.onnx')
     mod, params = relay.frontend.from_onnx(onnx_model, {"data": (1, 3, 32, 32)})
-    verify(mod, params,
-        allowed_dtypes=['int8'],
-        should_fail=True)
-    verify(mod, params,
-        allowed_dtypes=['int8', 'float32'],
-        should_fail=False)
+    verify_partition(mod, params,
+        [(['int8'], True),
+         (['int8', 'float32'], False)])
 
 
-def test_add():
+def test_add_dtype_restrict():
     # TODO The quantization pass should be patched, so larger ops aren't
     # required to initiate quantization.  For example, in this test case, `add`
     # is quantizable, but currently only `conv2d` and `dense` trigger
@@ -227,15 +228,12 @@ def test_add():
     """)
     mod = tvm.IRModule.from_expr(func)
     params = {}
-    verify(mod, params,
-        allowed_dtypes=['int8'],
-        should_fail=True)
-    verify(mod, params,
-        allowed_dtypes=['int8', 'float32'],
-        should_fail=False)
+    verify_partition(mod, params,
+        [(['int8'], True),
+         (['int8', 'float32'], False)])
 
 
-def test_conv2d():
+def test_conv2d_dtype_restrict():
     func = relay.fromtext("""
     v0.0.4
     fn (%x: Tensor[(1, 4, 16, 16), float32],
@@ -251,16 +249,13 @@ def test_conv2d():
     params = {
         'w': gen_rand_tvm(weight_ty, 0, 1)
     }
-    verify(mod, params,
-        allowed_dtypes=['int8'],
-        should_fail=False)
-    verify(mod, params,
-        allowed_dtypes=['int8', 'float32'],
-        should_fail=False)
+    verify_partition(mod, params,
+        [(['int8'], False),
+         (['int8', 'float32'], False)])
 
 
 @pytest.mark.xfail(raises=RuntimeError)
-def test_start_with_unquantizable():
+def test_unquantizable_prefix_dtype_restrict():
     # NOTE avgpool isn't currently supported
     func = relay.fromtext("""
     v0.0.4
@@ -278,15 +273,12 @@ def test_start_with_unquantizable():
     params = {
         'w': gen_rand_tvm(weight_ty, 0, 1)
     }
-    verify(mod, params,
-        allowed_dtypes=['int8'],
-        should_fail=True)
-    verify(mod, params,
-        allowed_dtypes=['int8', 'float32'],
-        should_fail=False)
+    verify_partition(mod, params,
+        [(['int8'], True),
+         (['int8', 'float32'], False)])
 
 
-def test_multiple_arg_conversions():
+def test_multiple_arg_conversions_dtype_restrict():
     mod = tvm.IRModule.from_expr(relay.fromtext("""
     v0.0.4
     fn (%x1: Tensor[(1, 4, 16, 16), float32],
@@ -312,12 +304,9 @@ def test_multiple_arg_conversions():
         'w1': gen_rand_tvm(w1_ty, 0, 1),
         'w2': gen_rand_tvm(w2_ty, 0, 1),
     }
-    verify(mod, params,
-        allowed_dtypes=['int8'],
-        should_fail=False)
-    verify(mod, params,
-        allowed_dtypes=['int8', 'float32'],
-        should_fail=False)
+    verify_partition(mod, params,
+        [(['int8'], False),
+         (['int8', 'float32'], False)])
 
 
 if __name__ == "__main__":
@@ -327,8 +316,8 @@ if __name__ == "__main__":
     test_calibrate_target(True)
     test_calibrate_memory_bound()
 
-    test_cifar10()
-    test_add()
-    test_conv2d()
-    test_start_with_unquantizable()
-    test_multiple_arg_conversions()
+    test_cifar10_dtype_restrict()
+    test_add_dtype_restrict()
+    test_conv2d_dtype_restrict()
+    test_unquantizable_prefix_dtype_restrict()
+    test_multiple_arg_conversions_dtype_restrict()

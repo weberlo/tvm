@@ -14,11 +14,6 @@ from topi import get_const_tuple
 from micro_eval import util
 from micro_eval.util import model_util
 
-# TODO don't hardcode so many things as int8
-
-# TODO using "partition" could get confusing, because there's already another
-# mechanism in quantization that's called partitioning (see `_partition.py`)
-
 # operators that are allowed to defy any `allowed_dtypes` restrictions, because
 # they are ops that are used in the conversion to and from the allowed
 # datatypes
@@ -35,7 +30,7 @@ def with_dtype(ty, target_dtype):
     return DtypeReplacer(target_dtype).visit(ty)
 
 
-class QuantPrefixCutter(ExprMutator):
+class PrefixCutter(ExprMutator):
     def __init__(self, params, allowed_dtypes):
         ExprMutator.__init__(self)
         self.params = set(params)
@@ -76,7 +71,7 @@ class QuantPrefixCutter(ExprMutator):
 def partition_prefix(mod, allowed_dtypes):
     assert len(mod.functions) == 1
     func = mod['main']
-    prefix_cutter = QuantPrefixCutter(func.params, allowed_dtypes)
+    prefix_cutter = PrefixCutter(func.params, allowed_dtypes)
     mid_body = prefix_cutter.visit(func.body)
     assert not func.type_params, 'unimplemented'
     assert func.attrs is None, 'unimplemented'
@@ -91,8 +86,13 @@ def partition_prefix(mod, allowed_dtypes):
     ret_expr = []
     for param in mid_func.params:
         if param in prefix_cutter.prefix_binding_map:
+            # this param required a conversion, so we collected it in the
+            # prefix cutter pass, and we can use the pass's mapping from mid
+            # func params to pre func params
             ret_expr.append(prefix_cutter.prefix_binding_map[param])
         else:
+            # there was no detected conversion for this argument, so we thread
+            # it through the prefix function untouched
             ret_expr.append(relay.Var(param.name_hint, param.checked_type))
     ret_expr = relay.Tuple(ret_expr)
     scope_builder.ret(ret_expr)
@@ -103,7 +103,7 @@ def partition_prefix(mod, allowed_dtypes):
     return pre_mod, mid_mod
 
 
-class QuantSuffixCutter(ExprMutator):
+class SuffixCutter(ExprMutator):
     def __init__(self, allowed_dtypes):
         ExprMutator.__init__(self)
         self.mid_body = None
@@ -120,7 +120,7 @@ class QuantSuffixCutter(ExprMutator):
 def partition_suffix(mod, allowed_dtypes):
     assert len(mod.functions) == 1
     func = mod['main']
-    suffix_cutter = QuantSuffixCutter(allowed_dtypes)
+    suffix_cutter = SuffixCutter(allowed_dtypes)
     post_body = suffix_cutter.visit(func.body)
     assert not func.type_params, 'unimplemented'
     assert func.attrs is None, 'unimplemented'
