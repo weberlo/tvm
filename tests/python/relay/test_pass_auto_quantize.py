@@ -104,63 +104,21 @@ def test_calibrate_memory_bound():
         relay.quantize.quantize(mod, params, dataset)
 
 
-
-#############################################
-# ALLOWED_DTYPES AND PARTITION_RESULT TESTS #
-#############################################
-
-def gen_rand_np(tt, low, high):
-    if 'int' in tt.dtype:
-        return np.random.randint(low, high, size=get_const_tuple(tt.shape), dtype=tt.dtype)
-    elif 'float' in tt.dtype:
-        return np.random.uniform(low, high, size=get_const_tuple(tt.shape)).astype(tt.dtype)
-    else:
-        assert False, 'unknown dtype'
-
+##############################
+# Datatype Restriction Tests #
+##############################
 
 def gen_rand_tvm(tt, low, high):
-    return tvm.nd.array(gen_rand_np(tt, low, high), ctx=tvm.cpu(0))
+    if 'int' in tt.dtype:
+        data_np = np.random.randint(low, high, size=get_const_tuple(tt.shape), dtype=tt.dtype)
+    elif 'float' in tt.dtype:
+        data_np = np.random.uniform(low, high, size=get_const_tuple(tt.shape)).astype(tt.dtype)
+    else:
+        assert False, 'unknown dtype'
+    return tvm.nd.array(data_np, ctx=tvm.cpu(0))
 
 
-def get_param_type(func, name):
-    for param in func.params:
-        if param.name_hint == name:
-            return param.checked_type
-
-
-def verify_partition(mod, params, specs):
-    for allowed_dtypes, should_fail in specs:
-        _verify_partition(mod, params, allowed_dtypes, should_fail)
-
-def _verify_partition(mod, params, allowed_dtypes, should_fail):
-    # TODO is the `with qconfig` shit even a good idea? why can't it just be a
-    # config dict passed to `quantize`?
-    base_cfg = {
-      'calibrate_mode': 'global_scale',
-      'global_scale': 8.0,
-      'nbit_activation': 8,
-      'skip_conv_layers': [],
-      'skip_dense_layers': False,
-      'dtype_activation': "int8",
-      'dtype_input': "int8",
-      'dtype_weight': "int8",
-    }
-    with relay.quantize.qconfig(**base_cfg):
-        full_mod = relay.quantize.quantize(mod, params)
-
-    with relay.quantize.qconfig(
-            **base_cfg,
-            partition_result=True,
-            allowed_dtypes=allowed_dtypes):
-        try:
-            pre_mod, mid_mod, post_mod = relay.quantize.quantize(mod, params)
-            if should_fail:
-                assert False, 'test should have failed'
-        except RuntimeError as e:
-            if not should_fail:
-                assert False, f'test should not have failed, but failed with:\n{e}'
-            return
-
+def fuse_partitions(pre_mod, mid_mod, post_mod):
     pre_func = pre_mod['main']
     mid_func = mid_mod['main']
     post_func = post_mod['main']
@@ -187,35 +145,59 @@ def _verify_partition(mod, params, allowed_dtypes, should_fail):
     ))
     sb.ret(dequantized_outputs)
     fused_mod['main'] = relay.Function(fused_mod_main_params, sb.get())
+    return fused_mod
+
+
+def verify_partition(mod, params, specs):
+    for allowed_dtypes, should_fail in specs:
+        _verify_partition(mod, params, allowed_dtypes, should_fail)
+
+def _verify_partition(mod, params, allowed_dtypes, should_fail):
+    base_cfg = {
+      'calibrate_mode': 'global_scale',
+      'global_scale': 8.0,
+      'nbit_activation': 8,
+      'skip_conv_layers': [],
+      'skip_dense_layers': False,
+      'dtype_activation': "int8",
+      'dtype_input': "int8",
+      'dtype_weight': "int8",
+    }
+    with relay.quantize.qconfig(**base_cfg):
+        full_mod = relay.quantize.quantize(mod, params)
+
+    with relay.quantize.qconfig(
+            **base_cfg,
+            partition_result=True,
+            allowed_dtypes=allowed_dtypes):
+        try:
+            pre_mod, mid_mod, post_mod = relay.quantize.quantize(mod, params)
+            if should_fail:
+                assert False, 'test should have failed'
+        except RuntimeError as e:
+            if not should_fail:
+                assert False, f'test should not have failed, but failed with:\n{e}'
+            return
+
+    fused_mod = fuse_partitions(pre_mod, mid_mod, post_mod)
 
     params = [
         gen_rand_tvm(param.type_annotation, 0, 1)
         for param in fused_mod['main'].params
     ]
 
-    vm = relay.create_executor('vm', ctx=tvm.cpu(0), target='llvm', mod=fused_mod)
-    fused_mod_result = vm.evaluate()(*params)
+    def _eval_mod(mod):
+        vm = relay.create_executor('vm', ctx=tvm.cpu(0), target='llvm', mod=mod)
+        return vm.evaluate()(*params)
 
-    vm = relay.create_executor('vm', ctx=tvm.cpu(0), target='llvm', mod=full_mod)
-    full_mod_result = vm.evaluate()(*params)
+    fused_mod_result = _eval_mod(fused_mod)
+    full_mod_result = _eval_mod(full_mod)
 
     tvm.testing.assert_allclose(full_mod_result.asnumpy(), fused_mod_result.asnumpy())
 
 
-# TODO remove this test before upstreaming
-@pytest.mark.xfail(raises=RuntimeError)
-def test_cifar10_dtype_restrict():
-    import onnx
-    import os
-    onnx_model = onnx.load(os.path.dirname(os.path.abspath(__file__)) + '/cifar10.onnx')
-    mod, params = relay.frontend.from_onnx(onnx_model, {"data": (1, 3, 32, 32)})
-    verify_partition(mod, params,
-        [(['int8'], True),
-         (['int8', 'float32'], False)])
-
-
 def test_add_dtype_restrict():
-    # TODO The quantization pass should be patched, so larger ops aren't
+    # TODO(weberlo) The quantization pass should be patched, so larger ops aren't
     # required to initiate quantization.  For example, in this test case, `add`
     # is quantizable, but currently only `conv2d` and `dense` trigger
     # quantization.
@@ -254,7 +236,6 @@ def test_conv2d_dtype_restrict():
          (['int8', 'float32'], False)])
 
 
-@pytest.mark.xfail(raises=RuntimeError)
 def test_unquantizable_prefix_dtype_restrict():
     # NOTE avgpool isn't currently supported
     func = relay.fromtext("""
@@ -298,8 +279,8 @@ def test_multiple_arg_conversions_dtype_restrict():
     }
     """))
 
-    w1_ty = get_param_type(mod['main'], 'w1')
-    w2_ty = get_param_type(mod['main'], 'w2')
+    w1_ty = mod['main'].params[1].checked_type
+    w2_ty = mod['main'].params[3].checked_type
     params = {
         'w1': gen_rand_tvm(w1_ty, 0, 1),
         'w2': gen_rand_tvm(w2_ty, 0, 1),
@@ -316,7 +297,6 @@ if __name__ == "__main__":
     test_calibrate_target(True)
     test_calibrate_memory_bound()
 
-    test_cifar10_dtype_restrict()
     test_add_dtype_restrict()
     test_conv2d_dtype_restrict()
     test_unquantizable_prefix_dtype_restrict()

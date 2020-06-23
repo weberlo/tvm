@@ -183,6 +183,19 @@ def qconfig(**kwargs):
     rounding: "UPWARD" or "TONEAREST"
         Rounding direction for fixed point multiplications.
 
+    allowed_dtypes: list[str]
+        Whether to restrict the data types allowed in the resulting network.
+        The default value is None, which means there are no restrictions. If,
+        for example, a fully `int8` network is desired, set `allowed_dtypes` to
+        `['int8']`.
+
+    partition_result: bool
+        To be used in tandem with `allowed_dtypes`. Specifies whether to
+        partition a quantized result into a prefix function (consisting of input
+        conversion into the quantized data space), a middle function
+        (consisting of the core network containing only operations with types in `allowed_dtypes`),
+        and a suffix function (consisting of output dequantization).
+
     Returns
     -------
     config: QConfig
@@ -364,12 +377,15 @@ def quantize(orig_mod, params=None, dataset=None):
             mod = quantize_seq(mod)
 
     allowed_dtypes = current_qconfig().allowed_dtypes
-    if allowed_dtypes is not None:
+    if allowed_dtypes is None:
+        assert not current_qconfig().partition_result, \
+            'partition_result can only be set when dtype restriction is enabled'
+    else:
         unquantized_ops = _dtype_restrict.collect_unquantized_ops(mod, allowed_dtypes)
         if unquantized_ops:
             mod_str = '  ' + str(orig_mod).replace('\n', '\n  ')
             raise RuntimeError(
-                f'found unquantizable ops `{unquantized_ops}` in given module (shown below):\n'
+                f'found unquantizable ops `{unquantized_ops}` in given module:\n'
                 + mod_str)
 
         pre_mod, mid_mod, post_mod = _dtype_restrict.partition_quantized(mod, allowed_dtypes)
