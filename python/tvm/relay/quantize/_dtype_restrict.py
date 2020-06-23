@@ -19,7 +19,10 @@ from micro_eval.util import model_util
 # TODO using "partition" could get confusing, because there's already another
 # mechanism in quantization that's called partitioning (see `_partition.py`)
 
-QUANT_DEQUANT_ALLOWED_OPS = ['add', 'multiply', 'right_shift', 'clip', 'round', 'cast']
+# operators that are allowed to defy any `allowed_dtypes` restrictions, because
+# they are ops that are used in the conversion to and from the allowed
+# datatypes
+ALLOWED_CONVERSION_OPS = ['add', 'multiply', 'right_shift', 'clip', 'round', 'cast']
 
 def with_dtype(ty, target_dtype):
     class DtypeReplacer(TypeMutator):
@@ -120,49 +123,52 @@ class QuantSuffixCutter(ExprMutator):
             return super().visit(expr)
 
 
-class ForbiddenOpException(Exception):
-    def __init__(self, forbidden_op, is_prefix):
-        self.forbidden_op = forbidden_op
-        self.is_prefix
+#class ForbiddenOpException(Exception):
+#    def __init__(self, forbidden_op, is_prefix):
+#        self.forbidden_op = forbidden_op
+#        self.is_prefix
 
 
-class OpChecker(ExprVisitor):
-    def __init__(self, allowed_ops, is_prefix):
+class UnquantizedOpCollector(ExprVisitor):
+    def __init__(self, allowed_dtypes):
         ExprVisitor.__init__(self)
-        self.allowed_ops = allowed_ops
-        self.is_prefix = is_prefix
+        self.allowed_dtypes = allowed_dtypes
+        self.forbidden_ops = set()
 
     def visit_call(self, call):
-        if call.op.name not in self.allowed_ops:
-            raise ForbiddenOpException(call.op.name, self.is_prefix)
+        if hasattr(call, 'checked_type') \
+                and call.checked_type.dtype not in self.allowed_dtypes \
+                and call.op.name not in ALLOWED_CONVERSION_OPS:
+            self.forbidden_ops.add(call.op)
+        super().visit_call(call)
 
 
-class ForbiddenDtypeException(Exception):
-    def __init__(self, invalid_dtype, allowed_dtypes):
-        self.invalid_dtype = invalid_dtype
-        self.allowed_dtypes = allowed_dtypes
-
-
-class TyDtypeChecker(TypeVisitor):
-    def __init__(self, allowed_dtypes):
-        TypeVisitor.__init__(self)
-        self.allowed_dtypes = allowed_dtypes
-
-    def visit_tensor_type(self, tt):
-        if tt.dtype not in self.allowed_dtypes:
-            raise ForbiddenDtypeException(tt.dtype, self.allowed_dtypes)
-
-
-class DtypeChecker(ExprVisitor):
-    def __init__(self, allowed_dtypes):
-        ExprVisitor.__init__(self)
-        self.allowed_dtypes = allowed_dtypes
-        self.ty_checker = TyDtypeChecker(allowed_dtypes)
-
-    def visit(self, expr):
-        if hasattr(expr, 'checked_type'):
-            self.ty_checker.visit(expr.checked_type)
-        return super().visit(expr)
+# class ForbiddenDtypeException(Exception):
+#     def __init__(self, invalid_dtype, allowed_dtypes):
+#         self.invalid_dtype = invalid_dtype
+#         self.allowed_dtypes = allowed_dtypes
+#
+#
+# class TyDtypeChecker(TypeVisitor):
+#     def __init__(self, allowed_dtypes):
+#         TypeVisitor.__init__(self)
+#         self.allowed_dtypes = allowed_dtypes
+#
+#     def visit_tensor_type(self, tt):
+#         if tt.dtype not in self.allowed_dtypes:
+#             raise ForbiddenDtypeException(tt.dtype, self.allowed_dtypes)
+#
+#
+# class DtypeChecker(ExprVisitor):
+#     def __init__(self, allowed_dtypes):
+#         ExprVisitor.__init__(self)
+#         self.allowed_dtypes = allowed_dtypes
+#         self.ty_checker = TyDtypeChecker(allowed_dtypes)
+#
+#     def visit(self, expr):
+#         if hasattr(expr, 'checked_type'):
+#             self.ty_checker.visit(expr.checked_type)
+#         return super().visit(expr)
 
 
 def partition_suffix(mod):
@@ -187,7 +193,13 @@ def partition_suffix(mod):
     return mid_mod, post_mod
 
 
-def partition_quantized(mod, allowed_dtypes):
+def collect_offending_ops(quantized_mod, allowed_dtypes):
+    op_collector = UnquantizedOpCollector(allowed_dtypes)
+    op_collector.visit(quantized_mod['main'])
+    return op_collector.forbidden_ops
+
+
+def partition_quantized(mod):
     # TODO we have the prefix/suffix conversion code chopped off, but we want
     # it to be a *partition*, so we need to save the pieces we're cutting off.
     # Also, do we want any restrictions on how much gets cut off?
@@ -204,24 +216,25 @@ def partition_quantized(mod, allowed_dtypes):
     # quantization pass to arbitrary models, this will need to change.
     assert len(mod.functions) == 1
     pre_mod, mid_mod = partition_prefix(mod)
-    if len(pre_mod['main'].params) == 0:
-        mod_str = '  ' + str(mod).replace('\n', '\n  ')
-        raise RuntimeError(f'no inputs to be quantized in given mod (shown below):\n{mod_str}')
+    #if len(pre_mod['main'].params) == 0:
+    #    mod_str = '  ' + str(mod).replace('\n', '\n  ')
+    #    raise RuntimeError(f'no inputs to be quantized in given mod (shown below):\n{mod_str}')
     mid_mod, post_mod = partition_suffix(mid_mod)
 
-    try:
-        OpChecker(QUANT_DEQUANT_ALLOWED_OPS, True).visit(pre_mod['main'])
-        DtypeChecker(allowed_dtypes).visit(mid_mod['main'])
-        OpChecker(QUANT_DEQUANT_ALLOWED_OPS, False).visit(post_mod['main'])
-    # TODO we should be able to unify the forbidden dtype and forbidden op
-    # exceptions, since they're pointing out essentially the same thing
-    # (there's an unquantizable op in your quantized result)
-    except ForbiddenDtypeException as e:
-        mod_str = '  ' + str(mid_mod).replace('\n', '\n  ')
-        raise RuntimeError(f'found dtype `{e.invalid_dtype}` in middle partition'
-            f' when allowed dtypes were `{e.allowed_dtypes}`. module shown below:\n{mod_str}')
-    except ForbiddenOpException as e:
-        starfix_str = 'input quantization prefix' if e.prefix else 'output dequantization suffix'
-        raise RuntimeError(f'found op `{e.forbidden_op}` in {starfix_str}')
+    #try:
+    #    op_collector = UnquantizedOpCollector(allowed_dtypes)
+    #    op_collector.visit(pre_mod['main'])
+    #    op_collector.visit(mid_mod['main'])
+    #    op_collector.visit(post_mod['main'])
+    ## TODO we should be able to unify the forbidden dtype and forbidden op
+    ## exceptions, since they're pointing out essentially the same thing
+    ## (there's an unquantizable op in your quantized result)
+    #except ForbiddenDtypeException as e:
+    #    mod_str = '  ' + str(mid_mod).replace('\n', '\n  ')
+    #    raise RuntimeError(f'found dtype `{e.invalid_dtype}` in middle partition'
+    #        f' when allowed dtypes were `{e.allowed_dtypes}`. module shown below:\n{mod_str}')
+    #except ForbiddenOpException as e:
+    #    starfix_str = 'input quantization prefix' if e.prefix else 'output dequantization suffix'
+    #    raise RuntimeError(f'found op `{e.forbidden_op}` in {starfix_str}')
 
     return pre_mod, mid_mod, post_mod
