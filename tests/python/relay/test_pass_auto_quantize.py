@@ -185,6 +185,7 @@ def verify(mod, params):
 
 
 # TODO remove this test before upstreaming
+@pytest.mark.xfail(raises=RuntimeError)
 def test_cifar10():
     import onnx
     import os
@@ -218,6 +219,7 @@ def test_conv_quant():
     verify(mod, params)
 
 
+@pytest.mark.xfail(raises=RuntimeError)
 def test_start_with_unquantizable():
     # start with avgpool, since it isn't currently supported
     func = relay.fromtext("""
@@ -239,11 +241,11 @@ def test_start_with_unquantizable():
     verify(mod, params)
 
 
+# TODO with respect to partitioning, what should we do in cases where the
+# function is so small the quantizer doesn't quantize anything?
+# TODO it *should* be able to quantize a single `add`. might need to patch
+# it so it can
 def test_add_quant():
-    # TODO with respect to partitioning, what should we do in cases where the
-    # function is so small the quantizer doesn't quantize anything?
-    # TODO it *should* be able to quantize a single `add`. might need to patch
-    # it so it can
     func = relay.fromtext("""
     v0.0.4
     fn (%x: Tensor[(10, 10), float32],
@@ -292,8 +294,12 @@ if __name__ == "__main__":
     test_calibrate_target(True)
     test_calibrate_memory_bound()
 
-    # test_cifar10()
-    # test_conv_quant()
-    # test_start_with_unquantizable()
-    # test_add_quant()
-    # test_multiple_arg_conversions()
+    test_cifar10()
+    test_conv_quant()
+    test_start_with_unquantizable()
+    test_add_quant()
+    test_multiple_arg_conversions()
+
+    # TODO add test that includes float32 in allowed_dtypes, and ensure every
+    # test doesn't throw an exception
+    assert False, 'TODO add tests that play with config knobs more'

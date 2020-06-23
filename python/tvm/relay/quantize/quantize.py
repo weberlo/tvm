@@ -21,7 +21,7 @@ import tvm
 from tvm.runtime import Object
 
 from . import _quantize
-from . import _force_quantize
+from . import _dtype_restrict
 from ._calibrate import calibrate
 from .. import expr as _expr
 from .. import transform as _transform
@@ -321,7 +321,7 @@ def prerequisite_optimize(mod, params=None):
     return mod
 
 
-def quantize(mod, params=None, dataset=None):
+def quantize(orig_mod, params=None, dataset=None):
     """ The quantization procedure. Before running the three main
     procedure of quantization, "annotate", "calibrate" and "realize"
     , we need to do "SimplifyInference", "FoldScaleAxis", "FoldConstant"
@@ -344,15 +344,13 @@ def quantize(mod, params=None, dataset=None):
     ret: Function
         The graph after quantization
     """
-    mod = prerequisite_optimize(mod, params)
+    mod = prerequisite_optimize(orig_mod, params)
 
     calibrate_pass = tvm.transform.module_pass(
         calibrate(dataset), opt_level=1,
         name="QuantizeCalibrate")
     quant_passes = [partition(),
-                    tvm.transform.PrintIR("post-partition"),
                     annotate(),
-                    tvm.transform.PrintIR("post-annotation"),
                     calibrate_pass]
     if not current_qconfig().do_simulation:
         quant_passes.append(realize())
@@ -365,9 +363,16 @@ def quantize(mod, params=None, dataset=None):
         with quantize_context():
             mod = quantize_seq(mod)
 
-    if current_qconfig().allowed_dtypes is not None:
-        pre_mod, mid_mod, post_mod = _force_quantize.partition_quantized(
-            mod, current_qconfig().allowed_dtypes)
+    allowed_dtypes = current_qconfig().allowed_dtypes
+    if allowed_dtypes is not None:
+        offending_ops = _dtype_restrict.collect_offending_ops(mod, allowed_dtypes)
+        if offending_ops:
+            mod_str = '  ' + str(orig_mod).replace('\n', '\n  ')
+            raise RuntimeError(
+                f'found unquantizable ops `{offending_ops}` in given module (shown below):\n'
+                + mod_str)
+
+        pre_mod, mid_mod, post_mod = _dtype_restrict.partition_quantized(mod)
         # TODO change to enum for conversion mode (SINGLE_MODULE (include
         # conversions in module), CHOPPED (exclude conversions from
         # module), PARTITIONED (split quantize, inner network, and
@@ -376,6 +381,8 @@ def quantize(mod, params=None, dataset=None):
             # TODO change docs ret type to union
             return pre_mod, mid_mod, post_mod
         else:
+            # if the user doesn't want a partition, only return the fully
+            # quantized core of the network
             return mid_mod
 
     return mod
