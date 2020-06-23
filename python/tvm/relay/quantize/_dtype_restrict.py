@@ -35,26 +35,15 @@ def with_dtype(ty, target_dtype):
     return DtypeReplacer(target_dtype).visit(ty)
 
 
-def gen_rand_np(tt, low, high):
-    if 'int' in tt.dtype:
-        return np.random.randint(low, high, size=get_const_tuple(tt.shape), dtype=tt.dtype)
-    elif 'float' in tt.dtype:
-        return np.random.uniform(low, high, size=get_const_tuple(tt.shape)).astype(tt.dtype)
-    else:
-        assert False, 'unknown dtype'
-
-
-def gen_rand_tvm(tt, low, high):
-    return tvm.nd.array(gen_rand_np(tt, low, high), ctx=tvm.cpu(0))
-
-
 class QuantPrefixCutter(ExprMutator):
-    def __init__(self, params):
+    def __init__(self, params, allowed_dtypes):
         ExprMutator.__init__(self)
         self.params = set(params)
+        self.allowed_dtypes = allowed_dtypes
         self.subtree_params = set()
         self.new_func_params = []
         self.prefix_sb = relay.ScopeBuilder()
+        self.prefix_binding_map = {}
 
     def visit_var(self, var):
         if var in self.params:
@@ -62,36 +51,32 @@ class QuantPrefixCutter(ExprMutator):
         return var
 
     def visit_call(self, call):
-        if call.op.name == 'cast' and call.attrs['dtype'] == 'int8':
+        if call.op.name == 'cast' \
+                and call.args[0].checked_type.dtype not in self.allowed_dtypes \
+                and call.attrs['dtype'] in self.allowed_dtypes:
+            cast_dtype = call.attrs['dtype']
             res = super().visit_call(call)
             if len(self.subtree_params) == 0:
                 return res
             else:
                 assert len(self.subtree_params) == 1
                 param = next(iter(self.subtree_params))
-                self.prefix_sb.let(param.name_hint, res)
+                pre_param = self.prefix_sb.let(param.name_hint, res)
                 self.subtree_params.clear()
+                mid_param = relay.Var(param.name_hint, with_dtype(param.type_annotation, cast_dtype))
+                self.prefix_binding_map[mid_param] = pre_param
                 # return new parameter, then we can use
                 # relay.analysis.free_vars at the end of the pass to generate
                 # new `mid_func` type signature
-                return relay.Var(param.name_hint, with_dtype(param.type_annotation, 'int8'))
+                return mid_param
         else:
             return super().visit_call(call)
 
-    def visit_function(self, func):
-        # override to make sure we *don't* visit the function params
-        return relay.Function(
-            func.params,
-            self.visit(func.body),
-            func.ret_type,
-            func.type_params,
-            func.attrs)
 
-
-def partition_prefix(mod):
+def partition_prefix(mod, allowed_dtypes):
     assert len(mod.functions) == 1
     func = mod['main']
-    prefix_cutter = QuantPrefixCutter(func.params)
+    prefix_cutter = QuantPrefixCutter(func.params, allowed_dtypes)
     mid_body = prefix_cutter.visit(func.body)
     assert not func.type_params, 'unimplemented'
     assert func.attrs is None, 'unimplemented'
@@ -101,7 +86,15 @@ def partition_prefix(mod):
     mid_mod = tvm.IRModule.from_expr(mid_func)
 
     scope_builder = prefix_cutter.prefix_sb
-    ret_expr = relay.Tuple(list(map(lambda b: b[0], scope_builder._bindings[-1])))
+    # make sure we pass through all inputs in the prefix function's return expr
+    # (even those that don't require quantization)
+    ret_expr = []
+    for param in mid_func.params:
+        if param in prefix_cutter.prefix_binding_map:
+            ret_expr.append(prefix_cutter.prefix_binding_map[param])
+        else:
+            ret_expr.append(relay.Var(param.name_hint, param.checked_type))
+    ret_expr = relay.Tuple(ret_expr)
     scope_builder.ret(ret_expr)
     pre_func_body = scope_builder.get()
     pre_func = relay.Function(relay.analysis.free_vars(pre_func_body), pre_func_body)
@@ -111,70 +104,23 @@ def partition_prefix(mod):
 
 
 class QuantSuffixCutter(ExprMutator):
-    def __init__(self):
+    def __init__(self, allowed_dtypes):
         ExprMutator.__init__(self)
         self.mid_body = None
+        self.allowed_dtypes = allowed_dtypes
 
     def visit(self, expr):
-        if hasattr(expr, 'checked_type') and expr.checked_type.dtype == 'int8':
+        if hasattr(expr, 'checked_type') and expr.checked_type.dtype in self.allowed_dtypes:
             self.mid_body = expr
             return relay.Var('input', expr.checked_type)
         else:
             return super().visit(expr)
 
 
-#class ForbiddenOpException(Exception):
-#    def __init__(self, forbidden_op, is_prefix):
-#        self.forbidden_op = forbidden_op
-#        self.is_prefix
-
-
-class UnquantizedOpCollector(ExprVisitor):
-    def __init__(self, allowed_dtypes):
-        ExprVisitor.__init__(self)
-        self.allowed_dtypes = allowed_dtypes
-        self.forbidden_ops = set()
-
-    def visit_call(self, call):
-        if hasattr(call, 'checked_type') \
-                and call.checked_type.dtype not in self.allowed_dtypes \
-                and call.op.name not in ALLOWED_CONVERSION_OPS:
-            self.forbidden_ops.add(call.op)
-        super().visit_call(call)
-
-
-# class ForbiddenDtypeException(Exception):
-#     def __init__(self, invalid_dtype, allowed_dtypes):
-#         self.invalid_dtype = invalid_dtype
-#         self.allowed_dtypes = allowed_dtypes
-#
-#
-# class TyDtypeChecker(TypeVisitor):
-#     def __init__(self, allowed_dtypes):
-#         TypeVisitor.__init__(self)
-#         self.allowed_dtypes = allowed_dtypes
-#
-#     def visit_tensor_type(self, tt):
-#         if tt.dtype not in self.allowed_dtypes:
-#             raise ForbiddenDtypeException(tt.dtype, self.allowed_dtypes)
-#
-#
-# class DtypeChecker(ExprVisitor):
-#     def __init__(self, allowed_dtypes):
-#         ExprVisitor.__init__(self)
-#         self.allowed_dtypes = allowed_dtypes
-#         self.ty_checker = TyDtypeChecker(allowed_dtypes)
-#
-#     def visit(self, expr):
-#         if hasattr(expr, 'checked_type'):
-#             self.ty_checker.visit(expr.checked_type)
-#         return super().visit(expr)
-
-
-def partition_suffix(mod):
+def partition_suffix(mod, allowed_dtypes):
     assert len(mod.functions) == 1
     func = mod['main']
-    suffix_cutter = QuantSuffixCutter()
+    suffix_cutter = QuantSuffixCutter(allowed_dtypes)
     post_body = suffix_cutter.visit(func.body)
     assert not func.type_params, 'unimplemented'
     assert func.attrs is None, 'unimplemented'
@@ -193,48 +139,28 @@ def partition_suffix(mod):
     return mid_mod, post_mod
 
 
-def collect_offending_ops(quantized_mod, allowed_dtypes):
+class UnquantizedOpCollector(ExprVisitor):
+    def __init__(self, allowed_dtypes):
+        ExprVisitor.__init__(self)
+        self.allowed_dtypes = allowed_dtypes
+        self.unquantized_ops = set()
+
+    def visit_call(self, call):
+        if hasattr(call, 'checked_type') \
+                and call.checked_type.dtype not in self.allowed_dtypes \
+                and call.op.name not in ALLOWED_CONVERSION_OPS:
+            self.unquantized_ops.add(call.op)
+        super().visit_call(call)
+
+
+def collect_unquantized_ops(quantized_mod, allowed_dtypes):
     op_collector = UnquantizedOpCollector(allowed_dtypes)
     op_collector.visit(quantized_mod['main'])
-    return op_collector.forbidden_ops
+    return op_collector.unquantized_ops
 
 
-def partition_quantized(mod):
-    # TODO we have the prefix/suffix conversion code chopped off, but we want
-    # it to be a *partition*, so we need to save the pieces we're cutting off.
-    # Also, do we want any restrictions on how much gets cut off?
-    # Right now, with the CIFAR-10 CNN, it cuts off some bias add and dense
-    # operations (i.e., not just conversion ops like clip, cast, and round),
-    # causing type inference to fail.
-    #
-    # should the user receive diagnostics about the results (e.g., letting them
-    # know some operators were chopped off in the prefix/suffix?)
-    #
-    # keep in mind that we have an implicit assumption in the prefix cutter
-    # that the first operator is quantizable, which is fairly safe, since a CNN
-    # usually starts with a conv, but if we have plans on generalizing the
-    # quantization pass to arbitrary models, this will need to change.
+def partition_quantized(mod, allowed_dtypes):
     assert len(mod.functions) == 1
-    pre_mod, mid_mod = partition_prefix(mod)
-    #if len(pre_mod['main'].params) == 0:
-    #    mod_str = '  ' + str(mod).replace('\n', '\n  ')
-    #    raise RuntimeError(f'no inputs to be quantized in given mod (shown below):\n{mod_str}')
-    mid_mod, post_mod = partition_suffix(mid_mod)
-
-    #try:
-    #    op_collector = UnquantizedOpCollector(allowed_dtypes)
-    #    op_collector.visit(pre_mod['main'])
-    #    op_collector.visit(mid_mod['main'])
-    #    op_collector.visit(post_mod['main'])
-    ## TODO we should be able to unify the forbidden dtype and forbidden op
-    ## exceptions, since they're pointing out essentially the same thing
-    ## (there's an unquantizable op in your quantized result)
-    #except ForbiddenDtypeException as e:
-    #    mod_str = '  ' + str(mid_mod).replace('\n', '\n  ')
-    #    raise RuntimeError(f'found dtype `{e.invalid_dtype}` in middle partition'
-    #        f' when allowed dtypes were `{e.allowed_dtypes}`. module shown below:\n{mod_str}')
-    #except ForbiddenOpException as e:
-    #    starfix_str = 'input quantization prefix' if e.prefix else 'output dequantization suffix'
-    #    raise RuntimeError(f'found op `{e.forbidden_op}` in {starfix_str}')
-
+    pre_mod, mid_mod = partition_prefix(mod, allowed_dtypes)
+    mid_mod, post_mod = partition_suffix(mid_mod, allowed_dtypes)
     return pre_mod, mid_mod, post_mod
