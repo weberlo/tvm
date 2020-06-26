@@ -219,6 +219,56 @@ def all_type_vars(expr, mod=None):
     return _ffi_api.all_type_vars(expr, use_mod)
 
 
+from tvm.relay.expr_functor import ExprMutator, ExprVisitor
+from tvm.relay.type_functor import TypeMutator, TypeVisitor
+
+class TyDtypeCollector(TypeVisitor):
+    def __init__(self):
+        TypeVisitor.__init__(self)
+        self.dtypes = set()
+
+    def visit_tensor_type(self, tty):
+        self.dtypes.add(tty.dtype)
+
+
+class ExprDtypeCollector(ExprVisitor):
+    def __init__(self):
+        ExprVisitor.__init__(self)
+        self.ty_visitor = TyDtypeCollector()
+
+    def visit(self, expr):
+        if hasattr(expr, 'checked_type'):
+            self.ty_visitor.visit(expr.checked_type)
+        elif hasattr(expr, 'type_annotation'):
+            self.ty_visitor.visit(expr.type_annotation)
+        ExprVisitor.visit(self, expr)
+
+
+#def collect_unquantized_ops(quantized_mod, quantized_dtypes):
+#    op_collector = UnquantizedOpCollector(quantized_dtypes)
+#    op_collector.visit(quantized_mod['main'])
+#    return op_collector.unquantized_ops
+
+
+def all_dtypes(expr):
+    """TODO
+
+    Parameters
+    ----------
+    expr : tvm.relay.Expr
+
+    Returns
+    -------
+    ret : Set[String]
+        Set of data types used in the expression
+    """
+    # TODO move visitor to here and eventually move to C++
+    # ret = _ffi_api.search_fc_transpose(expr)
+    dtype_collector = ExprDtypeCollector()
+    dtype_collector.visit(expr)
+    return dtype_collector.ty_visitor.dtypes
+
+
 def collect_device_info(expr):
     """Collect the device allocation map for the given expression. The device
     ids are propagated from the `device_copy` operators.
@@ -351,3 +401,4 @@ def search_fc_transpose(expr):
     """
     ret = _ffi_api.search_fc_transpose(expr)
     return ret
+

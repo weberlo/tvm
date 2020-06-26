@@ -442,6 +442,10 @@ Expr CastDtypeInputRealize(const Call& ref_call, const Array<Expr>& new_args,
 RELAY_REGISTER_OP("nn.max_pool2d")
     .set_attr<FForwardRewrite>("FQRealizeRewrite", CastDtypeInputRealize);
 
+// RELAY_REGISTER_OP("nn.bias_add").set_attr<FForwardRewrite>("FQRealizeRewrite", AddRealize);
+// RELAY_REGISTER_OP("nn.batch_flatten").set_attr<FForwardRewrite>("FQRealizeRewrite", IdentityRealize);
+// RELAY_REGISTER_OP("nn.pad").set_attr<FForwardRewrite>("FQRealizeRewrite", IdentityRealize);
+
 Expr AvgPoolRealize(const Call& ref_call, const Array<Expr>& new_args, const ObjectRef& ctx) {
   const QConfig& cfg = QConfig::Current();
   CHECK_EQ(new_args.size(), 1);

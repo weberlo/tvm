@@ -24,6 +24,10 @@ from tvm.relay import testing
 from tvm.relay.expr import Call
 from topi import get_const_tuple
 
+import os
+import onnx
+import tvm
+from tvm import relay
 
 def quantize_and_build(out):
     f = relay.Function(relay.analysis.free_vars(out), out)
@@ -104,9 +108,17 @@ def test_calibrate_memory_bound():
         relay.quantize.quantize(mod, params, dataset)
 
 
-##############################
-# Datatype Restriction Tests #
-##############################
+####################################
+# Quant/Dequant Partitioning Tests #
+####################################
+
+BASE_CFG = {
+  'skip_conv_layers': [],
+  'skip_dense_layers': False,
+  'dtype_input': "int8",
+  'dtype_weight': "int8",
+  'dtype_activation': "int32",
+}
 
 def gen_rand_tvm(tt, low, high):
     if 'int' in tt.dtype:
@@ -118,89 +130,45 @@ def gen_rand_tvm(tt, low, high):
     return tvm.nd.array(data_np, ctx=tvm.cpu(0))
 
 
-def fuse_partitions(pre_mod, mid_mod, post_mod):
-    pre_func = pre_mod['main']
-    mid_func = mid_mod['main']
-    post_func = post_mod['main']
-    fused_mod = tvm.IRModule(functions={
-        relay.GlobalVar('quantize_inputs'): pre_func,
-        relay.GlobalVar('quantized_main'): mid_func,
-        relay.GlobalVar('dequantize_outputs'): post_func,
-    })
-
-    sb = relay.ScopeBuilder()
-    fused_mod_main_params = [relay.Var(param.name_hint) for param in pre_func.params]
-    quantized_inputs = sb.let('quantized_inputs', relay.Call(
-        fused_mod.get_global_var('quantize_inputs'),
-        fused_mod_main_params
-    ))
-    quantized_outputs = sb.let('quantized_outputs', relay.Call(
-        fused_mod.get_global_var('quantized_main'),
-        [relay.TupleGetItem(quantized_inputs, i) for i in range(len(pre_func.ret_type.fields))]
-    ))
-    dequantized_outputs = sb.let('dequantized_outputs', relay.Call(
-        fused_mod.get_global_var('dequantize_outputs'),
-        # TODO relax assumption that we only have a single output?
-        [quantized_outputs]
-    ))
-    sb.ret(dequantized_outputs)
-    fused_mod['main'] = relay.Function(fused_mod_main_params, sb.get())
-    return fused_mod
+def verify_partition_fails(mod, params):
+    try:
+        with relay.quantize.qconfig(**BASE_CFG, partition_conversions=True):
+            partitioned_mod = relay.quantize.quantize(mod, params)
+        raise RuntimeError('partitioning should have failed')
+    except AssertionError:
+        pass
 
 
-def verify_partition(mod, params, specs):
-    for allowed_dtypes, should_fail in specs:
-        _verify_partition(mod, params, allowed_dtypes, should_fail)
-
-def _verify_partition(mod, params, allowed_dtypes, should_fail):
-    base_cfg = {
-      'calibrate_mode': 'global_scale',
-      'global_scale': 8.0,
-      'nbit_activation': 8,
-      'skip_conv_layers': [],
-      'skip_dense_layers': False,
-      'dtype_activation': "int8",
-      'dtype_input': "int8",
-      'dtype_weight': "int8",
-    }
-    with relay.quantize.qconfig(**base_cfg):
+def verify_partition(mod, params):
+    with relay.quantize.qconfig(**BASE_CFG):
         full_mod = relay.quantize.quantize(mod, params)
-
-    with relay.quantize.qconfig(
-            **base_cfg,
-            partition_result=True,
-            allowed_dtypes=allowed_dtypes):
-        try:
-            pre_mod, mid_mod, post_mod = relay.quantize.quantize(mod, params)
-            if should_fail:
-                assert False, 'test should have failed'
-        except RuntimeError as e:
-            if not should_fail:
-                assert False, f'test should not have failed, but failed with:\n{e}'
-            return
-
-    fused_mod = fuse_partitions(pre_mod, mid_mod, post_mod)
+    with relay.quantize.qconfig(**BASE_CFG, partition_conversions=True):
+        partitioned_mod = relay.quantize.quantize(mod, params)
 
     params = [
         gen_rand_tvm(param.type_annotation, 0, 1)
-        for param in fused_mod['main'].params
+        for param in partitioned_mod['main'].params
     ]
 
     def _eval_mod(mod):
         vm = relay.create_executor('vm', ctx=tvm.cpu(0), target='llvm', mod=mod)
         return vm.evaluate()(*params)
 
-    fused_mod_result = _eval_mod(fused_mod)
+    partitioned_mod_result = _eval_mod(partitioned_mod)
     full_mod_result = _eval_mod(full_mod)
 
-    tvm.testing.assert_allclose(full_mod_result.asnumpy(), fused_mod_result.asnumpy())
+    tvm.testing.assert_allclose(full_mod_result.asnumpy(), partitioned_mod_result.asnumpy())
 
 
-def test_add_dtype_restrict():
-    # TODO(weberlo) The quantization pass should be patched, so larger ops aren't
-    # required to initiate quantization.  For example, in this test case, `add`
-    # is quantizable, but currently only `conv2d` and `dense` trigger
-    # quantization.
+def test_cifar10():
+    import onnx
+    import os
+    onnx_model = onnx.load(os.path.dirname(os.path.abspath(__file__)) + '/cifar10.onnx')
+    mod, params = relay.frontend.from_onnx(onnx_model, {"data": (1, 3, 32, 32)})
+    verify_partition_fails(mod, params)
+
+
+def test_add_partition():
     func = relay.fromtext("""
     v0.0.4
     fn (%x: Tensor[(10, 10), float32],
@@ -210,12 +178,10 @@ def test_add_dtype_restrict():
     """)
     mod = tvm.IRModule.from_expr(func)
     params = {}
-    verify_partition(mod, params,
-        [(['int8'], True),
-         (['int8', 'float32'], False)])
+    verify_partition_fails(mod, params)
 
 
-def test_conv2d_dtype_restrict():
+def test_conv2d_partition():
     func = relay.fromtext("""
     v0.0.4
     fn (%x: Tensor[(1, 4, 16, 16), float32],
@@ -231,13 +197,11 @@ def test_conv2d_dtype_restrict():
     params = {
         'w': gen_rand_tvm(weight_ty, 0, 1)
     }
-    verify_partition(mod, params,
-        [(['int8'], False),
-         (['int8', 'float32'], False)])
+    verify_partition(mod, params)
 
 
-def test_unquantizable_prefix_dtype_restrict():
-    # NOTE avgpool isn't currently supported
+def test_unquantizable_prefix_partition():
+    # NOTE bias_add isn't currently quantizable
     func = relay.fromtext("""
     v0.0.4
     fn (%x: Tensor[(1, 4, 16, 16), float32],
@@ -254,12 +218,62 @@ def test_unquantizable_prefix_dtype_restrict():
     params = {
         'w': gen_rand_tvm(weight_ty, 0, 1)
     }
-    verify_partition(mod, params,
-        [(['int8'], True),
-         (['int8', 'float32'], False)])
+    verify_partition_fails(mod, params)
 
 
-def test_multiple_arg_conversions_dtype_restrict():
+def test_unquantizable_suffix_partition():
+    # NOTE bias_add isn't currently quantizable
+    func = relay.fromtext("""
+    v0.0.4
+    fn (%x: Tensor[(1, 4, 16, 16), float32],
+        %w: Tensor[(4, 4, 3, 3), float32],
+        %b: Tensor[(4), float32]) -> Tensor[(1, 4, 16, 16), float32] {
+      %0 = nn.conv2d(%x, %w,
+        padding=[1, 1, 1, 1],
+        channels=4,
+        kernel_size=[3, 3]);
+      nn.bias_add(%0, %b)
+    }
+    """)
+    mod = tvm.IRModule.from_expr(func)
+    weight_ty = mod['main'].params[1].checked_type
+    params = {
+        'w': gen_rand_tvm(weight_ty, 0, 1)
+    }
+    verify_partition_fails(mod, params)
+
+
+def test_unquantizable_core_partition():
+    # NOTE bias_add isn't currently quantizable
+    func = relay.fromtext("""
+    v0.0.4
+    fn (%x1: Tensor[(1, 4, 16, 16), float32],
+        %w1: Tensor[(4, 4, 3, 3), float32],
+        %b: Tensor[(4), float32],
+        %w2: Tensor[(4, 4, 3, 3), float32]) -> Tensor[(1, 4, 16, 16), float32] {
+      %0 = nn.conv2d(%x1, %w1,
+        padding=[1, 1, 1, 1],
+        channels=4,
+        kernel_size=[3, 3]);
+      %1 = nn.bias_add(%0, %b);
+      nn.conv2d(%1, %w2,
+        padding=[1, 1, 1, 1],
+        channels=4,
+        kernel_size=[3, 3])
+    }
+    """)
+    mod = tvm.IRModule.from_expr(func)
+    w1_ty = mod['main'].params[1].checked_type
+    w2_ty = mod['main'].params[3].checked_type
+    params = {
+        'w1': gen_rand_tvm(w1_ty, 0, 1),
+        'w2': gen_rand_tvm(w2_ty, 0, 1),
+    }
+    verify_partition_fails(mod, params)
+
+
+
+def test_multiple_arg_conversions_partition():
     mod = tvm.IRModule.from_expr(relay.fromtext("""
     v0.0.4
     fn (%x1: Tensor[(1, 4, 16, 16), float32],
@@ -285,9 +299,7 @@ def test_multiple_arg_conversions_dtype_restrict():
         'w1': gen_rand_tvm(w1_ty, 0, 1),
         'w2': gen_rand_tvm(w2_ty, 0, 1),
     }
-    verify_partition(mod, params,
-        [(['int8'], False),
-         (['int8', 'float32'], False)])
+    verify_partition(mod, params)
 
 
 if __name__ == "__main__":
@@ -297,7 +309,9 @@ if __name__ == "__main__":
     test_calibrate_target(True)
     test_calibrate_memory_bound()
 
-    test_add_dtype_restrict()
-    test_conv2d_dtype_restrict()
-    test_unquantizable_prefix_dtype_restrict()
-    test_multiple_arg_conversions_dtype_restrict()
+    test_add_partition()
+    test_conv2d_partition()
+    test_multiple_arg_conversions_partition()
+    test_unquantizable_prefix_partition()
+    test_unquantizable_suffix_partition()
+    test_unquantizable_core_partition()
