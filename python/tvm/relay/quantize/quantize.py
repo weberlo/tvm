@@ -21,7 +21,7 @@ import tvm
 from tvm.runtime import Object
 
 from . import _quantize
-from . import _dtype_restrict
+from ._partition_conversions import partition_conversions
 from ._calibrate import calibrate
 from .. import expr as _expr
 from .. import transform as _transform
@@ -86,9 +86,7 @@ class QConfig(Object):
         "debug_enabled_ops": None,
         "rounding": "UPWARD",
         "calibrate_chunk_by": -1,
-        # NOTE LOGANNNNN
-        "allowed_dtypes": None,
-        "partition_result": False,
+        "partition_conversions": False,
     }
 
     # pylint: disable=no-member
@@ -183,18 +181,13 @@ def qconfig(**kwargs):
     rounding: "UPWARD" or "TONEAREST"
         Rounding direction for fixed point multiplications.
 
-    allowed_dtypes: list[str]
-        Whether to restrict the data types allowed in the resulting network.
-        The default value is None, which means there are no restrictions. If,
-        for example, a fully `int8` network is desired, set `allowed_dtypes` to
-        `['int8']`.
-
-    partition_result: bool
-        To be used in tandem with `allowed_dtypes`. Specifies whether to
-        partition a quantized result into a prefix function (consisting of input
-        conversion into the quantized data space), a middle function
-        (consisting of the core network containing only operations with types in `allowed_dtypes`),
-        and a suffix function (consisting of output dequantization).
+    partition_conversions: bool
+        Whether to partition a quantized result into a module containing
+        a prefix function (consisting of input conversion into the quantized data space),
+        a middle function (consisting of the core quantized network),
+        a suffix function (consisting of output dequantization),
+        and a main function (that calls the prefix, middle, and suffix functions in succession).
+        The default value is `False`.
 
     Returns
     -------
@@ -376,29 +369,15 @@ def quantize(orig_mod, params=None, dataset=None):
         with quantize_context():
             mod = quantize_seq(mod)
 
-    allowed_dtypes = current_qconfig().allowed_dtypes
-    if allowed_dtypes is None:
-        assert not current_qconfig().partition_result, \
-            'partition_result can only be set when dtype restriction is enabled'
-    else:
-        unquantized_ops = _dtype_restrict.collect_unquantized_ops(mod, allowed_dtypes)
-        if unquantized_ops:
-            mod_str = '  ' + str(orig_mod).replace('\n', '\n  ')
-            raise RuntimeError(
-                f'found unquantizable ops `{unquantized_ops}` in given module:\n'
-                + mod_str)
-
-        pre_mod, mid_mod, post_mod = _dtype_restrict.partition_quantized(mod, allowed_dtypes)
-        # TODO change to enum for conversion mode (SINGLE_MODULE (include
-        # conversions in module), CHOPPED (exclude conversions from
-        # module), PARTITIONED (split quantize, inner network, and
-        # dequantize into separate modules))
-        if current_qconfig().partition_result:
-            # TODO change docs ret type to union
-            return pre_mod, mid_mod, post_mod
-        else:
-            # if the user doesn't want a partition, only return the fully
-            # quantized core of the network
-            return mid_mod
+    q_cfg = current_qconfig()
+    if q_cfg.partition_conversions:
+        quantized_dtypes = {q_cfg.dtype_input, q_cfg.dtype_weight, q_cfg.dtype_activation}
+        #unquantized_ops = _dtype_restrict.collect_unquantized_ops(mod, allowed_dtypes)
+        #if unquantized_ops:
+        #    mod_str = '  ' + str(orig_mod).replace('\n', '\n  ')
+        #    raise RuntimeError(
+        #        f'found unquantizable ops `{unquantized_ops}` in given module:\n'
+        #        + mod_str)
+        return partition_conversions(mod, quantized_dtypes)
 
     return mod
