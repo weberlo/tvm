@@ -145,6 +145,15 @@ def verify_partition(mod, params):
     with relay.quantize.qconfig(**BASE_CFG, partition_conversions=True):
         partitioned_mod = relay.quantize.quantize(mod, params)
 
+    # ensure the quantized core indeed only consists of quantized dtypes
+    q_dtypes = set([
+        BASE_CFG['dtype_input'],
+        BASE_CFG['dtype_weight'],
+        BASE_CFG['dtype_activation']
+    ])
+    q_main_dtypes = relay.analysis.all_dtypes(partitioned_mod['quantized_main'])
+    assert q_main_dtypes.issubset(q_dtypes)
+
     params = [
         gen_rand_tvm(param.type_annotation, 0, 1)
         for param in partitioned_mod['main'].params
@@ -160,7 +169,7 @@ def verify_partition(mod, params):
     tvm.testing.assert_allclose(full_mod_result.asnumpy(), partitioned_mod_result.asnumpy())
 
 
-def test_cifar10():
+def test_cifar10_partition():
     import onnx
     import os
     onnx_model = onnx.load(os.path.dirname(os.path.abspath(__file__)) + '/cifar10.onnx')
