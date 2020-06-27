@@ -1,9 +1,10 @@
-# Generated from /home/lweber/micro/tvm-micro/python/tvm/relay/grammar/Relay.g4 by ANTLR 4.7.2
+# Generated from /Users/doobs/Code/repo/sampl/tvm/python/tvm/relay/grammar/Relay.g4 by ANTLR 4.7.2
 # encoding: utf-8
 from antlr4 import *
 from io import StringIO
 from typing.io import TextIO
 import sys
+
 
 def serializedATN():
     with StringIO() as buf:
@@ -392,6 +393,7 @@ class RelayParser ( Parser ):
 
 
 
+
     class ProgContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -479,6 +481,7 @@ class RelayParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class GeneralIdentContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -532,6 +535,7 @@ class RelayParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class GlobalVarContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -570,6 +574,7 @@ class RelayParser ( Parser ):
         finally:
             self.exitRule()
         return localctx
+
 
     class LocalVarContext(ParserRuleContext):
 
@@ -616,6 +621,7 @@ class RelayParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class GraphVarContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -654,6 +660,7 @@ class RelayParser ( Parser ):
         finally:
             self.exitRule()
         return localctx
+
 
     class ExprListContext(ParserRuleContext):
 
@@ -714,6 +721,7 @@ class RelayParser ( Parser ):
         finally:
             self.exitRule()
         return localctx
+
 
     class CallListContext(ParserRuleContext):
 
@@ -815,6 +823,7 @@ class RelayParser ( Parser ):
         finally:
             self.exitRule()
         return localctx
+
 
     class ExprContext(ParserRuleContext):
 
@@ -1539,6 +1548,7 @@ class RelayParser ( Parser ):
             self.unrollRecursionContexts(_parentctx)
         return localctx
 
+
     class FuncContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -1615,6 +1625,7 @@ class RelayParser ( Parser ):
         finally:
             self.exitRule()
         return localctx
+
 
     class DefnContext(ParserRuleContext):
 
@@ -1805,6 +1816,7 @@ class RelayParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class ConstructorNameContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -1841,6 +1853,7 @@ class RelayParser ( Parser ):
         finally:
             self.exitRule()
         return localctx
+
 
     class AdtConsDefnListContext(ParserRuleContext):
 
@@ -1904,6 +1917,7 @@ class RelayParser ( Parser ):
         finally:
             self.exitRule()
         return localctx
+
 
     class AdtConsDefnContext(ParserRuleContext):
 
@@ -1975,6 +1989,7 @@ class RelayParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class MatchClauseListContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -2038,6 +2053,7 @@ class RelayParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class MatchClauseContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -2100,6 +2116,7 @@ class RelayParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class MatchTypeContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -2140,6 +2157,7 @@ class RelayParser ( Parser ):
         finally:
             self.exitRule()
         return localctx
+
 
     class PatternListContext(ParserRuleContext):
 
@@ -2198,6 +2216,7 @@ class RelayParser ( Parser ):
         finally:
             self.exitRule()
         return localctx
+
 
     class PatternContext(ParserRuleContext):
 
@@ -2349,6 +2368,7 @@ class RelayParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class AdtConsContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -2399,6 +2419,7 @@ class RelayParser ( Parser ):
         finally:
             self.exitRule()
         return localctx
+
 
     class AdtConsParamListContext(ParserRuleContext):
 
@@ -2458,6 +2479,7 @@ class RelayParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class AdtConsParamContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -2512,6 +2534,7 @@ class RelayParser ( Parser ):
         finally:
             self.exitRule()
         return localctx
+
 
     class ArgListContext(ParserRuleContext):
 
@@ -2614,6 +2637,7 @@ class RelayParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class VarListContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -2674,6 +2698,7 @@ class RelayParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class VarContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -2726,6 +2751,7 @@ class RelayParser ( Parser ):
         finally:
             self.exitRule()
         return localctx
+
 
     class AttrSeqContext(ParserRuleContext):
 
@@ -2781,6 +2807,7 @@ class RelayParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class AttrContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -2825,6 +2852,7 @@ class RelayParser ( Parser ):
         finally:
             self.exitRule()
         return localctx
+
 
     class TypeExprContext(ParserRuleContext):
 
@@ -3133,6 +3161,7 @@ class RelayParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class TypeParamListContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -3190,6 +3219,7 @@ class RelayParser ( Parser ):
         finally:
             self.exitRule()
         return localctx
+
 
     class ShapeListContext(ParserRuleContext):
 
@@ -3272,6 +3302,7 @@ class RelayParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class MetaContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -3323,6 +3354,7 @@ class RelayParser ( Parser ):
         finally:
             self.exitRule()
         return localctx
+
 
     class ShapeContext(ParserRuleContext):
 
@@ -3432,6 +3464,7 @@ class RelayParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class BodyContext(ParserRuleContext):
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
@@ -3473,6 +3506,7 @@ class RelayParser ( Parser ):
         finally:
             self.exitRule()
         return localctx
+
 
     class ScalarContext(ParserRuleContext):
 
@@ -3575,6 +3609,7 @@ class RelayParser ( Parser ):
         finally:
             self.exitRule()
         return localctx
+
 
     class IdentContext(ParserRuleContext):
 
