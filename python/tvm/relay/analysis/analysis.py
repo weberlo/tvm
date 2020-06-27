@@ -244,12 +244,6 @@ class ExprDtypeCollector(ExprVisitor):
         ExprVisitor.visit(self, expr)
 
 
-#def collect_unquantized_ops(quantized_mod, quantized_dtypes):
-#    op_collector = UnquantizedOpCollector(quantized_dtypes)
-#    op_collector.visit(quantized_mod['main'])
-#    return op_collector.unquantized_ops
-
-
 def all_dtypes(expr):
     """TODO
 
@@ -262,8 +256,6 @@ def all_dtypes(expr):
     ret : Set[String]
         Set of data types used in the expression
     """
-    # TODO move visitor to here and eventually move to C++
-    # ret = _ffi_api.search_fc_transpose(expr)
     dtype_collector = ExprDtypeCollector()
     dtype_collector.visit(expr)
     return dtype_collector.ty_visitor.dtypes
