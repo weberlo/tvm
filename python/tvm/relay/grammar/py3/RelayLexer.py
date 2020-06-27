@@ -1,8 +1,9 @@
-# Generated from /home/lweber/micro/tvm-micro/python/tvm/relay/grammar/Relay.g4 by ANTLR 4.7.2
+# Generated from /Users/doobs/Code/repo/sampl/tvm/python/tvm/relay/grammar/Relay.g4 by ANTLR 4.7.2
 from antlr4 import *
 from io import StringIO
 from typing.io import TextIO
 import sys
+
 
 
 def serializedATN():
