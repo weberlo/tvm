@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 #pylint: disable=unused-argument, not-context-manager
-"""Utilities for partitioning input quantization and output dequantization subexpressions."""
+"""Utilities for partitioning input quantization and output dequantization expressions."""
 import numpy as np
 import tvm
 from tvm import relay
@@ -27,6 +27,45 @@ from tvm.relay import transform
 # they are ops that are used in the conversion to and from the allowed
 # datatypes
 ALLOWED_CONVERSION_OPS = ['add', 'multiply', 'right_shift', 'clip', 'round', 'cast']
+
+def partition_conversions(mod, quantized_dtypes):
+    assert len(mod.functions) == 1
+    pre_mod, mid_mod = partition_prefix(mod, quantized_dtypes)
+    mid_mod, post_mod = partition_suffix(mid_mod, quantized_dtypes)
+    assert has_only_conversion_ops(pre_mod['main'])
+    assert relay.analysis.all_dtypes(mid_mod['main']).issubset(quantized_dtypes)
+    assert has_only_conversion_ops(post_mod['main'])
+    return fuse_partitions(pre_mod, mid_mod, post_mod)
+
+
+def fuse_partitions(pre_mod, mid_mod, post_mod):
+    pre_func = pre_mod['main']
+    mid_func = mid_mod['main']
+    post_func = post_mod['main']
+    fused_mod = tvm.IRModule(functions={
+        relay.GlobalVar('quantize_inputs'): pre_func,
+        relay.GlobalVar('quantized_main'): mid_func,
+        relay.GlobalVar('dequantize_outputs'): post_func,
+    })
+
+    sb = relay.ScopeBuilder()
+    fused_mod_main_params = [relay.Var(param.name_hint) for param in pre_func.params]
+    quantized_inputs = sb.let('quantized_inputs', relay.Call(
+        fused_mod.get_global_var('quantize_inputs'),
+        fused_mod_main_params
+    ))
+    quantized_outputs = sb.let('quantized_outputs', relay.Call(
+        fused_mod.get_global_var('quantized_main'),
+        [relay.TupleGetItem(quantized_inputs, i) for i in range(len(pre_func.ret_type.fields))]
+    ))
+    dequantized_outputs = sb.let('dequantized_outputs', relay.Call(
+        fused_mod.get_global_var('dequantize_outputs'),
+        [quantized_outputs]
+    ))
+    sb.ret(dequantized_outputs)
+    fused_mod['main'] = relay.Function(fused_mod_main_params, sb.get())
+    return fused_mod
+
 
 def with_dtype(ty, target_dtype):
     class DtypeReplacer(TypeMutator):
@@ -160,35 +199,6 @@ def partition_suffix(mod, quantized_dtypes):
     return mid_mod, post_mod
 
 
-def fuse_partitions(pre_mod, mid_mod, post_mod):
-    pre_func = pre_mod['main']
-    mid_func = mid_mod['main']
-    post_func = post_mod['main']
-    fused_mod = tvm.IRModule(functions={
-        relay.GlobalVar('quantize_inputs'): pre_func,
-        relay.GlobalVar('quantized_main'): mid_func,
-        relay.GlobalVar('dequantize_outputs'): post_func,
-    })
-
-    sb = relay.ScopeBuilder()
-    fused_mod_main_params = [relay.Var(param.name_hint) for param in pre_func.params]
-    quantized_inputs = sb.let('quantized_inputs', relay.Call(
-        fused_mod.get_global_var('quantize_inputs'),
-        fused_mod_main_params
-    ))
-    quantized_outputs = sb.let('quantized_outputs', relay.Call(
-        fused_mod.get_global_var('quantized_main'),
-        [relay.TupleGetItem(quantized_inputs, i) for i in range(len(pre_func.ret_type.fields))]
-    ))
-    dequantized_outputs = sb.let('dequantized_outputs', relay.Call(
-        fused_mod.get_global_var('dequantize_outputs'),
-        [quantized_outputs]
-    ))
-    sb.ret(dequantized_outputs)
-    fused_mod['main'] = relay.Function(fused_mod_main_params, sb.get())
-    return fused_mod
-
-
 class ValidStarfixChecker(ExprVisitor):
     """Checks that the given prefix or suffix (i.e., *fix) contains only conversion ops"""
     def __init__(self):
@@ -205,13 +215,3 @@ def has_only_conversion_ops(func):
     checker = ValidStarfixChecker()
     checker.visit(func)
     return checker.valid
-
-
-def partition_conversions(mod, quantized_dtypes):
-    assert len(mod.functions) == 1
-    pre_mod, mid_mod = partition_prefix(mod, quantized_dtypes)
-    mid_mod, post_mod = partition_suffix(mid_mod, quantized_dtypes)
-    assert has_only_conversion_ops(pre_mod['main'])
-    assert relay.analysis.all_dtypes(mid_mod['main']).issubset(quantized_dtypes)
-    assert has_only_conversion_ops(post_mod['main'])
-    return fuse_partitions(pre_mod, mid_mod, post_mod)

@@ -81,7 +81,6 @@ class QRealizeIntExpr : public QRealizeExpr {
 Expr QRealizeIntExprNode::Realize() const {
   Expr data = this->data;
   // dequantize
-  // std::cout << "ignoring fp32 cast on " << PrettyPrint(data) << std::endl;
   data = Cast(data, DataType::Float(32));
   data = Multiply(data, this->dom_scale);
   return data;

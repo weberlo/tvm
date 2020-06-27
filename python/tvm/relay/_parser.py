@@ -347,11 +347,7 @@ class ParseTreeToRelayIR(RelayVisitor):
         return local_var
 
     def visitGraphVar(self, ctx):
-        idx = int(ctx.NAT().getText())
-        # TODO i feel like there's a reason we *didn't* add this before
-        if idx >= len(self.graph_expr):
-            raise ParseError("unbound graph var `%{0}`".format(idx))
-        return self.graph_expr[idx]
+        return self.graph_expr[int(ctx.NAT().getText())]
 
     def visit_list(self, ctx_list) -> List[Any]:
         """"Visit a list of contexts."""

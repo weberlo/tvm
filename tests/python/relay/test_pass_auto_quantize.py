@@ -24,10 +24,6 @@ from tvm.relay import testing
 from tvm.relay.expr import Call
 from topi import get_const_tuple
 
-import os
-import onnx
-import tvm
-from tvm import relay
 
 def quantize_and_build(out):
     f = relay.Function(relay.analysis.free_vars(out), out)
@@ -141,7 +137,7 @@ def verify_partition_fails(mod, params):
 
 def verify_partition(mod, params):
     with relay.quantize.qconfig(**BASE_CFG):
-        full_mod = relay.quantize.quantize(mod, params)
+        unpartitioned_mod = relay.quantize.quantize(mod, params)
     with relay.quantize.qconfig(**BASE_CFG, partition_conversions=True):
         partitioned_mod = relay.quantize.quantize(mod, params)
 
@@ -154,27 +150,18 @@ def verify_partition(mod, params):
     q_main_dtypes = relay.analysis.all_dtypes(partitioned_mod['quantized_main'])
     assert q_main_dtypes.issubset(q_dtypes)
 
+    # ensure results of `partition_result=False` and `partition_result=True` agree
     params = [
         gen_rand_tvm(param.type_annotation, 0, 1)
         for param in partitioned_mod['main'].params
     ]
-
     def _eval_mod(mod):
         vm = relay.create_executor('vm', ctx=tvm.cpu(0), target='llvm', mod=mod)
         return vm.evaluate()(*params)
-
     partitioned_mod_result = _eval_mod(partitioned_mod)
-    full_mod_result = _eval_mod(full_mod)
-
-    tvm.testing.assert_allclose(full_mod_result.asnumpy(), partitioned_mod_result.asnumpy())
-
-
-def test_cifar10_partition():
-    import onnx
-    import os
-    onnx_model = onnx.load(os.path.dirname(os.path.abspath(__file__)) + '/cifar10.onnx')
-    mod, params = relay.frontend.from_onnx(onnx_model, {"data": (1, 3, 32, 32)})
-    verify_partition_fails(mod, params)
+    unpartitioned_mod_result = _eval_mod(unpartitioned_mod)
+    tvm.testing.assert_allclose(
+        unpartitioned_mod_result.asnumpy(), partitioned_mod_result.asnumpy())
 
 
 def test_add_partition():
@@ -209,79 +196,6 @@ def test_conv2d_partition():
     verify_partition(mod, params)
 
 
-def test_unquantizable_prefix_partition():
-    # NOTE bias_add isn't currently quantizable
-    func = relay.fromtext("""
-    v0.0.4
-    fn (%x: Tensor[(1, 4, 16, 16), float32],
-        %w: Tensor[(4, 4, 3, 3), float32]) -> Tensor[(1, 4, 8, 8), float32] {
-      %0 = nn.avg_pool2d(%x, pool_size=[3, 3], strides=[2, 2], padding=[0, 0, 0, 0], ceil_mode=True);
-      nn.conv2d(%0, %w,
-        padding=[1, 1, 1, 1],
-        channels=4,
-        kernel_size=[3, 3])
-    }
-    """)
-    mod = tvm.IRModule.from_expr(func)
-    weight_ty = mod['main'].params[1].checked_type
-    params = {
-        'w': gen_rand_tvm(weight_ty, 0, 1)
-    }
-    verify_partition_fails(mod, params)
-
-
-def test_unquantizable_suffix_partition():
-    # NOTE bias_add isn't currently quantizable
-    func = relay.fromtext("""
-    v0.0.4
-    fn (%x: Tensor[(1, 4, 16, 16), float32],
-        %w: Tensor[(4, 4, 3, 3), float32],
-        %b: Tensor[(4), float32]) -> Tensor[(1, 4, 16, 16), float32] {
-      %0 = nn.conv2d(%x, %w,
-        padding=[1, 1, 1, 1],
-        channels=4,
-        kernel_size=[3, 3]);
-      nn.bias_add(%0, %b)
-    }
-    """)
-    mod = tvm.IRModule.from_expr(func)
-    weight_ty = mod['main'].params[1].checked_type
-    params = {
-        'w': gen_rand_tvm(weight_ty, 0, 1)
-    }
-    verify_partition_fails(mod, params)
-
-
-def test_unquantizable_core_partition():
-    # NOTE bias_add isn't currently quantizable
-    func = relay.fromtext("""
-    v0.0.4
-    fn (%x1: Tensor[(1, 4, 16, 16), float32],
-        %w1: Tensor[(4, 4, 3, 3), float32],
-        %b: Tensor[(4), float32],
-        %w2: Tensor[(4, 4, 3, 3), float32]) -> Tensor[(1, 4, 16, 16), float32] {
-      %0 = nn.conv2d(%x1, %w1,
-        padding=[1, 1, 1, 1],
-        channels=4,
-        kernel_size=[3, 3]);
-      %1 = nn.bias_add(%0, %b);
-      nn.conv2d(%1, %w2,
-        padding=[1, 1, 1, 1],
-        channels=4,
-        kernel_size=[3, 3])
-    }
-    """)
-    mod = tvm.IRModule.from_expr(func)
-    w1_ty = mod['main'].params[1].checked_type
-    w2_ty = mod['main'].params[3].checked_type
-    params = {
-        'w1': gen_rand_tvm(w1_ty, 0, 1),
-        'w2': gen_rand_tvm(w2_ty, 0, 1),
-    }
-    verify_partition_fails(mod, params)
-
-
-
 def test_multiple_arg_conversions_partition():
     mod = tvm.IRModule.from_expr(relay.fromtext("""
     v0.0.4
@@ -306,9 +220,88 @@ def test_multiple_arg_conversions_partition():
     w2_ty = mod['main'].params[3].checked_type
     params = {
         'w1': gen_rand_tvm(w1_ty, 0, 1),
-        'w2': gen_rand_tvm(w2_ty, 0, 1),
+        'w2': gen_rand_tvm(w2_ty, 0, 1)
     }
     verify_partition(mod, params)
+
+
+def test_unquantizable_prefix_partition():
+    func = relay.fromtext("""
+    v0.0.4
+    fn (%x: Tensor[(1, 4, 16, 16), float32],
+        %b: Tensor[(4), float32],
+        %w: Tensor[(4, 4, 3, 3), float32]) -> Tensor[(1, 4, 16, 16), float32] {
+      // NOTE bias_add isn't currently quantizable
+      %0 = nn.bias_add(%x, %b);
+      nn.conv2d(%0, %w,
+        padding=[1, 1, 1, 1],
+        channels=4,
+        kernel_size=[3, 3])
+    }
+    """)
+    mod = tvm.IRModule.from_expr(func)
+    bias_ty = mod['main'].params[1].checked_type
+    weight_ty = mod['main'].params[2].checked_type
+    params = {
+        'b': gen_rand_tvm(bias_ty, 0, 1),
+        'w': gen_rand_tvm(weight_ty, 0, 1)
+    }
+    verify_partition_fails(mod, params)
+
+
+def test_unquantizable_core_partition():
+    func = relay.fromtext("""
+    v0.0.4
+    fn (%x1: Tensor[(1, 4, 16, 16), float32],
+        %w1: Tensor[(4, 4, 3, 3), float32],
+        %b: Tensor[(4), float32],
+        %w2: Tensor[(4, 4, 3, 3), float32]) -> Tensor[(1, 4, 16, 16), float32] {
+      %0 = nn.conv2d(%x1, %w1,
+        padding=[1, 1, 1, 1],
+        channels=4,
+        kernel_size=[3, 3]);
+      // NOTE bias_add isn't currently quantizable
+      %1 = nn.bias_add(%0, %b);
+      nn.conv2d(%1, %w2,
+        padding=[1, 1, 1, 1],
+        channels=4,
+        kernel_size=[3, 3])
+    }
+    """)
+    mod = tvm.IRModule.from_expr(func)
+    w1_ty = mod['main'].params[1].checked_type
+    bias_ty = mod['main'].params[2].checked_type
+    w2_ty = mod['main'].params[3].checked_type
+    params = {
+        'w1': gen_rand_tvm(w1_ty, 0, 1),
+        'w2': gen_rand_tvm(w2_ty, 0, 1),
+        'b': gen_rand_tvm(bias_ty, 0, 1)
+    }
+    verify_partition_fails(mod, params)
+
+
+def test_unquantizable_suffix_partition():
+    func = relay.fromtext("""
+    v0.0.4
+    fn (%x: Tensor[(1, 4, 16, 16), float32],
+        %w: Tensor[(4, 4, 3, 3), float32],
+        %b: Tensor[(4), float32]) -> Tensor[(1, 4, 16, 16), float32] {
+      %0 = nn.conv2d(%x, %w,
+        padding=[1, 1, 1, 1],
+        channels=4,
+        kernel_size=[3, 3]);
+      // NOTE bias_add isn't currently quantizable
+      nn.bias_add(%0, %b)
+    }
+    """)
+    mod = tvm.IRModule.from_expr(func)
+    weight_ty = mod['main'].params[1].checked_type
+    bias_ty = mod['main'].params[2].checked_type
+    params = {
+        'w': gen_rand_tvm(weight_ty, 0, 1),
+        'b': gen_rand_tvm(bias_ty, 0, 1)
+    }
+    verify_partition_fails(mod, params)
 
 
 if __name__ == "__main__":
@@ -322,5 +315,5 @@ if __name__ == "__main__":
     test_conv2d_partition()
     test_multiple_arg_conversions_partition()
     test_unquantizable_prefix_partition()
-    test_unquantizable_suffix_partition()
     test_unquantizable_core_partition()
+    test_unquantizable_suffix_partition()

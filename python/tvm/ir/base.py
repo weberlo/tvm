@@ -26,7 +26,7 @@ from . import json_compact
 
 class Node(Object):
     """Base class of all IR Nodes, implements astext function."""
-    def astext(self, show_meta_data=False, annotate=None):
+    def astext(self, show_meta_data=True, annotate=None):
         """Get the text format of the expression.
 
         Parameters
