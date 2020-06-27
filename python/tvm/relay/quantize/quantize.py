@@ -21,10 +21,11 @@ import tvm
 from tvm.runtime import Object
 
 from . import _quantize
-from ._partition_conversions import partition_conversions
 from ._calibrate import calibrate
+from ._partition_conversions import partition_conversions
 from .. import expr as _expr
 from .. import transform as _transform
+
 
 class QAnnotateKind(object):
     """Denote the kind of annotation field, corresponding
@@ -59,7 +60,7 @@ class QConfig(Object):
 
     Note
     ----
-    This object is backed by the object system in C++, with arguments that can be
+    This object is backed by node system in C++, with arguments that can be
     exchanged between python and C++.
 
     Do not construct directly, use qconfig instead.
@@ -72,7 +73,6 @@ class QConfig(Object):
         "nbit_input": 8,
         "nbit_weight": 8,
         "nbit_activation": 32,
-        # means conv input, i think
         "dtype_input": "int8",
         "dtype_weight": "int8",
         "dtype_activation": "int32",
@@ -187,6 +187,7 @@ def qconfig(**kwargs):
         a middle function (consisting of the core quantized network),
         a suffix function (consisting of output dequantization),
         and a main function (that calls the prefix, middle, and suffix functions in succession).
+        If there are unquantized operators in the core network, an exception is raised.
         The default value is `False`.
 
     Returns
@@ -327,7 +328,7 @@ def prerequisite_optimize(mod, params=None):
     return mod
 
 
-def quantize(orig_mod, params=None, dataset=None):
+def quantize(mod, params=None, dataset=None):
     """ The quantization procedure. Before running the three main
     procedure of quantization, "annotate", "calibrate" and "realize"
     , we need to do "SimplifyInference", "FoldScaleAxis", "FoldConstant"
@@ -350,7 +351,7 @@ def quantize(orig_mod, params=None, dataset=None):
     ret: Function
         The graph after quantization
     """
-    mod = prerequisite_optimize(orig_mod, params)
+    mod = prerequisite_optimize(mod, params)
 
     calibrate_pass = tvm.transform.module_pass(
         calibrate(dataset), opt_level=1,
@@ -372,12 +373,6 @@ def quantize(orig_mod, params=None, dataset=None):
     q_cfg = current_qconfig()
     if q_cfg.partition_conversions:
         quantized_dtypes = {q_cfg.dtype_input, q_cfg.dtype_weight, q_cfg.dtype_activation}
-        #unquantized_ops = _dtype_restrict.collect_unquantized_ops(mod, allowed_dtypes)
-        #if unquantized_ops:
-        #    mod_str = '  ' + str(orig_mod).replace('\n', '\n  ')
-        #    raise RuntimeError(
-        #        f'found unquantizable ops `{unquantized_ops}` in given module:\n'
-        #        + mod_str)
         return partition_conversions(mod, quantized_dtypes)
 
     return mod
