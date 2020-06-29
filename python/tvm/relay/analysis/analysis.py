@@ -21,6 +21,9 @@ This file contains the set of passes for Relay, which exposes an interface for
 configuring the passes and scripting them in Python.
 """
 from tvm.ir import IRModule
+# TODO(weberlo) remove when we port dtype collectors to C++
+from tvm.relay.expr_functor import ExprVisitor
+from tvm.relay.type_functor import TypeVisitor
 
 from . import _ffi_api
 from .feature import Feature
@@ -219,9 +222,6 @@ def all_type_vars(expr, mod=None):
     return _ffi_api.all_type_vars(expr, use_mod)
 
 
-from tvm.relay.expr_functor import ExprMutator, ExprVisitor
-from tvm.relay.type_functor import TypeMutator, TypeVisitor
-
 class TyDtypeCollector(TypeVisitor):
     """Pass that collects data types used in the visited type."""
 
@@ -398,4 +398,3 @@ def search_fc_transpose(expr):
     """
     ret = _ffi_api.search_fc_transpose(expr)
     return ret
-

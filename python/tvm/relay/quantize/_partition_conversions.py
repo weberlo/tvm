@@ -16,12 +16,10 @@
 # under the License.
 #pylint: disable=unused-argument, not-context-manager
 """Utilities for partitioning input quantization and output dequantization expressions."""
-import numpy as np
 import tvm
 from tvm import relay
 from tvm.relay.expr_functor import ExprMutator, ExprVisitor
-from tvm.relay.type_functor import TypeMutator, TypeVisitor
-from tvm.relay import transform
+from tvm.relay.type_functor import TypeMutator
 
 # operators that are allowed in prefix/suffix partitions, because they are used
 # to quantize/dequantize
@@ -119,31 +117,31 @@ def fuse_partitions(pre_mod, mid_mod, post_mod):
     })
     # construct a `main` that strings together the partitions, such that its
     # behaviour is equivalent to `main` in an *unpartitioned* module
-    sb = relay.ScopeBuilder()
+    scope_builder = relay.ScopeBuilder()
     fused_mod_main_params = [relay.Var(param.name_hint) for param in pre_func.params]
-    quantized_inputs = sb.let('quantized_inputs', relay.Call(
+    quantized_inputs = scope_builder.let('quantized_inputs', relay.Call(
         fused_mod.get_global_var('quantize_inputs'),
         fused_mod_main_params
     ))
-    quantized_outputs = sb.let('quantized_outputs', relay.Call(
+    quantized_outputs = scope_builder.let('quantized_outputs', relay.Call(
         fused_mod.get_global_var('quantized_main'),
         [relay.TupleGetItem(quantized_inputs, i) for i in range(len(pre_func.ret_type.fields))]
     ))
-    dequantized_outputs = sb.let('dequantized_outputs', relay.Call(
+    dequantized_outputs = scope_builder.let('dequantized_outputs', relay.Call(
         fused_mod.get_global_var('dequantize_outputs'),
         [quantized_outputs]
     ))
-    sb.ret(dequantized_outputs)
-    fused_mod['main'] = relay.Function(fused_mod_main_params, sb.get())
+    scope_builder.ret(dequantized_outputs)
+    fused_mod['main'] = relay.Function(fused_mod_main_params, scope_builder.get())
     return fused_mod
 
 
-def with_dtype(ty, target_dtype):
+def with_dtype(typ, target_dtype):
     """Generates a type from the given type where all dtypes are replaced with the target dtype.
 
     Parameters
     ----------
-    ty : relay.Type
+    typ : relay.Type
         Type whose dtypes are being replaced
 
     target_dtype : str
@@ -151,17 +149,18 @@ def with_dtype(ty, target_dtype):
 
     Returns
     -------
-    ty : relay.Type
+    typ : relay.Type
         Type with only `target_dtype` for dtypes
     """
     class DtypeReplacer(TypeMutator):
         def __init__(self, target_dtype):
+            TypeMutator.__init__(self)
             self.target_dtype = target_dtype
 
         def visit_tensor_type(self, tt):
             return relay.TensorType(tt.shape, self.target_dtype)
 
-    return DtypeReplacer(target_dtype).visit(ty)
+    return DtypeReplacer(target_dtype).visit(typ)
 
 
 class PrefixCutter(ExprMutator):
@@ -207,8 +206,8 @@ class PrefixCutter(ExprMutator):
                     # new `mid_func` type signature
                     new_args.append(mid_param)
             return relay.Call(call.op, new_args, call.attrs)
-        else:
-            return super().visit_call(call)
+
+        return super().visit_call(call)
 
 
 def partition_prefix(mod, quantized_dtypes):
@@ -280,8 +279,8 @@ class SuffixCutter(ExprMutator):
         if hasattr(expr, 'checked_type') and expr.checked_type.dtype in self.quantized_dtypes:
             self.mid_body = expr
             return relay.Var('input', expr.checked_type)
-        else:
-            return super().visit(expr)
+
+        return super().visit(expr)
 
 
 def partition_suffix(mod, quantized_dtypes):
