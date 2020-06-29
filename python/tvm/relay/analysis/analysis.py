@@ -223,6 +223,8 @@ from tvm.relay.expr_functor import ExprMutator, ExprVisitor
 from tvm.relay.type_functor import TypeMutator, TypeVisitor
 
 class TyDtypeCollector(TypeVisitor):
+    """Pass that collects data types used in the visited type."""
+
     def __init__(self):
         TypeVisitor.__init__(self)
         self.dtypes = set()
@@ -232,6 +234,8 @@ class TyDtypeCollector(TypeVisitor):
 
 
 class ExprDtypeCollector(ExprVisitor):
+    """Pass that collects data types used in all types in the visited expression."""
+
     def __init__(self):
         ExprVisitor.__init__(self)
         self.ty_visitor = TyDtypeCollector()
@@ -245,11 +249,12 @@ class ExprDtypeCollector(ExprVisitor):
 
 
 def all_dtypes(expr):
-    """TODO
+    """Collect set of all data types used in `expr`.
 
     Parameters
     ----------
     expr : tvm.relay.Expr
+        The input expression
 
     Returns
     -------
