@@ -23,12 +23,59 @@ from tvm.relay.expr_functor import ExprMutator, ExprVisitor
 from tvm.relay.type_functor import TypeMutator, TypeVisitor
 from tvm.relay import transform
 
-# operators that are allowed to defy any `quantized_dtypes` restrictions, because
-# they are ops that are used in the conversion to and from the allowed
-# datatypes
+# operators that are allowed in prefix/suffix partitions, because they are used
+# to quantize/dequantize
 ALLOWED_CONVERSION_OPS = ['add', 'multiply', 'right_shift', 'clip', 'round', 'cast']
 
 def partition_conversions(mod, quantized_dtypes):
+    """Partition mod into input quantization, core quantized inference, and output dequantization.
+
+    The resulting module includes an additional `main` that fuses all three
+    partitions together.
+
+    Parameters
+    ----------
+    mod : tvm.IRModule
+        Quantized module to partition
+
+    quantized_dtypes : Set[str]
+        Set of data types allowed in quantized operators
+
+    Returns
+    -------
+    fused_mod : tvm.IRModule
+        Module containing the input quantization (`quantize_inputs`), core
+        quantized inference (`quantized_main`), output dequantization
+        (`dequantize_outputs`), and full quantized inference functions
+    """
+    # Partitioning is implemented as in the diagram below:
+    #
+    #   +----------------------------+
+    #   |Quantized Inference Function|
+    #   +--------------+-------------+
+    #                  |
+    #           partition_prefix
+    #                  |
+    #            +-----+-------------------------+
+    #            |                               |
+    #   +--------v---------+   +-----------------v------------------+
+    #   |Input Quantization|   |Rest of Quantized Inference Function|
+    #   +------------------+   +-----------------+------------------+
+    #                                            |
+    #                                    partition_suffix
+    #                                            |
+    #                                     +------+---------------------+
+    #                                     |                            |
+    #   +------------------+   +----------v------------+   +-----------v---------+
+    #   |Input Quantization|   |Core Quantized Function|   |Output Dequantization|
+    #   +------------------+   +-----------------------+   +---------------------+
+    #
+    # The final module contains all three partitions, as well as a
+    # `main` function that composes these three functions (depicted below).
+    #
+    # +--------------------+-------------------------+-----------------------+
+    # | Input Quantization | Core Quantized Function | Output Dequantization |
+    # +--------------------+-------------------------+-----------------------+
     assert len(mod.functions) == 1
     pre_mod, mid_mod = partition_prefix(mod, quantized_dtypes)
     mid_mod, post_mod = partition_suffix(mid_mod, quantized_dtypes)
@@ -39,15 +86,39 @@ def partition_conversions(mod, quantized_dtypes):
 
 
 def fuse_partitions(pre_mod, mid_mod, post_mod):
+    """Combine prefix, middle, and suffix modules into a single module.
+
+    The combined module includes an additional `main` that fuses all three
+    partitions together.
+
+    Parameters
+    ----------
+    pre_mod : tvm.IRModule
+        Module containing an input quantization function
+
+    mid_mod : tvm.IRModule
+        Module containing core of a quantized inference function
+
+    post_mod : tvm.IRModule
+        Module containing an output dequantization function
+
+    Returns
+    -------
+    fused_mod : tvm.IRModule
+        Module containing the input quantization, core quantized inference,
+        output dequantization, and full quantized inference functions
+    """
     pre_func = pre_mod['main']
     mid_func = mid_mod['main']
     post_func = post_mod['main']
+    # create a module containing the prefix, middle, and suffix partitions
     fused_mod = tvm.IRModule(functions={
         relay.GlobalVar('quantize_inputs'): pre_func,
         relay.GlobalVar('quantized_main'): mid_func,
         relay.GlobalVar('dequantize_outputs'): post_func,
     })
-
+    # construct a `main` that strings together the partitions, such that its
+    # behaviour is equivalent to `main` in an *unpartitioned* module
     sb = relay.ScopeBuilder()
     fused_mod_main_params = [relay.Var(param.name_hint) for param in pre_func.params]
     quantized_inputs = sb.let('quantized_inputs', relay.Call(
@@ -68,6 +139,21 @@ def fuse_partitions(pre_mod, mid_mod, post_mod):
 
 
 def with_dtype(ty, target_dtype):
+    """Generates a type from the given type where all dtypes are replaced with the target dtype.
+
+    Parameters
+    ----------
+    ty : relay.Type
+        Type whose dtypes are being replaced
+
+    target_dtype : str
+        Target data type (e.g., 'int8')
+
+    Returns
+    -------
+    ty : relay.Type
+        Type with only `target_dtype` for dtypes
+    """
     class DtypeReplacer(TypeMutator):
         def __init__(self, target_dtype):
             self.target_dtype = target_dtype
@@ -79,6 +165,12 @@ def with_dtype(ty, target_dtype):
 
 
 class PrefixCutter(ExprMutator):
+    """A mutator for extracting input quantization expressions from a function
+
+    The result of `visit` is the core function, and the input quantization
+    expressions are stored in the `prefix_sb` scope builder.
+    """
+
     def __init__(self, params, quantized_dtypes):
         ExprMutator.__init__(self)
         self.params = set(params)
@@ -94,7 +186,7 @@ class PrefixCutter(ExprMutator):
         return var
 
     def visit_call(self, call):
-        # TODO use graph pattern matching?
+        # TODO(weberlo) use graph pattern matching?
         if not hasattr(call.op, 'name') or call.op.name not in ALLOWED_CONVERSION_OPS:
             new_args = []
             for arg in call.args:
@@ -106,7 +198,9 @@ class PrefixCutter(ExprMutator):
                     param = next(iter(self.subtree_params))
                     pre_param = self.prefix_sb.let(param.name_hint, new_arg)
                     self.subtree_params.clear()
-                    mid_param = relay.Var(param.name_hint, with_dtype(param.type_annotation, arg.checked_type.dtype))
+                    mid_param = relay.Var(
+                        param.name_hint,
+                        with_dtype(param.type_annotation, arg.checked_type.dtype))
                     self.prefix_binding_map[mid_param] = pre_param
                     # return new parameter, then we can use
                     # relay.analysis.free_vars at the end of the pass to generate
@@ -118,6 +212,24 @@ class PrefixCutter(ExprMutator):
 
 
 def partition_prefix(mod, quantized_dtypes):
+    """Extract input quantization expressions from `mod['main']`.
+
+    Parameters
+    ----------
+    mod : tvm.IRModule
+        Module containing a quantized inference function
+
+    quantized_dtypes : Set[str]
+        Set of data types allowed in quantized operators
+
+    Returns
+    -------
+    pre_mod : tvm.IRModule
+        Module containing the input quantization function
+
+    mid_mod : tvm.IRModule
+        Module containing a function with everything except for input quantization
+    """
     assert len(mod.functions) == 1
     func = mod['main']
     prefix_cutter = PrefixCutter(func.params, quantized_dtypes)
@@ -153,6 +265,12 @@ def partition_prefix(mod, quantized_dtypes):
 
 
 class SuffixCutter(ExprMutator):
+    """A mutator for extracting output dequantization expressions from a function
+
+    The result of `visit` is a function containing the output dequantization
+    expressions, and the middle of the function is stored in `mid_body`.
+    """
+
     def __init__(self, quantized_dtypes):
         ExprMutator.__init__(self)
         self.mid_body = None
@@ -167,6 +285,24 @@ class SuffixCutter(ExprMutator):
 
 
 def partition_suffix(mod, quantized_dtypes):
+    """Extract output dequantization expressions from `mod['main']`.
+
+    Parameters
+    ----------
+    mod : tvm.IRModule
+        Module containing a quantized inference function
+
+    quantized_dtypes : Set[str]
+        Set of data types allowed in quantized operators
+
+    Returns
+    -------
+    pre_mod : tvm.IRModule
+        Module containing the input quantization function
+
+    mid_mod : tvm.IRModule
+        Module containing a function with everything except for input quantization
+    """
     assert len(mod.functions) == 1
     func = mod['main']
     suffix_cutter = SuffixCutter(quantized_dtypes)
@@ -199,8 +335,8 @@ def partition_suffix(mod, quantized_dtypes):
     return mid_mod, post_mod
 
 
-class ValidStarfixChecker(ExprVisitor):
-    """Checks that the given prefix or suffix (i.e., *fix) contains only conversion ops"""
+class ConversionOpChecker(ExprVisitor):
+    """A pass for checking that the visited function contains only conversion ops"""
     def __init__(self):
         ExprVisitor.__init__(self)
         self.valid = True
@@ -212,6 +348,18 @@ class ValidStarfixChecker(ExprVisitor):
 
 
 def has_only_conversion_ops(func):
-    checker = ValidStarfixChecker()
+    """Return true iff the given function contains only quantization/dequantization ops.
+
+    Parameters
+    ----------
+    func : relay.Function
+        Function being checked
+
+    Returns
+    -------
+    valid : bool
+        Whether the function contains only conversion ops
+    """
+    checker = ConversionOpChecker()
     checker.visit(func)
     return checker.valid
