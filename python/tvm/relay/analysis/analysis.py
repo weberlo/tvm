@@ -229,8 +229,8 @@ class TyDtypeCollector(TypeVisitor):
         TypeVisitor.__init__(self)
         self.dtypes = set()
 
-    def visit_tensor_type(self, tty):
-        self.dtypes.add(tty.dtype)
+    def visit_tensor_type(self, tt):
+        self.dtypes.add(tt.dtype)
 
 
 class ExprDtypeCollector(ExprVisitor):
