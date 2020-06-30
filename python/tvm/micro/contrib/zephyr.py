@@ -27,7 +27,7 @@ class SubprocessEnv(object):
 class ZephyrCompiler(tvm.micro.Compiler):
 
   def __init__(self, project_dir=None, board=None, west_cmd=None, west_build_args=None,
-               zephyr_base=None, zephyr_toolchain_variant=None, env_vars=None, flasher_opts=None):
+               zephyr_base=None, zephyr_toolchain_variant=None, env_vars=None):
     self._project_dir = project_dir
     self._board = board
     if west_cmd is None:
@@ -53,7 +53,6 @@ class ZephyrCompiler(tvm.micro.Compiler):
       env.update(env_vars)
 
     self._subprocess_env = SubprocessEnv(env)
-    self._flasher_opts = flasher_opts or {}
 
   OPT_KEY_TO_CMAKE_DEFINE = {
     'cflags': 'CFLAGS',
@@ -156,17 +155,17 @@ class ZephyrCompiler(tvm.micro.Compiler):
                                  labelled_files={'cmake_cache': ['CMakeCache.txt'],
                                                  'device_tree': [os.path.join('zephyr', 'zephyr.dts')]})
 
-  def Flasher(self):
+  def Flasher(self, **flasher_opts):
     return ZephyrFlasher(self._west_cmd, zephyr_base=self._zephyr_base,
-                         subprocess_env=self._subprocess_env, **self._flasher_opts)
+                         subprocess_env=self._subprocess_env, **flasher_opts)
 
 
 CACHE_ENTRY_RE = re.compile(r'(?P<name>[^:]+):(?P<type>[^=]+)=(?P<value>.*)')
 
 
-CMAKE_BOOL_MAP = (
-  {k: True for k in ('1', 'ON', 'YES', 'TRUE', 'Y')}.update(
-    {k: False for k in ('0', 'OFF', 'NO', 'FALSE', 'N', 'IGNORE', 'NOTFOUND', '')}))
+CMAKE_BOOL_MAP = dict(
+  [(k, True) for k in ('1', 'ON', 'YES', 'TRUE', 'Y')] +
+  [(k, False) for k in ('0', 'OFF', 'NO', 'FALSE', 'N', 'IGNORE', 'NOTFOUND', '')])
 
 
 def read_cmake_cache(file_name):
@@ -185,6 +184,10 @@ def read_cmake_cache(file_name):
       entries[m.group('name')] = value
 
   return entries
+
+
+class BoardError(Exception):
+  pass
 
 
 class ZephyrFlasher(object):
