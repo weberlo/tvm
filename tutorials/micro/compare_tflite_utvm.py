@@ -152,25 +152,32 @@ def get_tflite_result():
 
 
 def get_tfmicro_result():
-    import subprocess
+    def run_cmd(*args):
+        import subprocess
+        (out, err) = subprocess.Popen(args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE).communicate()
+        return out, err
+
     lite_model_path = model_path
-    micro_model_path = 'model.cc'
-    replace_text = lite_model_path.replace('/', '_').replace('.', '_')
-    (out, err) = subprocess.Popen([
+    model_input_bytes_path = 'model_input.bytes'
+
+    with open(model_input_bytes_path, 'wb') as f:
+        f.write(input_data.tobytes())
+
+    model_replace_text = lite_model_path.replace('/', '_').replace('.', '_')
+    model_input_replace_text = model_input_bytes_path.replace('/', '_').replace('.', '_')
+    (out, err) = run_cmd(
         './run_tflite_micro.sh',
         lite_model_path,
-        micro_model_path,
-        replace_text,
-        str(input_data[0][0])
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE).communicate()
+        model_replace_text,
+        model_input_replace_text)
     out = out.decode('utf-8')
     err = err.decode('utf-8')
-    # print('Subprocess Stdout:')
-    # print('  ' + out.replace('\n', '\n  '))
-    # print('Subprocess Stderr:')
-    # print('  ' + err.replace('\n', '\n  '))
+    print('Subprocess Stdout:')
+    print('  ' + out.replace('\n', '\n  '))
+    print('Subprocess Stderr:')
+    print('  ' + err.replace('\n', '\n  '))
     return float(out)
 
 
@@ -205,7 +212,6 @@ def get_utvm_result():
                                             dtype_dict={input_tensor: input_dtype})
 
     TARGET = 'c -device=micro_dev'
-    # dev_config = micro.device.arm.stm32f746xx.generate_config("127.0.0.1", 6666)
     dev_config = micro.device.host.generate_config()
 
     with micro.Session(dev_config) as sess:
