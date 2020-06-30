@@ -176,6 +176,8 @@ def read_cmake_cache(file_name):
       if not m:
         continue
 
+      print('match', m.groups())
+
       if m.group('type') == 'BOOL':
         value = CMAKE_BOOL_MAP[m.group('value').upper()]
       else:
@@ -192,7 +194,8 @@ class BoardError(Exception):
 
 class ZephyrFlasher(object):
 
-  def __init__(self, west_cmd, zephyr_base=None, subprocess_env=None, flash_args=None):
+  def __init__(self, west_cmd, zephyr_base=None, subprocess_env=None, nrfjprog_snr=None,
+               openocd_serial=None, flash_args=None):
     zephyr_base = zephyr_base or os.environ['ZEPHYR_BASE']
     sys.path.insert(0, os.path.join(zephyr_base, 'scripts', 'dts'))
     try:
@@ -203,11 +206,13 @@ class ZephyrFlasher(object):
 
     self._west_cmd = west_cmd
     self._flash_args = flash_args
+    self._openocd_serial = openocd_serial
 
-  def _get_snr(self):
-    nrfjprog_ids = subprocess.check_output(['nrfjprog', '--ids'], encoding='utf-8')
+  def _get_nrf_device_args(self):
+    nrfjprog_args = ['nrfjprog', '--ids']
+    nrfjprog_ids = subprocess.check_output(nrfjprog_args, encoding='utf-8')
     if not nrfjprog_ids.strip('\n'):
-      raise BoardError(f'No attached boards recognized by {nrfjprog_ids.args}')
+      raise BoardError(f'No attached boards recognized by {" ".join(nrfjprog_args)}')
 
     boards = nrfjprog_ids.split('\n')[:-1]
     if len(boards) > 1:
@@ -220,34 +225,57 @@ class ZephyrFlasher(object):
 
     return boards[0]
 
+  def _get_openocd_device_args(self):
+    if self._openocd_serial is not None:
+      return ['--serial', self._openocd_serial]
+
+    return []
+
+  def _get_device_args(self):
+    flash_runner = cmake_entries['ZEPHYR_BOARD_FLASH_RUNNER']
+    if flash_runner == 'nrfjprog':
+      return self._get_nrf_device_args()
+    elif flash_runner == 'openocd':
+      return self._get_openocd_device_args()
+    else:
+      raise BoardError(
+        f"Don't know how to find serial terminal for board {cmake_entries['BOARD']} with flash "
+        f"runner {flash_runner}")
+
+
   def Flash(self, micro_binary):
     cmake_entries = read_cmake_cache(micro_binary.abspath(micro_binary.labelled_files['cmake_cache'][0]))
-    if cmake_entries['ZEPHYR_BOARD_FLASH_RUNNER'] != 'nrfjprog':
-      raise BoardError(f"Don't know how to find serial terminal for board {cmake_entries['BOARD']}")
 
-    snr = self._get_snr()
     build_dir = os.path.dirname(micro_binary.abspath(micro_binary.labelled_files['cmake_cache'][0]))
     west_args = self._west_cmd + ['flash',
                                   '--build-dir', self._build_dir,
-                                  '--skip-rebuild',
-                                  '--snr', snr]
+                                  '--skip-rebuild'] + self._get_device_args()
     if self._flash_args is not None:
       west_args.extend(self._flash_args)
     subprocess.check_output(west_args, cwd=self._build_dir)
 
     return self.Transport(micro_binary)
 
-  def Transport(self, micro_binary):
-    dt = self._dtlib.DT(micro_binary.abspath(micro_binary.labelled_files['device_tree'][0]))
-    uart_baud = dt.get_node('/chosen').props['zephyr,console'].to_path().props['current-speed'].to_num()
-    print('uart baud!', uart_baud)
-
-    snr = self._get_snr()
-
-    com_ports = subprocess.check_output(['nrfjprog', '--com', '--snr', snr], encoding='utf-8')
+  def _find_nrf_serial_port(self):
+    com_ports = subprocess.check_output(['nrfjprog', '--com'] + self._get_device_args(), encoding='utf-8')
     ports_by_vcom = {}
     for line in com_ports.split('\n')[:-1]:
       parts = line.split()
       ports_by_vcom[parts[2]] = parts[1]
 
-    return transport.SerialTransport(port_path=ports_by_vcom['VCOM2'], baudrate=uart_baud)
+    return {'port_path': ports_by_vcom['VCOM2']}
+
+  def _find_serial_port(self, micro_binary):
+    cmake_entries = read_cmake_cache(micro_binary.abspath(micro_binary.labelled_files['cmake_cache'][0]))
+    flash_runner = cmake_entries['ZEPHYR_BOARD_FLASH_RUNNER']
+    if flash_runner == 'nrfjprog':
+      return self._find_nrf_serial_port()
+
+    return {'grep': self._openocd_serial}
+
+  def Transport(self, micro_binary):
+    dt = self._dtlib.DT(micro_binary.abspath(micro_binary.labelled_files['device_tree'][0]))
+    uart_baud = dt.get_node('/chosen').props['zephyr,console'].to_path().props['current-speed'].to_num()
+    print('uart baud!', uart_baud)
+
+    return transport.SerialTransport(baudrate=uart_baud, **self._find_serial_port(micro_binary))
