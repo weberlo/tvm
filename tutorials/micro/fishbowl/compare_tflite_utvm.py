@@ -80,7 +80,10 @@ def get_model(model_path):
 
 def main():
     # model_url = 'https://people.linaro.org/~tom.gall/sine_model.tflite'
-    model_path = 'models/sine_model/sine_model.tflite'
+
+    # model_path = 'models/sine_model/sine_model.tflite'
+    # model_path = 'models/sine_model/sine_model.tflite'
+    model_path = 'models/micro_speech/model.tflite'
 
     # TODO get all models in `models` dir into tflite format (some are in .cc)
     # TODO fix `tvm_import_tflite` after you wrongfucktored it
@@ -193,16 +196,46 @@ def get_utvm_result(model):
     TARGET = 'c -device=micro_dev'
     dev_config = micro.device.host.generate_config()
 
+    assert False, 'TODO use real input data (not random) since we\'re getting [64 ... 64] every time for the results on the micro speech model. might be sensitive to the distribution'
+    assert False, 'TODO figure out why the auto_inline block here(/home/lweber/micro/tvm-micro/topi/python/topi/generic/default.py) causes the micro speech model and mobilenet to fail'
+
     with micro.Session(dev_config) as sess:
         ctx = tvm.micro_dev(0)
+#         mod = relay.fromtext("""
+# v0.0.4
+# def @main(%x: Tensor[(1, 1), float32]) -> Tensor[(1, 1), float32] {
+#   round(%x)
+# }
+#         """)
+        # mod = relay.fromtext("""
+        # v0.0.4
+        # def @main (%x: Tensor[(1, 4, 16, 16), float32],
+        #            %w: Tensor[(4, 4, 3, 3), float32]) -> Tensor[(1, 4, 16, 16), float32] {
+        #     nn.conv2d(%x, %w,
+        #         padding=[1, 1, 1, 1],
+        #         channels=4,
+        #         kernel_size=[3, 3])
+        # }
+        # """)
+        # params = {}
         mod, params = tvm_import_tflite(model)
+        print(mod)
+        # canon_mod = relay.qnn.transform.CanonicalizeOps()(mod)
+        # print(canon_mod)
+        # assert False, 'add support for round op in C codegen and figure out why `auto_inline` in generic_schedule causes compiler error for C target'
+        # import pdb; pdb.set_trace()
         with tvm.transform.PassContext(
                 opt_level=3,
                 config={'tir.disable_vectorize': True},
                 disabled_pass=['FuseOps']):
             graph, op_mod, params = relay.build(mod, target=TARGET, params=params)
 
-        micro_mod = micro.create_micro_mod(op_mod, dev_config)
+        micro_mod = micro.create_micro_mod(
+            op_mod, dev_config,
+            lib_src_paths=['libm.c'],
+            lib_include_paths=['.'],
+            lib_headers=['libm.h']
+       )
         mod = graph_runtime.create(graph, micro_mod, ctx)
         mod.set_input(**params)
 

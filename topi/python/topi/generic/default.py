@@ -30,5 +30,6 @@ def default_schedule(outs, auto_inline):
     if auto_inline:
         x = outs[0]
         te.schedule.AutoInlineInjective(s)
+        import pdb; pdb.set_trace()
         s[x].fuse(s[x].op.axis)
     return s

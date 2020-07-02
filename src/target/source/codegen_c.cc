@@ -641,6 +641,22 @@ void CodeGenC::VisitExpr_(const CallNode* op, std::ostream& os) {  // NOLINT(*)
       os << " != ";
       this->PrintExpr(op->args[0], os);
       os << ")";
+    } else if (call_op->name == "tir.round") {
+      // TODO(weberlo) add round as intrinsic?
+      // TODO use dtype to determine outer cast
+      os << "( (float) (";
+      {
+        os << "(int) (";
+          os << "(";
+            this->PrintExpr(op->args[0], os);
+          os << ")";
+        os << " + 0.5)";
+      }
+      os << "))";
+      // def here: /home/lweber/micro/tvm-micro/include/tvm/runtime/data_type.h
+      // std::cout << op->dtype << std::endl;
+
+      // LOG(FATAL) << "AYY LMAO " << op->op;
     } else {
       LOG(FATAL) << "Unresolved call " << op->op;
     }

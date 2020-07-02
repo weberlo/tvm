@@ -240,6 +240,7 @@ def register_injective_schedule(op_name, level=10):
     return register_schedule(op_name, _schedule_injective, level)
 
 
+# TODO hey yo what the frick my dude why do broadcast and injective do the same thing?
 def register_broadcast_schedule(op_name, level=10):
     """Register broadcast schedule function for an op.
 
