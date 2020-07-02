@@ -21,8 +21,6 @@ echo "${model_metadata}" >> model.cc
 
 TF_PATH="$HOME/micro/tensorflow"
 
-# TODO see if we can consolidate these into a single compile cmd
-
 g++ -std=c++11 -DTF_LITE_STATIC_MEMORY -DNDEBUG -O3 \
   -DTF_LITE_DISABLE_X86_NEON \
   "-I${TF_PATH}" \
@@ -31,33 +29,8 @@ g++ -std=c++11 -DTF_LITE_STATIC_MEMORY -DNDEBUG -O3 \
   "-I${TF_PATH}/tensorflow/lite/micro/tools/make/downloads/flatbuffers/include" \
   "-I${TF_PATH}/tensorflow/lite/micro/tools/make/downloads/ruy" \
   "-I${TF_PATH}/tensorflow/lite/micro/tools/make/downloads/kissfft" \
-  -c \
   model.cc \
-  -o model.o
-
-g++ -std=c++11 -DTF_LITE_STATIC_MEMORY -DNDEBUG -O3 \
-  -DTF_LITE_DISABLE_X86_NEON \
-  "-DINPUT_DATA=${input_val}" \
-  "-I${TF_PATH}" \
-  "-I${TF_PATH}/tensorflow/lite/micro/tools/make/downloads/" \
-  "-I${TF_PATH}/tensorflow/lite/micro/tools/make/downloads/gemmlowp" \
-  "-I${TF_PATH}/tensorflow/lite/micro/tools/make/downloads/flatbuffers/include" \
-  "-I${TF_PATH}/tensorflow/lite/micro/tools/make/downloads/ruy" \
-  "-I${TF_PATH}/tensorflow/lite/micro/tools/make/downloads/kissfft" \
-  -c \
   driver.cc \
-  -o driver.o
-
-g++ -std=c++11 -DTF_LITE_STATIC_MEMORY -DNDEBUG -O3 \
-  -DTF_LITE_DISABLE_X86_NEON \
-  "-I${TF_PATH}" \
-  "-I${TF_PATH}/tensorflow/lite/micro/tools/make/downloads/" \
-  "-I${TF_PATH}/tensorflow/lite/micro/tools/make/downloads/gemmlowp" \
-  "-I${TF_PATH}/tensorflow/lite/micro/tools/make/downloads/flatbuffers/include" \
-  "-I${TF_PATH}/tensorflow/lite/micro/tools/make/downloads/ruy" \
-  "-I${TF_PATH}/tensorflow/lite/micro/tools/make/downloads/kissfft" \
-  driver.o \
-  model.o \
   "${TF_PATH}/tensorflow/lite/micro/tools/make/gen/linux_x86_64/lib/libtensorflow-microlite.a" \
   -lm \
   -o run_model

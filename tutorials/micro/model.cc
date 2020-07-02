@@ -224,7 +224,7 @@ unsigned char g_model[] = {
 };
 unsigned int g_model_len = 2656;
 unsigned char g_model_input[] = {
-  0x75, 0x57, 0x09, 0x3f
+  0x3e, 0x91, 0xf7, 0x3e
 };
 unsigned int g_model_input_len = 4;
 
