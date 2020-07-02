@@ -19,7 +19,7 @@ Micro TVM with TFLite Models
 ============================
 **Author**: `Tom Gall <https://github.com/tom-gall>`_
 
-This tutorial is an introduction to working with MicroTVM and a TFLite 
+This tutorial is an introduction to working with MicroTVM and a TFLite
 model with Relay.
 """
 
@@ -137,7 +137,7 @@ print ("Model Version: " + str(version))
 # If you are unsure what that might be, this can be discovered by using
 # the visualize.py script within the Tensorflow project.
 # See : How do I inspect a .tflite file? `<https://www.tensorflow.org/lite/guide/faq>`_
- 
+
 input_tensor = "dense_4_input"
 input_shape = (1,)
 input_dtype = "float32"

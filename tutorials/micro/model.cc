@@ -223,3 +223,20 @@ unsigned char g_model[] = {
   0x00, 0x00, 0x00, 0x09
 };
 unsigned int g_model_len = 2656;
+unsigned char g_model_input[] = {
+  0x75, 0x57, 0x09, 0x3f
+};
+unsigned int g_model_input_len = 4;
+
+#include <tensorflow/lite/micro/all_ops_resolver.h>
+#include <tensorflow/lite/micro/micro_error_reporter.h>
+#include <tensorflow/lite/micro/micro_interpreter.h>
+#include <tensorflow/lite/micro/testing/micro_test.h>
+#include <tensorflow/lite/schema/schema_generated.h>
+#include <tensorflow/lite/version.h>
+    int g_model_input_ndims = 2;
+int g_model_input_shape[] = {1, 1};
+TfLiteType g_model_input_dtype = kTfLiteFloat32;
+int g_model_output_ndims = 2;
+int g_model_output_shape[] = {1, 1};
+TfLiteType g_model_output_dtype = kTfLiteFloat32;

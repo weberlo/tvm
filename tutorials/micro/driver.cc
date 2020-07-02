@@ -8,7 +8,6 @@
 #include <tensorflow/lite/version.h>
 
 #include "model.h"
-#include "model_io.h"
 
 TF_LITE_MICRO_TESTS_BEGIN // {
 {

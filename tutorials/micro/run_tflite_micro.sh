@@ -3,20 +3,25 @@
 set -e
 
 tflite_model_path="$1"
-model_replace_text="$2"
-model_input_replace_text="$3"
+model_input_path="$2"
+model_metadata="$3"
 
-# Convert model to a C source file
-xxd -i "$tflite_model_path" > model.cc
-# Update variable names
-sed -i "s/${model_replace_text}/g_model/g" model.cc
+function as_c {
+  in_path="$1"
+  arr_name="$2"
 
-# Convert model input to a C source file
-xxd -i model_input.bytes > model_input.cc
-# Update variable names
-sed -i "s/${model_input_replace_text}/g_model_input/g" model_input.cc
+  replace_text=$(echo "${in_path}" | sed "s/\//_/g" | sed "s/\./_/g")
+  # Convert model to a C source file and set array var's name
+  xxd -i "${in_path}" | sed "s/${replace_text}/${arr_name}/g"
+}
+
+as_c "${tflite_model_path}" g_model > model.cc
+as_c "${model_input_path}" g_model_input >> model.cc
+echo "${model_metadata}" >> model.cc
 
 TF_PATH="$HOME/micro/tensorflow"
+
+# TODO see if we can consolidate these into a single compile cmd
 
 g++ -std=c++11 -DTF_LITE_STATIC_MEMORY -DNDEBUG -O3 \
   -DTF_LITE_DISABLE_X86_NEON \

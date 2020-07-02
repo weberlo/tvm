@@ -14,85 +14,6 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""
-Micro TVM with TFLite Models
-============================
-**Author**: `Tom Gall <https://github.com/tom-gall>`_
-
-This tutorial is an introduction to working with MicroTVM and a TFLite
-model with Relay.
-"""
-
-# %%
-# Setup
-# -----
-#
-# To get started, TFLite package needs to be installed as prerequisite.
-#
-# install tflite
-#
-# .. code-block:: bash
-#
-#   pip install tflite=2.1.0 --user
-#
-# or you could generate TFLite package yourself. The steps are the following:
-#
-#   Get the flatc compiler.
-#   Please refer to https://github.com/google/flatbuffers for details
-#   and make sure it is properly installed.
-#
-# .. code-block:: bash
-#
-#   flatc --version
-#
-# Get the TFLite schema.
-#
-# .. code-block:: bash
-#
-#   wget https://raw.githubusercontent.com/tensorflow/tensorflow/r1.13/tensorflow/lite/schema/schema.fbs
-#
-# Generate TFLite package.
-#
-# .. code-block:: bash
-#
-#   flatc --python schema.fbs
-#
-# Add the current folder (which contains generated tflite module) to PYTHONPATH.
-#
-# .. code-block:: bash
-#
-#   export PYTHONPATH=${PYTHONPATH:+$PYTHONPATH:}$(pwd)
-#
-# To validate that the TFLite package was installed successfully, ``python -c "import tflite"``
-#
-# CMSIS needs to be downloaded and the CMSIS_ST_PATH environment variable setup
-# This tutorial only supports the STM32F7xx series of boards.
-# Download from : https://www.st.com/en/embedded-software/stm32cubef7.html
-# After you've expanded the zip file
-#
-# .. code-block:: bash
-#
-#   export CMSIS_ST_PATH=/path/to/STM32Cube_FW_F7_V1.16.0/Drivers/CMSIS
-
-# %%
-# Recreating your own Pre-Trained TFLite model
-# --------------------------------------------
-#
-# The tutorial downloads a pretrained TFLite model. When working with microcontrollers
-# you need to be mindful these are highly resource constrained devices as such standard
-# models like MobileNet may not fit into their modest memory.
-#
-# For this tutorial, we'll make use of one of the TF Micro example models.
-#
-# If you wish to replicate the training steps see:
-# https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/micro/examples/hello_world/train
-#
-#   .. note::
-#
-#     If you accidentally download the example pretrained model from:
-#     wget https://storage.googleapis.com/download.tensorflow.org/models/tflite/micro/hello_world_2020_04_13.zip
-#     this will fail due to an unimplemented opcode (114)
-
 import os
 
 import numpy as np
@@ -103,14 +24,6 @@ import tvm.micro as micro
 from tvm.contrib.download import download_testdata
 from tvm.contrib import graph_runtime, util
 from tvm import relay
-
-
-# %%
-# Load and prepare the Pre-Trained Model
-# --------------------------------------
-#
-# Load the pretrained TFLite model from a file in your current
-# directory into a buffer
 
 model_url = 'https://people.linaro.org/~tom.gall/sine_model.tflite'
 model_file = 'sine_model.tflite'
@@ -124,10 +37,6 @@ interpreter.allocate_tensors()
 input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
 
-input_shape = input_details[0]['shape']
-# Test the model on random input data.
-input_data = np.array(np.random.random_sample(input_shape), dtype=np.float32)
-
 NP_TO_TVM_DTYPE = {
     np.float32: 'float32',
     np.float16: 'float16',
@@ -135,6 +44,20 @@ NP_TO_TVM_DTYPE = {
     np.int16: 'int16',
     np.int8: 'int8',
 }
+
+TVM_TO_TFLITE_DTYPE = {
+    'float32': 'kTfLiteFloat32',
+    'int32': 'kTfLiteInt32',
+    'int16': 'kTfLiteInt16',
+    'int8': 'kTfLiteInt8',
+}
+
+input_shape = input_details[0]['shape']
+input_dtype = NP_TO_TVM_DTYPE[input_details[0]['dtype']]
+output_shape = output_details[0]['shape']
+output_dtype = NP_TO_TVM_DTYPE[output_details[0]['dtype']]
+# Test the model on random input data.
+input_data = np.array(np.random.random_sample(input_shape), dtype=np.float32)
 
 def main():
     print(get_tflite_result())
@@ -160,25 +83,43 @@ def get_tfmicro_result():
         return out, err
 
     lite_model_path = model_path
-    model_input_bytes_path = 'model_input.bytes'
-
-    with open(model_input_bytes_path, 'wb') as f:
+    model_input_path = 'model_input.bytes'
+    with open(model_input_path, 'wb') as f:
         f.write(input_data.tobytes())
 
-    model_replace_text = lite_model_path.replace('/', '_').replace('.', '_')
-    model_input_replace_text = model_input_bytes_path.replace('/', '_').replace('.', '_')
+    model_metadata = """
+#include <tensorflow/lite/micro/all_ops_resolver.h>
+#include <tensorflow/lite/micro/micro_error_reporter.h>
+#include <tensorflow/lite/micro/micro_interpreter.h>
+#include <tensorflow/lite/micro/testing/micro_test.h>
+#include <tensorflow/lite/schema/schema_generated.h>
+#include <tensorflow/lite/version.h>
+    """
+
+    model_metadata += '\n'.join([
+        f'int g_model_input_ndims = {len(input_shape)};',
+        f'int g_model_input_shape[] = {{{", ".join(list(map(str, input_shape)))}}};',
+        f'TfLiteType g_model_input_dtype = {TVM_TO_TFLITE_DTYPE[input_dtype]};',
+        f'int g_model_output_ndims = {len(output_shape)};',
+        f'int g_model_output_shape[] = {{{", ".join(list(map(str, output_shape)))}}};',
+        f'TfLiteType g_model_output_dtype = {TVM_TO_TFLITE_DTYPE[output_dtype]};'
+    ])
+
     (out, err) = run_cmd(
         './run_tflite_micro.sh',
         lite_model_path,
-        model_replace_text,
-        model_input_replace_text)
-    out = out.decode('utf-8')
-    err = err.decode('utf-8')
-    print('Subprocess Stdout:')
-    print('  ' + out.replace('\n', '\n  '))
-    print('Subprocess Stderr:')
-    print('  ' + err.replace('\n', '\n  '))
-    return float(out)
+        model_input_path,
+        model_metadata
+        )
+    # out = out.decode('utf-8')
+    res = np.frombuffer(out, dtype=output_dtype)
+    # err = err.decode('utf-8')
+    # print('Subprocess Stdout:')
+    # print('  ' + out.replace('\n', '\n  '))
+    # print('Subprocess Stderr:')
+    # print('  ' + err.replace('\n', '\n  '))
+    # return float(out)
+    return res[0]
 
 
 def get_utvm_result():
