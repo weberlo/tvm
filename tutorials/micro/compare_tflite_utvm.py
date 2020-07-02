@@ -25,9 +25,12 @@ from tvm.contrib.download import download_testdata
 from tvm.contrib import graph_runtime, util
 from tvm import relay
 
-model_url = 'https://people.linaro.org/~tom.gall/sine_model.tflite'
-model_file = 'sine_model.tflite'
-model_path = download_testdata(model_url, model_file, module='data')
+# model_url = 'https://people.linaro.org/~tom.gall/sine_model.tflite'
+# model_file = 'sine_model.tflite'
+# model_path = download_testdata(model_url, model_file, module='data')
+
+model_path = 'models/sine_model.tflite'
+model_path = 'models/mobilenet_v1_0.25_128_quant.tflite'
 
 # Load the TFLite model and allocate tensors.
 interpreter = tf.lite.Interpreter(model_path=model_path)
@@ -43,6 +46,7 @@ NP_TO_TVM_DTYPE = {
     np.int32: 'int32',
     np.int16: 'int16',
     np.int8: 'int8',
+    np.uint8: 'uint8',
 }
 
 TVM_TO_TFLITE_DTYPE = {
@@ -50,6 +54,7 @@ TVM_TO_TFLITE_DTYPE = {
     'int32': 'kTfLiteInt32',
     'int16': 'kTfLiteInt16',
     'int8': 'kTfLiteInt8',
+    'uint8': 'kTfLiteUInt8',
 }
 
 input_shape = input_details[0]['shape']
@@ -57,12 +62,25 @@ input_dtype = NP_TO_TVM_DTYPE[input_details[0]['dtype']]
 output_shape = output_details[0]['shape']
 output_dtype = NP_TO_TVM_DTYPE[output_details[0]['dtype']]
 # Test the model on random input data.
-input_data = np.array(np.random.random_sample(input_shape), dtype=np.float32)
+input_data = np.array(np.random.random_sample(input_shape), dtype=input_dtype)
 
 def main():
-    print(get_tflite_result())
-    print(get_tfmicro_result())
-    print(get_utvm_result())
+    runtimes = [
+        # ('TVM TfLite', get_tvm_tflite_result),
+        ('TfLite', get_tflite_result),
+        ('TfLite Micro', get_tfmicro_result),
+        ('µTVM', get_utvm_result)
+        ]
+    for name, gen_func in runtimes:
+        print(f'{name}')
+        res = gen_func()
+        print(f'  {res} :: {res.shape}')
+        print()
+
+
+def get_tvm_tflite_result():
+    # TODO use ziheng's tflite runtime
+    pass
 
 
 def get_tflite_result():
@@ -71,7 +89,7 @@ def get_tflite_result():
     # The function `get_tensor()` returns a copy of the tensor data.
     # Use `tensor()` in order to get a pointer to the tensor.
     output_data = interpreter.get_tensor(output_details[0]['index'])
-    return output_data[0][0]
+    return output_data
 
 
 def get_tfmicro_result():
@@ -111,15 +129,12 @@ def get_tfmicro_result():
         model_input_path,
         model_metadata
         )
-    # out = out.decode('utf-8')
-    res = np.frombuffer(out, dtype=output_dtype)
-    # err = err.decode('utf-8')
-    # print('Subprocess Stdout:')
-    # print('  ' + out.replace('\n', '\n  '))
-    # print('Subprocess Stderr:')
-    # print('  ' + err.replace('\n', '\n  '))
-    # return float(out)
-    return res[0]
+    res = np.frombuffer(out, dtype=output_dtype).reshape(output_shape)
+    err = err.decode('utf-8')
+    if len(err) != 0:
+        print('Subprocess Stderr:')
+        print('  ' + err.replace('\n', '\n  '))
+    return res
 
 
 def get_utvm_result():
@@ -175,7 +190,7 @@ def get_utvm_result():
         mod.set_input(input_tensor, tvm.nd.array(input_data))
         mod.run()
         tvm_output = mod.get_output(0).asnumpy()
-        return tvm_output[0][0]
+        return tvm_output
 
 
 if __name__ == '__main__':

@@ -9,6 +9,17 @@
 
 #include "model.h"
 
+size_t TfLiteSizeOf(TfLiteType type) {
+  switch (type) {
+    case kTfLiteFloat32: return sizeof(float);
+    case kTfLiteInt32: return sizeof(int32_t);
+    case kTfLiteInt16: return sizeof(int16_t);
+    case kTfLiteInt8: return sizeof(int8_t);
+    case kTfLiteUInt8: return sizeof(uint8_t);
+    default: return 0;
+  }
+}
+
 TF_LITE_MICRO_TESTS_BEGIN // {
 {
   // Set up logging
@@ -64,7 +75,7 @@ TF_LITE_MICRO_TESTS_BEGIN // {
   // other).
 
   TF_LITE_MICRO_EXPECT_EQ(g_model_input_dtype, input->type);
-  size_t input_nbytes = 4;
+  size_t input_nbytes = TfLiteSizeOf(input->type);
   for (int i = 0; i < g_model_input_ndims; i++) {
     TF_LITE_MICRO_EXPECT_EQ(g_model_input_shape[i], input->dims->data[i]);
     input_nbytes *= g_model_input_shape[i];
@@ -72,15 +83,15 @@ TF_LITE_MICRO_TESTS_BEGIN // {
   TF_LITE_MICRO_EXPECT_EQ(input_nbytes, g_model_input_len);
 
   // Provide an input value
-  if (input->type == kTfLiteFloat32) {
-    memset(input->data.f, 0, input->bytes);
-    memcpy(input->data.f,
-           &g_model_input,
-           g_model_input_len);
-  } else {
-    // unhandled dtype
-    TF_LITE_MICRO_EXPECT_EQ(true, false);
-  }
+  memcpy(input->data.raw,
+          &g_model_input,
+          g_model_input_len);
+  // if (input->type == kTfLiteFloat32) {
+  //   // memset(input->data.f, 0, input->bytes);
+  // } else {
+  //   // unhandled dtype
+  //   TF_LITE_MICRO_EXPECT_EQ(true, false);
+  // }
 
   // Run the model on this input and check that it succeeds
   TfLiteStatus invoke_status = interpreter.Invoke();
@@ -90,7 +101,7 @@ TF_LITE_MICRO_TESTS_BEGIN // {
   // properties we expect. It should be the same as the input tensor.
   TfLiteTensor* output = interpreter.output(0);
   TF_LITE_MICRO_EXPECT_EQ(g_model_output_dtype, output->type);
-  size_t output_nbytes = 4;
+  size_t output_nbytes = TfLiteSizeOf(output->type);
   for (int i = 0; i < g_model_output_ndims; i++) {
     TF_LITE_MICRO_EXPECT_EQ(g_model_output_shape[i], output->dims->data[i]);
     output_nbytes *= g_model_output_shape[i];
