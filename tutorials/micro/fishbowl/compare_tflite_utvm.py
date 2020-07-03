@@ -83,7 +83,8 @@ def main():
 
     # model_path = 'models/sine_model/sine_model.tflite'
     # model_path = 'models/sine_model/sine_model.tflite'
-    model_path = 'models/micro_speech/model.tflite'
+    # model_path = 'models/micro_speech/model.tflite'
+    model_path = 'models/mobilenet_v1_0.25_128_quant/mobilenet_v1_0.25_128_quant.tflite'
 
     # TODO get all models in `models` dir into tflite format (some are in .cc)
     # TODO fix `tvm_import_tflite` after you wrongfucktored it
