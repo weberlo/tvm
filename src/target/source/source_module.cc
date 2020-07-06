@@ -115,7 +115,7 @@ class CSourceModuleNode : public runtime::ModuleNode {
         is_micro_runtime_(is_micro_runtime) {}
 
   const char* type_key() const {
-    return is_micro_runtime ? "micro-c" : "c";
+    return is_micro_runtime_ ? "micro-c" : "c";
   }
 
   PackedFunc GetFunction(const std::string& name, const ObjectPtr<Object>& sptr_to_self) final {
@@ -148,6 +148,7 @@ class CSourceModuleNode : public runtime::ModuleNode {
   std::string fmt_;
   std::string symbol_;
   Array<String> const_vars_;
+  bool is_micro_runtime_;
 };
 
 runtime::Module CSourceModuleCreate(const String& code, const String& fmt, const String& symbol,
@@ -213,8 +214,8 @@ runtime::Module DeviceSourceModuleCreate(
 TVM_REGISTER_GLOBAL("runtime.SourceModuleCreate").set_body_typed(SourceModuleCreate);
 
 TVM_REGISTER_GLOBAL("runtime.CSourceModuleCreate")
-    .set_body_typed([](String code, String fmt, String symbol, Array<String> const_vars) {
-      return CSourceModuleCreate(code, fmt, symbol, const_vars);
+.set_body_typed([](String code, String fmt, String symbol, Array<String> const_vars) {
+  return CSourceModuleCreate(code, fmt, symbol, const_vars, false);
     });
 
 }  // namespace codegen

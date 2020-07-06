@@ -124,10 +124,6 @@ std::unordered_set<std::string> TargetNode::GetLibs() const {
   return result;
 }
 
-bool TargetNode::is_micro_runtime() const {
-  return std::find(keys_array.begin(), keys_array.end(), "micro-runtime") != keys_array.end();
-}
-
 const std::string& TargetNode::str() const {
   if (str_repr_.empty()) {
     std::ostringstream os;
