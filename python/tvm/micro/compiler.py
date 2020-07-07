@@ -57,24 +57,22 @@ class Compiler(metaclass=abc.ABCMeta):
   # Maps regexes identifying CPUs to the default toolchain prefix for that CPU.
   TOOLCHAIN_PREFIX_BY_CPU_REGEX = {
     r'cortex-[am].*': 'arm-none-eabi-',
-    'x86-64': '',
+    'x86_64': '',
   }
 
   def _AutodetectToolchainPrefix(self, target):
-    for opt in target.options:
-      if opt.startswith('-mcpu='):
-        matches = []
-        for regex, prefix in self.TOOLCHAIN_PREFIX_BY_CPU_REGEX.items():
-          if re.match(regex, opt[len('-mcpu='):]):
-            matches.append(prefix)
+    matches = []
+    for regex, prefix in self.TOOLCHAIN_PREFIX_BY_CPU_REGEX.items():
+      if re.match(regex, target.attrs['mcpu']):
+        matches.append(prefix)
 
-        if matches:
-          if len(matches) != 1:
-            raise NoDefaultToolchainMatchedError(
-              f'{opt} matched more than 1 default toolchain prefix: {", ".join(matches)}. Specify '
-              f'cc.cross_compiler to create_micro_library()')
+    if matches:
+      if len(matches) != 1:
+        raise NoDefaultToolchainMatchedError(
+          f'{opt} matched more than 1 default toolchain prefix: {", ".join(matches)}. Specify '
+          f'cc.cross_compiler to create_micro_library()')
 
-          return prefix
+      return prefix
 
     raise NoDefaultToolchainMatchedError(f'target {str(target)} did not match any default toolchains')
 
@@ -91,9 +89,10 @@ class Compiler(metaclass=abc.ABCMeta):
         Default options used the configure the compiler for that target.
     """
     opts = []
-    for opt in target.options_array:
-      if opt.startswith('-m'):
-        opts.append(opt)
+    if target.attrs.get('mcpu'):
+      opts.append(f'-mcpu={target.attrs["mcpu"]}')
+    if target.attrs.get('mfpu'):
+      opts.append(f'-mfpu={target.attrs["mfpu"]}')
 
     return opts
 
@@ -178,6 +177,10 @@ class Compiler(metaclass=abc.ABCMeta):
     raise NotImplementedError()
 
 
+class IncompatibleTargetError(Exception):
+  """Raised when source files specify a target that differs from the compiler target."""
+
+
 class DefaultCompiler(Compiler):
 
   def __init__(self, target=None, *args, **kw):
@@ -193,18 +196,18 @@ class DefaultCompiler(Compiler):
 
       target = self.target
 
-    if str(self.target) != str(target):
+    if self.target is not None and str(self.target) != str(target):
       raise IncompatibleTargetError(
         f'auto-detected target {target} differs from configured {self.target}')
 
-    prefix = self._AutodetectToolchainPrefix(self.target)
+    prefix = self._AutodetectToolchainPrefix(target)
     outputs = []
     for src in sources:
       src_base, src_ext = os.path.splitext(os.path.basename(src))
 
       compiler_name = {'.c': 'gcc', '.cc': 'g++', '.cpp': 'g++'}[src_ext]
       args = [prefix + compiler_name, '-g']
-      args.extend(self._DefaultsFromTarget(self.target))
+      args.extend(self._DefaultsFromTarget(target))
 
       if options is not None:
         args.extend(options.get(f'{src_ext[1:]}flags', []))

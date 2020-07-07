@@ -8,7 +8,6 @@ import numpy
 import tvm
 import tvm.micro
 
-from tvm.micro.contrib import mbed
 from tvm.contrib import device_util
 from tvm.contrib import util
 

@@ -49,6 +49,9 @@ class Session:
 
         self._rpc = None
 
+    def get_system_lib(self):
+        return self._rpc.get_function('runtime.SystemLib')()
+
     def __enter__(self):
         """Initialize this session and establish an RPC session with the on-device RPC server.
 
