@@ -242,9 +242,6 @@ class DefaultCompiler(Compiler):
     output_filename = os.path.basename(output)
     output_abspath = os.path.join(output, output_filename)
     args.extend(['-g', '-o', output_abspath])
-    for obj in objects:
-      for lib_name in obj.library_files:
-        args.append(obj.abspath(lib_name))
 
     if link_main:
       host_main_srcs = glob.glob(os.path.join(build.CRT_ROOT_DIR, 'host', '*.cc'))
@@ -254,6 +251,10 @@ class DefaultCompiler(Compiler):
           args.append(main_lib.abspath(lib_name))
       else:
         args.extend(host_main_srcs)
+
+    for obj in objects:
+      for lib_name in obj.library_files:
+        args.append(obj.abspath(lib_name))
 
     binutil.run_cmd(args)
     return tvm.micro.MicroBinary(output, output_filename, [])
