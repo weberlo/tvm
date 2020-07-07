@@ -57,7 +57,7 @@ class Compiler(metaclass=abc.ABCMeta):
   # Maps regexes identifying CPUs to the default toolchain prefix for that CPU.
   TOOLCHAIN_PREFIX_BY_CPU_REGEX = {
     r'cortex-[am].*': 'arm-none-eabi-',
-    'x86_64': '',
+    'x86[_-]64': '',
   }
 
   def _AutodetectToolchainPrefix(self, target):
