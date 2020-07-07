@@ -175,24 +175,8 @@ class MbedCompiler(tvm.micro.Compiler):
 
   IMAGE_RE = re.compile('^Image: ./(.*)$', re.MULTILINE)
 
-  GLOB_PATTERNS = ['__tvm_*', 'libtvm__*']
-
   def Binary(self, output, objects, options=None):
-    copied = []
-    for p in self.GLOB_PATTERNS:
-      for f in glob.glob(os.path.join(self._project_dir, p)):
-        os.unlink(f)
-
-    for obj in objects:
-      for lib_file in obj.library_files:
-        obj_base = os.path.basename(lib_file)
-        if obj_base.endswith('.a'):
-          dest = os.path.join(self._project_dir, f'libtvm__{obj_base}')
-        else:
-          dest = os.path.join(self._project_dir, f'__tvm_{obj_base}')
-
-        shutil.copy(obj.abspath(lib_file), dest)
-
+    populate_tvm_objs(output, objects)
     args = ['compile', '--source', '.']
     if options:
       args += self._OptionsToArgs(options)

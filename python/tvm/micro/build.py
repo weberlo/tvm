@@ -71,7 +71,7 @@ def _generate_mod_wrapper(src_path):
     wrapper_f.write('\n'.join(lines))
 
 
-CRT_RUNTIME_LIB_NAMES = ['common', 'rpc_server']
+CRT_RUNTIME_LIB_NAMES = ['rpc_server', 'common']
 
 
 TVM_ROOT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
@@ -81,9 +81,9 @@ CRT_ROOT_DIR = os.path.join(TVM_ROOT_DIR, 'src', 'runtime', 'crt')
 
 
 RUNTIME_LIB_SRC_DIRS = (
+  [os.path.join(CRT_ROOT_DIR, n) for n in CRT_RUNTIME_LIB_NAMES] +
   [os.path.join(TVM_ROOT_DIR,
-                '3rdparty/mbed-os/targets/TARGET_NORDIC/TARGET_NRF5x/TARGET_SDK_11/libraries/crc16')] +
-  [os.path.join(CRT_ROOT_DIR, n) for n in CRT_RUNTIME_LIB_NAMES])
+                '3rdparty/mbed-os/targets/TARGET_NORDIC/TARGET_NRF5x/TARGET_SDK_11/libraries/crc16')])
 
 
 RUNTIME_SRC_REGEX = re.compile('^.*\.cc?$', re.IGNORECASE)
@@ -141,7 +141,6 @@ def build_static_runtime(workspace, compiler, module, lib_opts=None, bin_opts=No
   _generate_mod_wrapper(mod_src_path)
 
   libs = []
-  libs.append(compiler.Library(mod_build_dir, [mod_src_path], lib_opts))
 
   for lib_src_dir in RUNTIME_LIB_SRC_DIRS:
     lib_name = os.path.basename(lib_src_dir)
@@ -154,6 +153,8 @@ def build_static_runtime(workspace, compiler, module, lib_opts=None, bin_opts=No
         lib_srcs.append(os.path.join(lib_src_dir, p))
 
     libs.append(compiler.Library(lib_build_dir, lib_srcs, lib_opts))
+
+  libs.append(compiler.Library(mod_build_dir, [mod_src_path], lib_opts))
 
   runtime_build_dir = workspace.relpath(f'build/runtime')
   os.makedirs(runtime_build_dir)

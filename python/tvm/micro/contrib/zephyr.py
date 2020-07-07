@@ -80,7 +80,7 @@ class ZephyrCompiler(tvm.micro.Compiler):
     with open(os.path.join(output, 'prj.conf'), 'w') as prj_conf_f:
       prj_conf_f.write(
         'CONFIG_CPLUSPLUS=y\n'
-#        'CONFIG_NEWLIB_LIBC=y\n'
+        'CONFIG_NEWLIB_LIBC=y\n'
 #        'CONFIG_LIB_CPLUSPLUS=y\n'
       )
 
