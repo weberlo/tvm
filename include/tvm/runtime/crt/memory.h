@@ -29,8 +29,9 @@
 extern "C" {
 #endif
 
-#include <inttypes.h>
 #include <stdlib.h>
+
+extern int vleak_size;
 
 /*!
  * \brief Allocate memory from manager
@@ -54,18 +55,8 @@ void* vrealloc(void* ptr, size_t size);
  */
 void vfree(void* ptr);
 
-/*! \brief Physical address type */
-typedef uintptr_t tvm_phy_addr_t;
-
-typedef struct MemoryManager MemoryManager;
-
-MemoryManager* MemoryManagerCreate(uint8_t* memory_pool,
-                                   size_t memory_pool_size_bytes,
-                                   size_t page_size_bytes_log2);
-
 #ifdef __cplusplus
 }  // extern "C"
 #endif
-
 
 #endif  // TVM_RUNTIME_CRT_MEMORY_H_

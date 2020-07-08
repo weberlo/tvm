@@ -17,28 +17,23 @@
  * under the License.
  */
 
-/*!
- * \file tvm/runtime/crt/platform.h
- * \brief The virtual memory manager for micro-controllers
- */
+// LINT_C_FILE
 
-#ifndef TVM_RUNTIME_CRT_PLATFORM_H_
-#define TVM_RUNTIME_CRT_PLATFORM_H_
+/*!
+ * \file tvm/runtime/crt/include/tvm/runtime/crt/internal/common/func_registry.h
+ * \brief Abstract device memory management API
+ */
+#ifndef TVM_RUNTIME_CRT_INCLUDE_TVM_RUNTIME_CRT_INTERNAL_COMMON_FUNC_REGISTRY_H_
+#define TVM_RUNTIME_CRT_INCLUDE_TVM_RUNTIME_CRT_INTERNAL_COMMON_FUNC_REGISTRY_H_
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/*! \brief Called when an internal error occurs and execution cannot continue.
- *
- * The platform should ideally restart or hang at this point.
- *
- * \param code An error code.
- */
-void __attribute__((noreturn)) TVMPlatformAbort(int code);
+int strcmp_cursor(const char** cursor, const char* name);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
-#endif  // TVM_RUNTIME_CRT_PLATFORM_H_
+#endif  // TVM_RUNTIME_CRT_INCLUDE_TVM_RUNTIME_CRT_INTERNAL_COMMON_FUNC_REGISTRY_H_

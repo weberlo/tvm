@@ -17,22 +17,22 @@
  * under the License.
  */
 
+// LINT_C_FILE
+
 /*!
  * \file load_json.c
  * \brief Load graph from JSON file.
  */
-#include "load_json.h"
-
-#include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
+#include <tvm/runtime/crt/internal/graph_runtime/load_json.h>
 #include <tvm/runtime/crt/memory.h>
 
 // the node entry structure in serialized format
 typedef struct JSONNodeEntry {
-  unsigned long node_id;
-  unsigned long index;
-  unsigned long version;
+  uint32_t node_id;
+  uint32_t index;
+  uint32_t version;
   void (*Load)(struct JSONNodeEntry* entry, JSONReader* reader);
 } JSONNodeEntry;
 
@@ -198,7 +198,7 @@ int JSONReader_ReadString(JSONReader* reader, char* out_str) {
         status = -1;
         break;
       }
-      strncat(output, (char*) &ch, 1);
+      strncat(output, &ch, 1);
       output_counter++;
       if (output_counter >= 127) {
         fprintf(stderr, "Error: string size greater than 128.\n");
@@ -206,7 +206,7 @@ int JSONReader_ReadString(JSONReader* reader, char* out_str) {
         break;
       }
     }
-    if (ch == ((char) EOF) || ch == '\r' || ch == '\n') {
+    if (ch == EOF || ch == '\r' || ch == '\n') {
       fprintf(stderr, "Error at line X, Expect \'\"\' but reach end of line\n");
       status = -1;
     }
@@ -215,21 +215,21 @@ int JSONReader_ReadString(JSONReader* reader, char* out_str) {
   return status;
 }
 
-int JSONReader_ReadUnsignedInteger(JSONReader* reader, unsigned long* out_value) {
+int JSONReader_ReadUnsignedInteger(JSONReader* reader, unsigned int* out_value) {
   int status = 0;
   char* endptr;
   const char* icstr = reader->isptr;
-  unsigned long number = strtoul(icstr, &endptr, 10);
+  unsigned int number = strtol(icstr, &endptr, 10);
   reader->isptr += endptr - icstr;
   *out_value = number;
   return status;
 }
 
-int JSONReader_ReadInteger(JSONReader* reader, long* out_value) {
+int JSONReader_ReadInteger(JSONReader* reader, int64_t* out_value) {
   int status = 0;
   char* endptr;
   const char* icstr = reader->isptr;
-  long number = strtol(icstr, &endptr, 10);
+  int64_t number = strtol(icstr, &endptr, 10);
   reader->isptr += endptr - icstr;
   *out_value = number;
   return status;
