@@ -184,7 +184,10 @@ class RPCModuleNode final : public ModuleNode {
 
   PackedFunc GetTimeEvaluator(const std::string& name, TVMContext ctx, int number, int repeat,
                               int min_repeat_ms) {
+    // TODO(weberlo) can we not just move the closure into here?
+    std::cout << "BEFORE" << std::endl;
     InitRemoteFunc(&remote_get_time_evaluator_, "runtime.RPCTimeEvaluator");
+    std::cout << "AFTER" << std::endl;
     // Remove session mask because we pass ctx by parts.
     int dev_type = ctx.device_type;
     CHECK_EQ(dev_type / kRPCSessMask, sess_->table_index() + 1)
@@ -192,10 +195,13 @@ class RPCModuleNode final : public ModuleNode {
     ctx.device_type = static_cast<DLDeviceType>(ctx.device_type % kRPCSessMask);
 
     if (module_handle_ != nullptr) {
+      std::cout << "AYYYY" << std::endl;
+      // TODO see how much effort it would take to move the closure host-side
       return remote_get_time_evaluator_(GetRef<Module>(this), name,
                                         static_cast<int>(ctx.device_type), ctx.device_id, number,
                                         repeat, min_repeat_ms);
     } else {
+      std::cout << "BEEEEEE" << std::endl;
       return remote_get_time_evaluator_(Optional<Module>(nullptr), name,
                                         static_cast<int>(ctx.device_type), ctx.device_id, number,
                                         repeat, min_repeat_ms);
@@ -221,7 +227,7 @@ class RPCModuleNode final : public ModuleNode {
   void InitRemoteFunc(FType* func, const std::string& name) {
     if (*func != nullptr) return;
     RPCSession::PackedFuncHandle handle = sess_->GetFunction(name);
-    CHECK(handle != nullptr) << "Cannot found remote function " << name;
+    CHECK(handle != nullptr) << "Could not find remote function " << name;
     *func = WrapRemoteFunc(handle);
   }
 
@@ -304,11 +310,11 @@ PackedFunc WrapTimeEvaluator(PackedFunc pf, TVMContext ctx, int number, int repe
                              int min_repeat_ms) {
   CHECK(pf != nullptr);
 
-  if (static_cast<int>(ctx.device_type) == static_cast<int>(kDLMicroDev)) {
-    auto get_micro_time_evaluator = runtime::Registry::Get("micro._GetMicroTimeEvaluator");
-    CHECK(get_micro_time_evaluator != nullptr) << "micro backend not enabled";
-    return (*get_micro_time_evaluator)(pf, ctx, number, repeat);
-  }
+  // if (static_cast<int>(ctx.device_type) == static_cast<int>(kDLMicroDev)) {
+  //   auto get_micro_time_evaluator = runtime::Registry::Get("micro._GetMicroTimeEvaluator");
+  //   CHECK(get_micro_time_evaluator != nullptr) << "micro backend not enabled";
+  //   return (*get_micro_time_evaluator)(pf, ctx, number, repeat);
+  // }
 
   auto ftimer = [pf, ctx, number, repeat, min_repeat_ms](TVMArgs args, TVMRetValue* rv) mutable {
     TVMRetValue temp;
@@ -359,6 +365,7 @@ PackedFunc WrapTimeEvaluator(PackedFunc pf, TVMContext ctx, int number, int repe
 TVM_REGISTER_GLOBAL("runtime.RPCTimeEvaluator")
     .set_body_typed([](Optional<Module> opt_mod, std::string name, int device_type, int device_id,
                        int number, int repeat, int min_repeat_ms) {
+      std::cout << "WIR SIND FUCKN HERE" << std::endl;
       TVMContext ctx;
       ctx.device_type = static_cast<DLDeviceType>(device_type);
       ctx.device_id = device_id;

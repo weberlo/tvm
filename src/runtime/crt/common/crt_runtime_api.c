@@ -174,6 +174,55 @@ int SystemLibraryCreate(TVMValue* args, int* type_codes, int num_args, TVMValue*
   return 0;
 }
 
+int RPCTimeEvaluator(
+  TVMValue* args, int* type_codes,
+  int num_args,
+  TVMValue* ret_val, int* ret_type_codes) {
+
+  // args:
+  //   Optional<Module> opt_mod, std::string name, int device_type, int device_id,
+  //     int number, int repeat, int min_repeat_ms
+
+  // example call:
+  //   feval = _ffi_api.RPCTimeEvaluator(
+  //     self, func_name, ctx.device_type, ctx.device_id,
+  //     number, repeat, min_repeat_ms)
+
+  TVMModuleHandle mod;
+  const char* name;
+  // TODO dev type
+  // TODO dev id
+  int number;
+  int repeat;
+  int min_repeat_ms;
+
+  TVMFunctionHandle func_to_time;
+
+  ret_val[0].v_handle = NULL;
+  ret_type_codes[0] = kTVMNullptr;
+  if (num_args != 7 ||
+      type_codes[0] != kTVMModuleHandle ||
+      type_codes[1] != kTVMStr) {
+    TVMAPIErrorf("invalid arg signature");
+    return -1;
+  }
+
+  mod = (TVMModuleHandle) args[0].v_handle;
+  name = args[1].v_str;
+  int ret_code = TVMModGetFunction(mod, name, /* query_imports */ 0, &func_to_time);
+  if (ret_code != 0) {
+    return ret_code;
+  }
+
+  // TODO shit. normally we would be returning a closure here. andrew suggested
+  // adding a bit in the func/mod index for determining whether we should time
+  // this func, but we still need to store the `number`, `repeat`, and
+  // `min_repeat_ms` fields somewhere.
+
+  TVMAPIErrorf("haha u lick farts");
+  return -1;
+}
+
 static TVMFunctionHandle EncodeFunctionHandle(tvm_module_index_t module_index, tvm_function_index_t function_index) {
   return (TVMFunctionHandle) ((uintptr_t) (((module_index | 0x8000) << (sizeof(tvm_function_index_t) * 8)) | (function_index | 0x8000)));
 }
@@ -199,7 +248,6 @@ static int DecodeFunctionHandle(TVMFunctionHandle handle, tvm_module_index_t* mo
 
 int TVMFuncCall(TVMFunctionHandle func_handle, TVMValue* arg_values, int* type_codes, int num_args,
                 TVMValue* ret_val, int* ret_type_code) {
-  TVMAPIErrorf("IN TVMFUNCCALL");
   tvm_module_index_t module_index;
   tvm_function_index_t function_index;
   void* resource_handle;
@@ -209,8 +257,6 @@ int TVMFuncCall(TVMFunctionHandle func_handle, TVMValue* arg_values, int* type_c
   if (DecodeFunctionHandle(func_handle, &module_index, &function_index) != 0) {
     return -1;
   }
-
-  TVMAPIErrorf("DECODED FUNC HANDLE");
 
   if (module_index == kGlobalFuncModuleIndex) {
     resource_handle = NULL;
@@ -223,7 +269,6 @@ int TVMFuncCall(TVMFunctionHandle func_handle, TVMValue* arg_values, int* type_c
     TVMAPIErrorf("invalid function index: %04" PRIx16, function_index);
     return -1;
   }
-  TVMAPIErrorf("GOT FROM REGSITERY %p", func);
 
   ret_type_code[0] = kTVMNullptr;
   ret_val[0].v_handle = NULL;
@@ -322,6 +367,11 @@ int TVMInitializeRuntime() {
   }
 
   error = TVMFuncRegisterGlobal("runtime.SystemLib", &SystemLibraryCreate, 0);
+  if (error != 0) {
+    return error;
+  }
+
+  error = TVMFuncRegisterGlobal("runtime.RPCTimeEvaluator", &RPCTimeEvaluator, 0);
   if (error != 0) {
     return error;
   }
