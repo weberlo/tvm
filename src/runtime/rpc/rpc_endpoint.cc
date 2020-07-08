@@ -492,6 +492,7 @@ class RPCEndpoint::EventHandler : public dmlc::Stream {
     uint64_t call_handle;
 
     this->Read(&call_handle);
+
     TVMArgs args = RecvPackedSeq();
 
     this->SwitchToState(kWaitForAsyncCallback);
@@ -798,10 +799,13 @@ void RPCEndpoint::CallFunc(RPCSession::PackedFuncHandle h, const TVMValue* arg_v
       sizeof(code) + sizeof(handle) +
       handler_->PackedSeqGetNumBytes(arg_values, arg_type_codes, num_args, true);
 
+  std::cout << "AYYY " << packet_nbytes << std::endl;
   handler_->Write(packet_nbytes);
   handler_->Write(code);
   handler_->Write(handle);
+  std::cout << "HANDLE " << handle << std::endl;
   handler_->SendPackedSeq(arg_values, arg_type_codes, num_args, true);
+  std::cout << "LMAO" << std::endl;
 
   code = HandleUntilReturnEvent(true, encode_return);
   CHECK(code == RPCCode::kReturn) << "code=" << static_cast<int>(code);

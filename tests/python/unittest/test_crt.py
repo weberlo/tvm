@@ -87,7 +87,8 @@ def test_dev_timer(sess):
   start_timer = system_lib.get_function('TVMPlatformTimerStart')
   stop_timer = system_lib.get_function('TVMPlatformTimerStop')
   start_timer()
-  stop_timer()
+  exec_time = stop_timer()
+  print(f'exec time took {exec_time} seconds')
   # platform_abort = system_lib.get_function('TVMPlatformAbort')
   # platform_abort(-1)
 

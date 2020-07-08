@@ -25,6 +25,8 @@
 #ifndef TVM_RUNTIME_CRT_PLATFORM_H_
 #define TVM_RUNTIME_CRT_PLATFORM_H_
 
+#include <tvm/runtime/c_runtime_api.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -37,9 +39,13 @@ extern "C" {
  */
 void __attribute__((noreturn)) TVMPlatformAbort(int code);
 
-// void TVMPlatformTimerStart();
+int TVMPlatformTimerStart(TVMValue* args, int* type_codes, int num_args,
+                           TVMValue* out_ret_value, int* out_ret_tcode,
+                           void* resource_handle);
 
-// void TVMPlatformTimerStop();
+int TVMPlatformTimerStop(TVMValue* args, int* type_codes, int num_args,
+                         TVMValue* out_ret_value, int* out_ret_tcode,
+                         void* resource_handle);
 
 /*! \brief Enter a critical section of code which is not thread-safe.
  *

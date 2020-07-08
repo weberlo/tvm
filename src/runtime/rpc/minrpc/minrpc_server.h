@@ -139,11 +139,14 @@ class MinRPCServer {
     TVMValue ret_value[3];
     int ret_tcode[3];
 
+    LOG_DEBUG("Handling Call Func");
     this->Read(&call_handle);
     RecvPackedSeq(&values, &tcodes, &num_args);
 
+    LOG_DEBUG("before TVMFuncCall");
     int call_ecode = TVMFuncCall(reinterpret_cast<void*>(call_handle), values, tcodes, num_args,
                                  &(ret_value[1]), &(ret_tcode[1]));
+    LOG_DEBUG("after TVMFuncCall(call_ecode=%d)", call_ecode);
 
     if (call_ecode == 0) {
       // Return value encoding as in LocalSession

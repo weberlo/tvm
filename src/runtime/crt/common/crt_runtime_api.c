@@ -198,6 +198,7 @@ static int DecodeFunctionHandle(TVMFunctionHandle handle, tvm_module_index_t* mo
 
 int TVMFuncCall(TVMFunctionHandle func_handle, TVMValue* arg_values, int* type_codes, int num_args,
                 TVMValue* ret_val, int* ret_type_code) {
+  TVMAPIErrorf("IN TVMFUNCCALL");
   tvm_module_index_t module_index;
   tvm_function_index_t function_index;
   void* resource_handle;
@@ -208,6 +209,8 @@ int TVMFuncCall(TVMFunctionHandle func_handle, TVMValue* arg_values, int* type_c
     return -1;
   }
 
+  TVMAPIErrorf("DECODED FUNC HANDLE");
+
   if (module_index == kGlobalFuncModuleIndex) {
     resource_handle = NULL;
     registry = &global_func_registry.registry;
@@ -215,11 +218,11 @@ int TVMFuncCall(TVMFunctionHandle func_handle, TVMValue* arg_values, int* type_c
     resource_handle = (void*) registered_modules[module_index]->registry;
     registry = registered_modules[module_index]->registry;
   }
-
   if (TVMFuncRegistry_GetByIndex(registry, function_index, &func) != 0) {
     TVMAPIErrorf("invalid function index: %04" PRIx16, function_index);
     return -1;
   }
+  TVMAPIErrorf("GOT FROM REGSITERY %p", func);
 
   ret_type_code[0] = kTVMNullptr;
   ret_val[0].v_handle = NULL;
