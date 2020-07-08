@@ -31,6 +31,7 @@
 #include <dmlc/endian.h>
 #include <tvm/runtime/c_runtime_api.h>
 #include <cstring>
+#include <iostream>
 
 #include "../../../support/generic_arena.h"
 #include "rpc_protocol.h"
@@ -410,7 +411,9 @@ class MinRPCServer {
     TVMContext ctx = values[0].v_ctx;
     void* handle = values[1].v_handle;
 
+    std::cerr << "BEFORE FREE" << std::endl;
     int call_ecode = TVMDeviceFreeDataSpace(ctx, handle);
+    std::cerr << "AFTER FREE" << std::endl;
 
     if (call_ecode == 0) {
       this->ReturnVoid();

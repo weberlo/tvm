@@ -84,7 +84,8 @@ int TVMDeviceAllocDataSpace(DLContext ctx, size_t nbytes, size_t alignment, DLDa
 }
 
 int TVMDeviceFreeDataSpace(TVMContext ctx, void *ptr) {
-  vfree(ptr);
+  // TODO fix x86 vfree impl
+  // vfree(ptr);
   return 0;
 }
 

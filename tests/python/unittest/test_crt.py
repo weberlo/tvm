@@ -47,38 +47,22 @@ def _setup(test_func):
   }
 
   flasher = compiler.Flasher(**flasher_kw)
-  print('WHEEERRRR')
   with tvm.micro.Session(binary=micro_binary, flasher=flasher) as sess:
-  #   print('WATTTTTTT')
     test_func(sess)
-  #   print('WILLLLLLLLLL')
-  # print('ROKKKKKKKKKKKk')
-    # A_data = tvm.nd.array(numpy.array([2, 3], dtype='int8'), ctx=sess.context)
-    # B_data = tvm.nd.array(numpy.array([4], dtype='int8'), ctx=sess.context)
-    # C_data = tvm.nd.array(numpy.array([0, 0], dtype='int8'), ctx=sess.context)
-
-    # system_lib = sess._rpc.system_lib()
-    # print('got system lib', system_lib)
-    # system_lib.get_function('add')(A_data, B_data, C_data)
-    # print('got data!', C_data.asnumpy())
-    # assert (C_data.asnumpy() == numpy.array([6, 7])).all()
 
 
 def test_compile_runtime(sess):
   """Test compiling the on-device runtime."""
-  # TODO figure out why this test isn't working when factored into a function
-  print('CANNNNNNNNNNNN')
   A_data = tvm.nd.array(numpy.array([2, 3], dtype='int8'), ctx=sess.context)
-  print('WEEEEE')
-  # B_data = tvm.nd.array(numpy.array([4], dtype='int8'), ctx=sess.context)
-  # C_data = tvm.nd.array(numpy.array([0, 0], dtype='int8'), ctx=sess.context)
+  B_data = tvm.nd.array(numpy.array([4], dtype='int8'), ctx=sess.context)
+  C_data = tvm.nd.array(numpy.array([0, 0], dtype='int8'), ctx=sess.context)
 
-  # system_lib = sess._rpc.system_lib()
-  # print('got system lib', system_lib)
-  # system_lib.get_function('add')(A_data, B_data, C_data)
-  # system_lib.get_function('add')
-  # print('got data!', C_data.asnumpy())
-  # assert (C_data.asnumpy() == numpy.array([6, 7])).all()
+  system_lib = sess._rpc.system_lib()
+  print('got system lib', system_lib)
+  system_lib.get_function('add')(A_data, B_data, C_data)
+  system_lib.get_function('add')
+  print('got data!', C_data.asnumpy())
+  assert (C_data.asnumpy() == numpy.array([6, 7])).all()
 
 
 def test_dev_timer(sess):
@@ -89,10 +73,15 @@ def test_dev_timer(sess):
   start_timer()
   exec_time = stop_timer()
   print(f'exec time took {exec_time} seconds')
-  # platform_abort = system_lib.get_function('TVMPlatformAbort')
-  # platform_abort(-1)
+
+
+def test_time_evaluator(sess):
+  system_lib = sess._rpc.system_lib()
+  print('got system lib', system_lib)
+
 
 
 if __name__ == '__main__':
   # _setup(test_compile_runtime)
-  _setup(test_dev_timer)
+  # _setup(test_dev_timer)
+  _setup(test_time_evaluator)
