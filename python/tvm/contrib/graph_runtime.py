@@ -56,10 +56,10 @@ def create(graph_json_str, libmod, ctx):
 
     ctx, num_rpc_ctx, device_type_id = get_device_ctx(libmod, ctx)
 
-    if num_rpc_ctx == len(ctx):
-        fcreate = ctx[0]._rpc_sess.get_function("tvm.graph_runtime.create")
-    else:
-        fcreate = tvm._ffi.get_global_func("tvm.graph_runtime.create")
+#    if num_rpc_ctx == len(ctx):
+#        fcreate = ctx[0]._rpc_sess.get_function("tvm.graph_runtime.create")
+#    else:
+    fcreate = tvm._ffi.get_global_func("tvm.graph_runtime.create")
 
     return GraphModule(fcreate(graph_json_str, libmod, *device_type_id))
 
@@ -103,7 +103,7 @@ def get_device_ctx(libmod, ctx):
             assert _rpc_ffi_api.SessTableIndex(
                 libmod) == cur_ctx._rpc_sess._tbl_index
             num_rpc_ctx += 1
-            device_type = cur_ctx.device_type % rpc_base.RPC_SESS_MASK
+            device_type = cur_ctx.device_type # % rpc_base.RPC_SESS_MASK
         device_type_id.append(device_type)
         device_type_id.append(cur_ctx.device_id)
 

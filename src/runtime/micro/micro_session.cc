@@ -94,6 +94,7 @@ class MicroTransportChannel : public RPCChannel {
       std::string chunk = frecv_(128);
       pending_chunk_ = chunk;
       LOG(INFO) << "receive " << pending_chunk_.size();
+      CHECK(pending_chunk_.size() > 0);
     }
   }
 

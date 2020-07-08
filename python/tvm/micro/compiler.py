@@ -289,6 +289,7 @@ class HostFlasher(Flasher):
     self.debug = debug
 
   def Flash(self, micro_binary):
+    print('flash', self.debug)
     if self.debug:
       gdb_wrapper = debugger.GdbTransportDebugger([micro_binary.abspath(micro_binary.binary_file)])
       return transport.DebugWrapperTransport(

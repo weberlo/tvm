@@ -26,7 +26,7 @@ void TVMPlatformAbort(int exit_code) {
 }
 }
 
-uint8_t memory[64 * 1024];
+uint8_t memory[512 * 1024];
 
 int main(int argc, char** argv) {
   utvm_rpc_server_t rpc_server = utvm_rpc_server_init(memory, sizeof(memory), 8, &utvm_write_func, nullptr);

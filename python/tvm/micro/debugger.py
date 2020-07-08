@@ -45,6 +45,7 @@ class GdbDebugger(Debugger):
           logging.warn('on_terminate_callback raised exception', exc_info=True)
 
   def Start(self):
+    print('start GDB!')
     kw = self.PopenKwargs()
     self.did_terminate = threading.Event()
     self.old_signal = signal.signal(signal.SIGINT, signal.SIG_IGN)
