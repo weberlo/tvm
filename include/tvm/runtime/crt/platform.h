@@ -37,6 +37,10 @@ extern "C" {
  */
 void __attribute__((noreturn)) TVMPlatformAbort(int code);
 
+// void TVMPlatformTimerStart();
+
+// void TVMPlatformTimerStop();
+
 /*! \brief Enter a critical section of code which is not thread-safe.
  *
  * The implementation should ensure that no other code (i.e. ISRs) can execute after this function

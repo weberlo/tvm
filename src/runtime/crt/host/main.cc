@@ -1,10 +1,13 @@
 #include <iostream>
 #include <unistd.h>
+#include <chrono>
 
 #include <inttypes.h>
 
 #include <tvm/runtime/crt/logging.h>
 #include <tvm/runtime/micro/micro_rpc_server.h>
+
+using namespace std::chrono;
 
 extern "C" {
 
@@ -20,10 +23,25 @@ ssize_t utvm_write_func(void* context, const uint8_t* data, size_t num_bytes) {
   return to_return;
 }
 
+
 void TVMPlatformAbort(int exit_code) {
   std::cerr << "TVM Abort:" << exit_code << std::endl;
   throw "Aborted";
 }
+
+high_resolution_clock::time_point utvm_start_time;
+
+void TVMPlatformTimerStart() {
+  utvm_start_time = high_resolution_clock::now();
+}
+
+void TVMPlatformTimerStop() {
+  auto utvm_stop_time = high_resolution_clock::now();
+  duration<double> time_span = duration_cast<duration<double>>(
+    utvm_stop_time - utvm_start_time);
+  std::cerr << "It took me " << time_span.count() << " seconds." << std::endl;
+}
+
 }
 
 uint8_t memory[64 * 1024];
