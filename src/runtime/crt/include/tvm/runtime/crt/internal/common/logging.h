@@ -30,8 +30,8 @@
 #define CHECK(x)                                 \
   do {                                           \
     if (!(x)) {                                  \
-      fprintf(stderr, "Check failed: %s\n", #x); \
-      exit(-1);                                  \
+      TVMLogf, "Check failed: %s\n", #x);        \
+      TVMPlatformAbort(-1);                      \
     }                                            \
   } while (0)
 #endif
@@ -40,8 +40,8 @@
 #define CHECK_BINARY_OP(op, x, y, fmt, ...)                                             \
   do {                                                                                  \
     if (!(x op y)) {                                                                    \
-      fprintf(stderr, "Check failed: %s %s %s: " fmt "\n", #x, #op, #y, ##__VA_ARGS__); \
-      exit(-1);                                                                         \
+      TVMLogf("Check failed: %s %s %s: " fmt "\n", #x, #op, #y, ##__VA_ARGS__); \
+      TVMPlatformAbort(-1);                                             \
     }                                                                                   \
   } while (0)
 #endif

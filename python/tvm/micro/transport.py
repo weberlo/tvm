@@ -168,6 +168,7 @@ class SerialTransport(Transport):
 
     def write(self, data):
         # NOTE(areusch): Due to suspected flaky ST-Link VCP OS X driver, write 1 byte at a time.
+        print('write write', len(data))
         total_written = 0
         while len(data) > 0:
           num = self._port.write(data[:1])
@@ -202,7 +203,11 @@ class SubprocessTransport(Transport):
     return to_return
 
   def read(self, n):
-    return self.stdout.read(n)
+    to_return = ''
+    while len(to_return) == 0:
+      to_return = self.stdout.read(n)
+
+    return to_return
 
   def close(self):
     self.stdin.close()

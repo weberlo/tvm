@@ -207,7 +207,8 @@ class RpcDebugger(Debugger):
     self.wrapping_context_manager = wrapping_context_manager
 
   def Start(self):
-    self.wrapping_context_manager.__enter__()
+    if self.wrapping_context_manager is not None:
+      self.wrapping_context_manager.__enter__()
     self.launch_debugger(self.debugger_class_path, *self._args, **self._kw)
     input('Press [Enter] when debugger is set')
 
@@ -215,4 +216,5 @@ class RpcDebugger(Debugger):
     try:
       self.stop_debugger()
     finally:
-      self.wrapping_context_manager.__exit__(None, None, None)
+      if self.wrapping_context_manager is not None:
+        self.wrapping_context_manager.__exit__(None, None, None)

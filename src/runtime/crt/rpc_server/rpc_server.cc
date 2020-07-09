@@ -32,10 +32,12 @@
 #define DMLC_CMAKE_LITTLE_ENDIAN DMLC_IO_USE_LITTLE_ENDIAN
 #define DMLC_LITTLE_ENDIAN true
 #include <tvm/runtime/c_runtime_api.h>
+#include <tvm/runtime/crt/crt.h>
 #include <tvm/runtime/crt/logging.h>
 #include <tvm/runtime/crt/memory.h>
 #include <tvm/runtime/crt/module.h>
 #include <tvm/runtime/crt/platform.h>
+#include <tvm/runtime/crt/internal/common/memory.h>
 #include <tvm/runtime/micro/micro_rpc_server.h>
 
 #include "crt_config.h"
@@ -83,23 +85,25 @@ class MicroIOHandler {
   Buffer* receive_buffer_;
 };
 
+namespace {
+// Stored as globals so that they can be used to report initialization errors.
+utvm_rpc_channel_write_t g_write_func = nullptr;
+void* g_write_func_ctx = nullptr;
+}
 
 class SerialWriteStream : public WriteStream {
  public:
-  SerialWriteStream(utvm_rpc_channel_write_t write_func, void* write_func_ctx) :
-      write_func_{write_func}, write_func_ctx_{write_func_ctx} {}
+  SerialWriteStream() {}
   virtual ~SerialWriteStream() {}
 
   ssize_t Write(const uint8_t* data, size_t data_size_bytes) override {
-    return write_func_(write_func_ctx_, data, data_size_bytes);
+    return g_write_func(g_write_func_ctx, data, data_size_bytes);
   }
 
   void PacketDone(bool is_valid) override {}
 
  private:
   void operator delete(void*) noexcept {}
-  utvm_rpc_channel_write_t write_func_;
-  void* write_func_ctx_;
 };
 
 class MicroRPCServer {
@@ -107,7 +111,7 @@ class MicroRPCServer {
   MicroRPCServer(uint8_t* receive_storage, size_t receive_storage_size_bytes,
                  utvm_rpc_channel_write_t write_func, void* write_func_ctx) :
       receive_buffer_{receive_storage, receive_storage_size_bytes},
-      send_stream_{write_func, write_func_ctx}, framer_{&send_stream_},
+      framer_{&send_stream_},
       session_{0xa5, &framer_, &receive_buffer_, &HandleCompleteMessageCb, this},
       io_{&session_, &receive_buffer_},
       unframer_{session_.Receiver()},
@@ -178,11 +182,14 @@ void* operator new[](size_t count, void* ptr) noexcept { return ptr; }
 
 extern "C" {
 
-utvm_rpc_server_t g_rpc_server = nullptr;
+static utvm_rpc_server_t g_rpc_server = nullptr;
 
 utvm_rpc_server_t utvm_rpc_server_init(uint8_t* memory, size_t memory_size_bytes, size_t page_size_bytes_log2,
                                        utvm_rpc_channel_write_t write_func, void* write_func_ctx) {
-  MemoryManagerCreate(memory, memory_size_bytes, page_size_bytes_log2);
+  tvm::runtime::g_write_func = write_func;
+  tvm::runtime::g_write_func_ctx = write_func_ctx;
+
+  TVMInitializeGlobalMemoryManager(memory, memory_size_bytes, page_size_bytes_log2);
   if (TVMInitializeRuntime() != 0) {
     TVMPlatformAbort(-1);
   }
@@ -208,8 +215,18 @@ void TVMLogf(const char* format, ...) {
     num_bytes_logged--;
   }
 
-  static_cast<tvm::runtime::MicroRPCServer*>(g_rpc_server)->Log(
-    reinterpret_cast<uint8_t*>(log_buffer), num_bytes_logged);
+  if (g_rpc_server != nullptr) {
+    static_cast<tvm::runtime::MicroRPCServer*>(g_rpc_server)->Log(
+      reinterpret_cast<uint8_t*>(log_buffer), num_bytes_logged);
+  } else {
+    tvm::runtime::SerialWriteStream write_stream;
+    tvm::runtime::Framer framer{&write_stream};
+    tvm::runtime::Session session{0xa5, &framer, nullptr, nullptr, nullptr};
+    int to_return = session.SendMessage(tvm::runtime::MessageType::kLogMessage, (uint8_t*) log_buffer, num_bytes_logged);
+    if (to_return != 0) {
+      TVMPlatformAbort(-1);
+    }
+  }
 }
 
 size_t utvm_rpc_server_receive_byte(utvm_rpc_server_t server_ptr, uint8_t byte) {

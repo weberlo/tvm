@@ -64,8 +64,9 @@ class Session:
             self.transport_context_manager = self.flasher.Flash(self.binary)
             time.sleep(3.0)
 
+        import logging
         self.transport = TransportLogger(
-            self.session_name, self.transport_context_manager).__enter__()
+            self.session_name, self.transport_context_manager, level=logging.INFO).__enter__()
         self._rpc = RPCSession(_rpc_connect(
             self.session_name, self.transport.write, self.transport.read))
         self.context = self._rpc.cpu(0)

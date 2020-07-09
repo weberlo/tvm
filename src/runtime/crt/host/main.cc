@@ -3,6 +3,7 @@
 
 #include <inttypes.h>
 
+#include "crt_config.h"
 #include <tvm/runtime/crt/logging.h>
 #include <tvm/runtime/micro/micro_rpc_server.h>
 

@@ -61,11 +61,11 @@ def create(graph_json_str, libmod, ctx, dump_root=None):
             raise ValueError("Type %s is not supported" % type(graph_json_str))
     try:
         ctx, num_rpc_ctx, device_type_id = graph_runtime.get_device_ctx(libmod, ctx)
-        if num_rpc_ctx == len(ctx):
-            fcreate = ctx[0]._rpc_sess.get_function(
-                "tvm.graph_runtime_debug.create")
-        else:
-            fcreate = tvm._ffi.get_global_func("tvm.graph_runtime_debug.create")
+#        if num_rpc_ctx == len(ctx):
+#            fcreate = ctx[0]._rpc_sess.get_function(
+#                "tvm.graph_runtime_debug.create")
+#        else:
+        fcreate = tvm._ffi.get_global_func("tvm.graph_runtime_debug.create")
     except ValueError:
         raise ValueError(
             "Please set '(USE_GRAPH_RUNTIME_DEBUG ON)' in "

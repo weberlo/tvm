@@ -69,7 +69,13 @@ class Session {
       receive_buffer_has_complete_message_{false},
       message_received_func_{message_received_func},
       message_received_func_context_{message_received_func_context} {
-        receive_buffer_->Clear();
+
+        // Session can be used for system startup logging, before the RPC server is instantiated. In
+        // this case, allow receive_buffer_ to be nullptr. The instantiator agrees not to use
+        // Receiver().
+        if (receive_buffer_ != nullptr) {
+          receive_buffer_->Clear();
+        }
       }
 
   /*!

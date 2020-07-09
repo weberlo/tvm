@@ -37,11 +37,6 @@
 #include <tvm/runtime/crt/memory.h>
 #include <tvm/runtime/crt/platform.h>
 
-/**
- * \brief Memory pool for virtual dynamic memory allocation
- */
-static uint8_t g_memory_pool[TVM_CRT_VIRT_MEM_SIZE];
-
 // construct a new page
 Page PageCreate(uint8_t* memory_pool, size_t page_size_bytes, tvm_index_t ptable_begin,
                 tvm_index_t num_pages) {
@@ -260,6 +255,9 @@ void MemoryManager_Free(MemoryManager* mgr, void* ptr) {
 
 #define ROUND_UP(qty, modulo) (((qty) + ((modulo)-1)) / (modulo) * (modulo))
 
+static bool g_memory_manager_initialized = 0;
+static MemoryManager g_memory_manager;
+
 void MemoryManagerCreate(MemoryManager* manager, uint8_t* memory_pool,
                          size_t memory_pool_size_bytes, size_t page_size_bytes_log2) {
   memset(manager, 0, sizeof(MemoryManager));
@@ -308,16 +306,24 @@ void MemoryManagerCreate(MemoryManager* manager, uint8_t* memory_pool,
   manager->free_map.insert = MultiMap_Insert;
 }
 
+void TVMInitializeGlobalMemoryManager(uint8_t* memory_pool, size_t memory_pool_size_bytes,
+                                      size_t page_size_bytes_log2) {
+  if (g_memory_manager_initialized) {
+    TVMPlatformAbort(-1);
+  }
+
+  MemoryManagerCreate(&g_memory_manager, memory_pool, memory_pool_size_bytes,
+                      page_size_bytes_log2);
+
+  g_memory_manager_initialized = true;
+  }
+
 MemoryManager* TVMGetGlobalMemoryManager() {
   /* initialize once */
-  static uint32_t initialized = 0;
-  static MemoryManager mgr;
-  if (!initialized) {
-    memset(g_memory_pool, 0, sizeof(g_memory_pool));
-    MemoryManagerCreate(&mgr, g_memory_pool, TVM_CRT_VIRT_MEM_SIZE, TVM_CRT_PAGE_BYTES_LOG);
-    initialized = 1;
+  if (!g_memory_manager_initialized) {
+    TVMPlatformAbort(-1);
   }
-  return &mgr;
+  return &g_memory_manager;
 }
 
 /** \brief Allocate memory from manager */
