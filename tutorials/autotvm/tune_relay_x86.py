@@ -178,34 +178,34 @@ def tune_and_evaluate(tuning_opt):
     # extract workloads from relay program
     print("Extract tasks...")
     mod, params, data_shape, out_shape = get_network(model_name, batch_size)
-    tasks = autotvm.task.extract_from_program(mod["main"], target=target,
-                                              params=params,
-                                              ops=(relay.op.get("nn.conv2d"),))
+    # tasks = autotvm.task.extract_from_program(mod["main"], target=target,
+    #                                           params=params,
+    #                                           ops=(relay.op.get("nn.conv2d"),))
 
-    # run tuning tasks
-    tune_kernels(tasks, **tuning_opt)
-    tune_graph(mod["main"], data_shape, log_file, graph_opt_sch_file)
+    # # run tuning tasks
+    # tune_kernels(tasks, **tuning_opt)
+    # tune_graph(mod["main"], data_shape, log_file, graph_opt_sch_file)
 
     # compile kernels with graph-level best records
-    with autotvm.apply_graph_best(graph_opt_sch_file):
-        print("Compile...")
-        with tvm.transform.PassContext(opt_level=3):
-            graph, lib, params = relay.build_module.build(
-                mod, target=target, params=params)
+    # with autotvm.apply_graph_best(graph_opt_sch_file):
+    print("Compile...")
+    with tvm.transform.PassContext(opt_level=3):
+        graph, lib, params = relay.build_module.build(
+            mod, target=target, params=params)
 
-        # upload parameters to device
-        ctx = tvm.cpu()
-        data_tvm = tvm.nd.array((np.random.uniform(size=data_shape)).astype(dtype))
-        module = runtime.create(graph, lib, ctx)
-        module.set_input(input_name, data_tvm)
-        module.set_input(**params)
+    # upload parameters to device
+    ctx = tvm.cpu()
+    data_tvm = tvm.nd.array((np.random.uniform(size=data_shape)).astype(dtype))
+    module = runtime.create(graph, lib, ctx)
+    module.set_input(input_name, data_tvm)
+    module.set_input(**params)
 
-        # evaluate
-        print("Evaluate inference time cost...")
-        ftimer = module.module.time_evaluator("run", ctx, number=100, repeat=3)
-        prof_res = np.array(ftimer().results) * 1000  # convert to millisecond
-        print("Mean inference time (std dev): %.2f ms (%.2f ms)" %
-              (np.mean(prof_res), np.std(prof_res)))
+    # evaluate
+    print("Evaluate inference time cost...")
+    ftimer = module.module.time_evaluator("run", ctx, number=100, repeat=3)
+    prof_res = np.array(ftimer().results) * 1000  # convert to millisecond
+    print("Mean inference time (std dev): %.2f ms (%.2f ms)" %
+            (np.mean(prof_res), np.std(prof_res)))
 
 # We do not run the tuning in our webpage server since it takes too long.
 # Uncomment the following line to run it by yourself.

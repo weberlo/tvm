@@ -62,7 +62,8 @@ class RPCDeviceAPI final : public DeviceAPI {
       GetSess(ctx)->GetDeviceAPI(remote_ctx)->FreeDataSpace(remote_ctx, space->data);
     } catch (const dmlc::Error& e) {
       // fault tolerance to remote close.
-      std::cout << "FreeDataSpace fukn crashed with err:\n" << e.what() << std::endl;
+      // std::cout << "FreeDataSpace fukn crashed with err:\n" << e.what() << std::endl;
+      std::cout << "FreeDataSpace fukn crashed\n" << std::endl;
     }
     delete space;
   }

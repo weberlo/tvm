@@ -177,7 +177,7 @@ int SystemLibraryCreate(TVMValue* args, int* type_codes, int num_args, TVMValue*
 int RPCTimeEvaluator(
   TVMValue* args, int* type_codes,
   int num_args,
-  TVMValue* ret_val, int* ret_type_codes) {
+  TVMValue* ret_val, int* ret_type_code) {
 
   // args:
   //   Optional<Module> opt_mod, std::string name, int device_type, int device_id,
@@ -199,28 +199,57 @@ int RPCTimeEvaluator(
   TVMFunctionHandle func_to_time;
 
   ret_val[0].v_handle = NULL;
-  ret_type_codes[0] = kTVMNullptr;
-  if (num_args != 7 ||
-      type_codes[0] != kTVMModuleHandle ||
-      type_codes[1] != kTVMStr) {
-    TVMAPIErrorf("invalid arg signature");
+  ret_type_code[0] = kTVMNullptr;
+  if (num_args < 7 ||
+      type_codes[0] != kTVMOpaqueHandle ||
+      type_codes[1] != kTVMModuleHandle ||
+      type_codes[2] != kTVMStr) {
+    TVMAPIErrorf("invalid arg signature (num_args=%d) "
+      "(%d, %d, %d, %d, %d, %d, %d, %d, %d, %d)",
+      num_args,
+      type_codes[0],
+      type_codes[1],
+      type_codes[2],
+      type_codes[3],
+      type_codes[4],
+      type_codes[5],
+      type_codes[6],
+      type_codes[7],
+      type_codes[8],
+      type_codes[9]);
     return -1;
   }
 
-  mod = (TVMModuleHandle) args[0].v_handle;
-  name = args[1].v_str;
+  mod = (TVMModuleHandle) args[1].v_handle;
+  name = args[2].v_str;
   int ret_code = TVMModGetFunction(mod, name, /* query_imports */ 0, &func_to_time);
   if (ret_code != 0) {
     return ret_code;
   }
 
-  // TODO shit. normally we would be returning a closure here. andrew suggested
-  // adding a bit in the func/mod index for determining whether we should time
-  // this func, but we still need to store the `number`, `repeat`, and
-  // `min_repeat_ms` fields somewhere.
+  float res;
+  ret_code = TVMPlatformTimerStart();
+  if (ret_code != 0) {
+    return ret_code;
+  }
 
-  TVMAPIErrorf("haha u lick farts");
-  return -1;
+  ret_code = TVMFuncCall(
+    func_to_time,
+    &(args[7]), &(type_codes[7]), num_args - 7,
+    ret_val, ret_type_code);
+  if (ret_code != 0) {
+    return ret_code;
+  }
+
+  ret_code = TVMPlatformTimerStop(&res);
+  if (ret_code != 0) {
+    return ret_code;
+  }
+
+  *ret_type_code = kTVMArgFloat;
+  ret_val->v_float64 = (double) res;
+
+  return 0;
 }
 
 static TVMFunctionHandle EncodeFunctionHandle(tvm_module_index_t module_index, tvm_function_index_t function_index) {

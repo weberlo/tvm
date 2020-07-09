@@ -31,21 +31,16 @@ void TVMPlatformAbort(int exit_code) {
 
 high_resolution_clock::time_point utvm_start_time;
 
-int TVMPlatformTimerStart(TVMValue* args, int* type_codes, int num_args,
-                           TVMValue* out_ret_value, int* out_ret_tcode,
-                           void* resource_handle) {
+int TVMPlatformTimerStart() {
   utvm_start_time = high_resolution_clock::now();
   return 0;
 }
 
-int TVMPlatformTimerStop(TVMValue* args, int* type_codes, int num_args,
-                         TVMValue* out_ret_value, int* out_ret_tcode,
-                         void* resource_handle) {
+int TVMPlatformTimerStop(float* res) {
   auto utvm_stop_time = high_resolution_clock::now();
-  duration<double> time_span = duration_cast<duration<double>>(
+  duration<float> time_span = duration_cast<duration<float>>(
     utvm_stop_time - utvm_start_time);
-  *out_ret_tcode = kTVMArgFloat;
-  out_ret_value->v_float64 = time_span.count();
+  *res = time_span.count();
   return 0;
 }
 

@@ -43,8 +43,8 @@ def _generate_mod_wrapper(src_path):
 
   # TODO parse platform.h to auto-append these funcs?
   # funcs.append('TVMPlatformAbort')
-  funcs.append('TVMPlatformTimerStart')
-  funcs.append('TVMPlatformTimerStop')
+  # funcs.append('TVMPlatformTimerStart')
+  # funcs.append('TVMPlatformTimerStop')
 
   encoded_funcs = f'\\{len(funcs):03o}' + '\\0'.join(funcs)
   lines = [

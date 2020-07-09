@@ -85,8 +85,9 @@ def test_time_evaluator(sess):
   timer_func = system_lib.time_evaluator('add', sess.context, number=10)
   print('got timer_func', timer_func)
   time_res = timer_func(A_data, B_data, C_data)
-  # print('time result: ', time_res)
+  print('time result: ', time_res)
   # print('time mean: ', time_res.mean)
+  print(C_data.asnumpy())
 
 
 if __name__ == '__main__':

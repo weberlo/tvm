@@ -39,13 +39,9 @@ extern "C" {
  */
 void __attribute__((noreturn)) TVMPlatformAbort(int code);
 
-int TVMPlatformTimerStart(TVMValue* args, int* type_codes, int num_args,
-                           TVMValue* out_ret_value, int* out_ret_tcode,
-                           void* resource_handle);
+int TVMPlatformTimerStart();
 
-int TVMPlatformTimerStop(TVMValue* args, int* type_codes, int num_args,
-                         TVMValue* out_ret_value, int* out_ret_tcode,
-                         void* resource_handle);
+int TVMPlatformTimerStop(float* res);
 
 /*! \brief Enter a critical section of code which is not thread-safe.
  *
