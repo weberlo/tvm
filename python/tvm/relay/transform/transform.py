@@ -30,6 +30,9 @@ from tvm.runtime import ndarray as _nd
 from tvm import relay
 from . import _ffi_api
 
+# TODO(weberlo) remove when we port dtype collectors to C++
+# from tvm.relay.expr_functor import ExprVisitor
+from tvm.relay.type_functor import TypeMutator
 
 def build_config(opt_level=2,
                  required_pass=None,

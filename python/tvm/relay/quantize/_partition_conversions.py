@@ -20,6 +20,7 @@ import tvm
 from tvm import relay
 from tvm.relay.expr_functor import ExprMutator, ExprVisitor
 from tvm.relay.type_functor import TypeMutator
+from tvm.relay.transform import with_dtype
 
 # operators that are allowed in prefix/suffix partitions, because they are used
 # to quantize/dequantize
@@ -159,7 +160,6 @@ class PrefixCutter(ExprMutator):
 
     def visit_call(self, call):
         # TODO(weberlo) use graph pattern matching?
-        import pdb; pdb.set_trace()
         if not hasattr(call.op, 'name') or call.op.name not in ALLOWED_CONVERSION_OPS:
             new_args = []
             for arg in call.args:
