@@ -224,8 +224,11 @@ int RPCTimeEvaluator(
   }
 
   // TODO should *really* rethink needing to return doubles
-  double* results = (double*) vmalloc(8 * repeat + 1);
-  double* iter = results;
+  TVMByteArray* result_byte_arr = (TVMByteArray*) vmalloc(sizeof(TVMByteArray));
+  size_t data_size = 8 * repeat + 1;
+  result_byte_arr->data = vmalloc(data_size);
+  result_byte_arr->size = data_size;
+  double* iter = (double*) result_byte_arr->data;
   for (int i = 0; i < repeat; i++) {
     ret_code = TVMPlatformTimerStart();
     if (ret_code != 0) {
@@ -250,11 +253,8 @@ int RPCTimeEvaluator(
     *iter = (double) res;
     iter++;
   }
-  *((char*) iter) = '\0';
-  TVMAPIErrorf("TODO you're constructing a string but setting the ret type to bytes. what the frick, dude?");
-  return -1;
   *ret_type_code = kTVMBytes;
-  ret_val->v_str = (const char*) results;
+  ret_val->v_handle = result_byte_arr;
   return 0;
 }
 

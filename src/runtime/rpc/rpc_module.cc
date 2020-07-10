@@ -109,7 +109,6 @@ class RPCWrappedFunc : public Object {
   // remove a remote session mask
   TVMContext RemoveSessMask(TVMContext ctx) const {
     int dev_type = ctx.device_type;
-    std::cout << "dev_type: " << dev_type << std::endl;
     CHECK_EQ(dev_type / kRPCSessMask, sess_->table_index() + 1)
         << "Can not pass in local context or context with a different remote session";
     ctx.device_type = static_cast<DLDeviceType>(ctx.device_type % kRPCSessMask);
@@ -270,6 +269,7 @@ class RPCModuleNode final : public ModuleNode {
   // remote function to get time evaluator
   // TypedPackedFunc<TVMRetValue(Optional<Module>, std::string, int, int, int, int, int, Array<ObjectRef>)>
   //     remote_get_time_evaluator_;
+  // needs to be dynamically typed, because it's variadic
   PackedFunc remote_get_time_evaluator_;
   // remote function getter for modules.
   TypedPackedFunc<PackedFunc(Module, std::string, bool)> remote_mod_get_function_;
@@ -314,6 +314,14 @@ void RPCWrappedFunc::WrapRemoteReturnToValue(TVMArgs args, TVMRetValue* rv) cons
     DLTensor* tensor = args[1];
     void* nd_handle = args[2];
     *rv = WrapRemoteNDArray(tensor, nd_handle);
+  } else if (tcode == kTVMBytes) {
+    // TODO stop handling bytes as strings internally?
+    CHECK_EQ(args.size(), 2);
+    const std::string& byte_arr = args[1];
+    *rv = TVMByteArray {
+      .data = byte_arr.data(),
+      .size = byte_arr.size() - 1  // strip off null terminator
+    };
   } else {
     CHECK_EQ(args.size(), 2);
     *rv = args[1];
