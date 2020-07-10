@@ -207,8 +207,6 @@ class RPCModuleNode final : public ModuleNode {
       int num_flat_args = 7 + args.num_args;
       TVMValue values[num_flat_args];
       int type_codes[num_flat_args];
-      // values.reserve(7 + args.num_args);
-      // type_codes.reserve(7 + args.num_args);
       TVMArgsSetter setter(values, type_codes);
       int offs = 0;
       setter(offs, this);
@@ -232,23 +230,6 @@ class RPCModuleNode final : public ModuleNode {
 
       std::cout << "About to call time eval" << std::endl;
       remote_get_time_evaluator_.CallPacked(TVMArgs(values, type_codes, num_flat_args), rv);
-
-      // detail::for_each(TVMArgsSetter(values, type_codes), std::forward<Args>(args)...);
-      // TVMRetValue rv;
-      // body_(TVMArgs(values, type_codes, kNumArgs), &rv);
-
-      // Array<TVMArgValue> flat_args;
-      // for (int i = 0; i < args.num_args; i++) {
-      //   flat_args.push_back(args[i]);
-      // }
-
-      // TODO need to use call packed instead of operator() to flatten arg structure
-
-      // *rv = remote_get_time_evaluator_(
-      //   opt_mod, name,
-      //   static_cast<int>(ctx.device_type), ctx.device_id,
-      //   number, repeat, min_repeat_ms,
-      //   arg_arr);
       std::cout << "After time eval call" << std::endl;
     });
   }

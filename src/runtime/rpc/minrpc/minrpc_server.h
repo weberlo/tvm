@@ -147,7 +147,7 @@ class MinRPCServer {
     LOG_DEBUG("before TVMFuncCall");
     int call_ecode = TVMFuncCall(reinterpret_cast<void*>(call_handle), values, tcodes, num_args,
                                  &(ret_value[1]), &(ret_tcode[1]));
-    LOG_DEBUG("after TVMFuncCall(call_ecode=%d)", call_ecode);
+    LOG_DEBUG("after TVMFuncCall(call_ecode=%d, ret_tcode=%d)", call_ecode, ret_tcode[1]);
 
     if (call_ecode == 0) {
       // Return value encoding as in LocalSession
@@ -159,6 +159,8 @@ class MinRPCServer {
         ret_value[2].v_handle = ret_value[1].v_handle;
         ret_tcode[2] = kTVMOpaqueHandle;
         this->ReturnPackedSeq(ret_value, ret_tcode, 3);
+      } else if (rv_tcode == kTVMBytes) {
+        TODO FIGURE OUT WHAT TO DO WHEN WE'RE RETURNING BYTES
       } else if (rv_tcode == kTVMPackedFuncHandle || rv_tcode == kTVMModuleHandle) {
         ret_tcode[1] = kTVMOpaqueHandle;
         this->ReturnPackedSeq(ret_value, ret_tcode, 2);

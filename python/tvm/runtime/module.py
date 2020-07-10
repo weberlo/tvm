@@ -212,15 +212,14 @@ class Module(object):
                     ctx.device_type, ctx.device_id,
                     number, repeat, min_repeat_ms,
                     *args)
-                import pdb; pdb.set_trace()
                 # # Wrap feval so we can add more stats in future.
                 # blob = feval(*args)
 
-                # fmt = "@" + ("d" * repeat)
-                # results = struct.unpack(fmt, blob)
-                # mean = sum(results) / float(repeat)
-                # return ProfileResult(mean=mean, results=results)
-                return 'ayy'
+                print(f'result blob is len: ', len(blob))
+                fmt = "@" + ("d" * repeat)
+                results = struct.unpack(fmt, blob)
+                mean = sum(results) / float(repeat)
+                return ProfileResult(mean=mean, results=results)
 
             return evaluator
         except NameError:

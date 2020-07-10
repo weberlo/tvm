@@ -82,7 +82,7 @@ def test_time_evaluator(sess):
 
   system_lib = sess._rpc.system_lib()
   print('got system lib', system_lib)
-  timer_func = system_lib.time_evaluator('add', sess.context, number=10)
+  timer_func = system_lib.time_evaluator('add', sess.context, number=10000)
   print('got timer_func', timer_func)
   time_res = timer_func(A_data, B_data, C_data)
   print('time result: ', time_res)

@@ -188,16 +188,6 @@ int RPCTimeEvaluator(
   //     self, func_name, ctx.device_type, ctx.device_id,
   //     number, repeat, min_repeat_ms)
 
-  TVMModuleHandle mod;
-  const char* name;
-  // TODO dev type
-  // TODO dev id
-  int number;
-  int repeat;
-  int min_repeat_ms;
-
-  TVMFunctionHandle func_to_time;
-
   ret_val[0].v_handle = NULL;
   ret_type_code[0] = kTVMNullptr;
   if (num_args < 7 ||
@@ -220,35 +210,51 @@ int RPCTimeEvaluator(
     return -1;
   }
 
-  mod = (TVMModuleHandle) args[1].v_handle;
-  name = args[2].v_str;
+  TVMModuleHandle mod = (TVMModuleHandle) args[1].v_handle;
+  const char* name = args[2].v_str;
+  TVMContext ctx = args[3].v_ctx;
+  int number = args[4].v_int64;
+  int repeat = args[5].v_int64;
+  int min_repeat_ms = args[6].v_int64;
+
+  TVMFunctionHandle func_to_time;
   int ret_code = TVMModGetFunction(mod, name, /* query_imports */ 0, &func_to_time);
   if (ret_code != 0) {
     return ret_code;
   }
 
-  float res;
-  ret_code = TVMPlatformTimerStart();
-  if (ret_code != 0) {
-    return ret_code;
+  // TODO should *really* rethink needing to return doubles
+  double* results = (double*) vmalloc(8 * repeat + 1);
+  double* iter = results;
+  for (int i = 0; i < repeat; i++) {
+    ret_code = TVMPlatformTimerStart();
+    if (ret_code != 0) {
+      return ret_code;
+    }
+
+    for (int j = 0; j < number; j++) {
+      ret_code = TVMFuncCall(
+        func_to_time,
+        &(args[7]), &(type_codes[7]), num_args - 7,
+        ret_val, ret_type_code);
+      if (ret_code != 0) {
+        return ret_code;
+      }
+    }
+
+    float res;
+    ret_code = TVMPlatformTimerStop(&res);
+    if (ret_code != 0) {
+      return ret_code;
+    }
+    *iter = (double) res;
+    iter++;
   }
-
-  ret_code = TVMFuncCall(
-    func_to_time,
-    &(args[7]), &(type_codes[7]), num_args - 7,
-    ret_val, ret_type_code);
-  if (ret_code != 0) {
-    return ret_code;
-  }
-
-  ret_code = TVMPlatformTimerStop(&res);
-  if (ret_code != 0) {
-    return ret_code;
-  }
-
-  *ret_type_code = kTVMArgFloat;
-  ret_val->v_float64 = (double) res;
-
+  *((char*) iter) = '\0';
+  TVMAPIErrorf("TODO you're constructing a string but setting the ret type to bytes. what the frick, dude?");
+  return -1;
+  *ret_type_code = kTVMBytes;
+  ret_val->v_str = (const char*) results;
   return 0;
 }
 
