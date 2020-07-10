@@ -712,6 +712,36 @@ def un_cps(func):
     return _ffi_api.un_cps(func)
 
 
+# TODO(weberlo) I think this is the right place to put this?
+# TODO(weberlo) change this to a dtype remap (i.e., the user needs to specify a mapping)?
+# TODO(weberlo): this one's so small. is it even worth it to convert?
+def with_dtype(typ, target_dtype):
+    """Generate a type from the given type where all dtypes are replaced with the target dtype.
+
+    Parameters
+    ----------
+    typ : relay.Type
+        Type whose dtypes are being replaced
+
+    target_dtype : str
+        Target data type (e.g., 'int8')
+
+    Returns
+    -------
+    typ : relay.Type
+        Type with only `target_dtype` for dtypes
+    """
+    class DtypeReplacer(TypeMutator):
+        def __init__(self, target_dtype):
+            TypeMutator.__init__(self)
+            self.target_dtype = target_dtype
+
+        def visit_tensor_type(self, tt):
+            return relay.TensorType(tt.shape, self.target_dtype)
+
+    return DtypeReplacer(target_dtype).visit(typ)
+
+
 def _wrap_class_function_pass(pass_cls, pass_info):
     """Wrap a python class as function pass"""
     class PyFunctionPass(FunctionPass):

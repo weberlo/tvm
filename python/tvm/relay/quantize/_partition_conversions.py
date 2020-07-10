@@ -74,6 +74,7 @@ def partition_conversions(mod, quantized_dtypes):
     # +--------------------+-------------------------+-----------------------+
     # | Input Quantization | Core Quantized Function | Output Dequantization |
     # +--------------------+-------------------------+-----------------------+
+    #
     assert len(mod.functions) == 1
     pre_mod, mid_mod = partition_prefix(mod, quantized_dtypes)
     mid_mod, post_mod = partition_suffix(mid_mod, quantized_dtypes)
@@ -136,33 +137,6 @@ def fuse_partitions(pre_mod, mid_mod, post_mod):
     return fused_mod
 
 
-def with_dtype(typ, target_dtype):
-    """Generates a type from the given type where all dtypes are replaced with the target dtype.
-
-    Parameters
-    ----------
-    typ : relay.Type
-        Type whose dtypes are being replaced
-
-    target_dtype : str
-        Target data type (e.g., 'int8')
-
-    Returns
-    -------
-    typ : relay.Type
-        Type with only `target_dtype` for dtypes
-    """
-    class DtypeReplacer(TypeMutator):
-        def __init__(self, target_dtype):
-            TypeMutator.__init__(self)
-            self.target_dtype = target_dtype
-
-        def visit_tensor_type(self, tt):
-            return relay.TensorType(tt.shape, self.target_dtype)
-
-    return DtypeReplacer(target_dtype).visit(typ)
-
-
 class PrefixCutter(ExprMutator):
     """A mutator for extracting input quantization expressions from a function
 
@@ -175,7 +149,6 @@ class PrefixCutter(ExprMutator):
         self.params = set(params)
         self.quantized_dtypes = quantized_dtypes
         self.subtree_params = set()
-        self.new_func_params = []
         self.prefix_sb = relay.ScopeBuilder()
         self.prefix_binding_map = {}
 
@@ -186,6 +159,7 @@ class PrefixCutter(ExprMutator):
 
     def visit_call(self, call):
         # TODO(weberlo) use graph pattern matching?
+        import pdb; pdb.set_trace()
         if not hasattr(call.op, 'name') or call.op.name not in ALLOWED_CONVERSION_OPS:
             new_args = []
             for arg in call.args:

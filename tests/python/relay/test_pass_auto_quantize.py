@@ -305,11 +305,11 @@ def test_unquantizable_suffix_partition():
 
 
 if __name__ == "__main__":
-    test_mul_rewrite()
-    test_batch_flatten_rewrite()
-    test_calibrate_target(False)
-    test_calibrate_target(True)
-    test_calibrate_memory_bound()
+    # test_mul_rewrite()
+    # test_batch_flatten_rewrite()
+    # test_calibrate_target(False)
+    # test_calibrate_target(True)
+    # test_calibrate_memory_bound()
 
     test_add_partition()
     test_conv2d_partition()
