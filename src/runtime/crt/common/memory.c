@@ -324,18 +324,21 @@ void* MemoryManager_Realloc(MemoryManager* mgr, void* ptr, tvm_index_t size) {
  * \return The virtual address
  */
 void MemoryManager_Free(MemoryManager* mgr, void* ptr) {
+  fprintf(stderr, "in MemoryManager_Free(mgr=%p, ptr=%p)\n", mgr, ptr);
   TLB* pmap = &(mgr->pmap);
   CHECK_NE(pmap->num_pages, 0, "invalid translation look-aside buffer.");
   PageEntry* entry = pmap->find(pmap, (uint8_t*)ptr);  // NOLINT(*)
   CHECK_NE(entry, 0, "no valid page entry found.");
   Page* p = &(entry->page);
   MultiMap* free_map = &(mgr->free_map);
+  fprintf(stderr, "[WEEEE] pmap: %p, pmap->num_pages: %d, entry: %p, p: %p, free_map: %p\n", pmap, pmap->num_pages, entry, p, free_map);
   free_map->insert(free_map, p->num_pages, p);
+  fprintf(stderr, "AFTERAFTERAFTERAFTERAFTER\n");
   vleak_size--;
-#if TVM_CRT_DEBUG > 1
-  printf("release: addr=%p, start=%d/%d, npage=%d, vleak=%d\n", ptr, entry->page.ptable_begin,
-         mgr->ptable.max_pages, entry->page.num_pages, vleak_size);
-#endif  // TVM_CRT_DEBUG
+// #if TVM_CRT_DEBUG > 1
+  // printf("release: addr=%p, start=%d/%d, npage=%d, vleak=%d\n", ptr, entry->page.ptable_begin,
+  //        mgr->ptable.max_pages, entry->page.num_pages, vleak_size);
+// #endif  // TVM_CRT_DEBUG
 }
 
 static bool g_memory_manager_initialized = 0;

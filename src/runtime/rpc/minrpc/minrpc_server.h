@@ -161,9 +161,16 @@ class MinRPCServer {
         this->ReturnPackedSeq(ret_value, ret_tcode, 3);
       } else if (rv_tcode == kTVMBytes) {
         ret_tcode[1] = kTVMBytes;
-        // ret_value[2].v_handle = ret_value[1].v_handle;
-        // ret_tcode[2] = kTVMOpaqueHandle;
         this->ReturnPackedSeq(ret_value, ret_tcode, 2);
+        // HACK assuming the only func that returns bytes is RPCTimeAllocator
+        // TODO(weberlo) figure out more principled way to deallocate timing results
+        TVMByteArray* byte_array_ptr = (TVMByteArray*) ret_value[1].v_handle;
+        // TODO look into vfree impl
+        fprintf(stderr, "Right before first vfree\n");
+        vfree(const_cast<char*>(byte_array_ptr->data));
+        fprintf(stderr, "Made it past first vfree\n");
+        vfree(byte_array_ptr);
+        fprintf(stderr, "Made it past second vfree\n");
       } else if (rv_tcode == kTVMPackedFuncHandle || rv_tcode == kTVMModuleHandle) {
         ret_tcode[1] = kTVMOpaqueHandle;
         this->ReturnPackedSeq(ret_value, ret_tcode, 2);
@@ -416,9 +423,7 @@ class MinRPCServer {
     TVMContext ctx = values[0].v_ctx;
     void* handle = values[1].v_handle;
 
-    std::cerr << "BEFORE FREE" << std::endl;
     int call_ecode = TVMDeviceFreeDataSpace(ctx, handle);
-    std::cerr << "AFTER FREE" << std::endl;
 
     if (call_ecode == 0) {
       this->ReturnVoid();

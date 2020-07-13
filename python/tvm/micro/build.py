@@ -41,16 +41,10 @@ def _generate_mod_wrapper(src_path):
       if m:
         funcs.append(m.group(1))
 
-  # TODO parse platform.h to auto-append these funcs?
-  # funcs.append('TVMPlatformAbort')
-  # funcs.append('TVMPlatformTimerStart')
-  # funcs.append('TVMPlatformTimerStop')
-
   encoded_funcs = f'\\{len(funcs):03o}' + '\\0'.join(funcs)
   lines = [
       '#include <tvm/runtime/c_runtime_api.h>',
       '#include <tvm/runtime/crt/module.h>',
-      '#include <tvm/runtime/crt/platform.h>',
       '#include <stdio.h>',
       '',
       'static TVMBackendPackedCFunc funcs[] = {',

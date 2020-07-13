@@ -174,39 +174,26 @@ int SystemLibraryCreate(TVMValue* args, int* type_codes, int num_args, TVMValue*
   return 0;
 }
 
+static TVMByteArray g_time_eval_result;
+
 int RPCTimeEvaluator(
-  TVMValue* args, int* type_codes,
-  int num_args,
-  TVMValue* ret_val, int* ret_type_code) {
-
-  // args:
-  //   Optional<Module> opt_mod, std::string name, int device_type, int device_id,
-  //     int number, int repeat, int min_repeat_ms
-
-  // example call:
-  //   feval = _ffi_api.RPCTimeEvaluator(
-  //     self, func_name, ctx.device_type, ctx.device_id,
-  //     number, repeat, min_repeat_ms)
-
+    TVMValue* args, int* type_codes,
+    int num_args,
+    TVMValue* ret_val, int* ret_type_code) {
   ret_val[0].v_handle = NULL;
   ret_type_code[0] = kTVMNullptr;
-  if (num_args < 7 ||
-      type_codes[0] != kTVMOpaqueHandle ||
+  if (num_args < 7) {
+    TVMAPIErrorf("not enough args");
+    return -1;
+  }
+  if (type_codes[0] != kTVMOpaqueHandle ||
       type_codes[1] != kTVMModuleHandle ||
-      type_codes[2] != kTVMStr) {
-    TVMAPIErrorf("invalid arg signature (num_args=%d) "
-      "(%d, %d, %d, %d, %d, %d, %d, %d, %d, %d)",
-      num_args,
-      type_codes[0],
-      type_codes[1],
-      type_codes[2],
-      type_codes[3],
-      type_codes[4],
-      type_codes[5],
-      type_codes[6],
-      type_codes[7],
-      type_codes[8],
-      type_codes[9]);
+      type_codes[2] != kTVMStr ||
+      type_codes[3] != kTVMContext ||
+      type_codes[4] != kTVMArgInt ||
+      type_codes[5] != kTVMArgInt ||
+      type_codes[6] != kTVMArgInt) {
+    TVMAPIErrorf("one or more invalid arg types");
     return -1;
   }
 
@@ -223,34 +210,42 @@ int RPCTimeEvaluator(
     return ret_code;
   }
 
-  // TODO should *really* rethink needing to return doubles
+  // TODO(weberlo) should *really* rethink needing to return doubles
   TVMByteArray* result_byte_arr = (TVMByteArray*) vmalloc(sizeof(TVMByteArray));
+  fprintf(stderr, "result_byte_arr: %p\n", result_byte_arr);
   size_t data_size = 8 * repeat + 1;
   result_byte_arr->data = vmalloc(data_size);
+  fprintf(stderr, "result_byte_arr->data: %p\n", result_byte_arr->data);
   result_byte_arr->size = data_size;
   double* iter = (double*) result_byte_arr->data;
   for (int i = 0; i < repeat; i++) {
-    ret_code = TVMPlatformTimerStart();
-    if (ret_code != 0) {
-      return ret_code;
-    }
-
-    for (int j = 0; j < number; j++) {
-      ret_code = TVMFuncCall(
-        func_to_time,
-        &(args[7]), &(type_codes[7]), num_args - 7,
-        ret_val, ret_type_code);
+    float repeat_res = 0.0;
+    // do-while structure ensures we run even when `min_repeat_ms` isn't set (i.e., is 0).
+    do {
+      ret_code = TVMPlatformTimerStart();
       if (ret_code != 0) {
         return ret_code;
       }
-    }
 
-    float res;
-    ret_code = TVMPlatformTimerStop(&res);
-    if (ret_code != 0) {
-      return ret_code;
-    }
-    *iter = (double) res;
+      for (int j = 0; j < number; j++) {
+        ret_code = TVMFuncCall(
+          func_to_time,
+          &(args[7]), &(type_codes[7]), num_args - 7,
+          ret_val, ret_type_code);
+        if (ret_code != 0) {
+          return ret_code;
+        }
+      }
+
+      float curr_res;
+      ret_code = TVMPlatformTimerStop(&curr_res);
+      if (ret_code != 0) {
+        return ret_code;
+      }
+      repeat_res += curr_res;
+
+    } while (repeat_res < min_repeat_ms);
+    *iter = (double) (repeat_res / number);
     iter++;
   }
   *ret_type_code = kTVMBytes;

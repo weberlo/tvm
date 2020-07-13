@@ -79,15 +79,33 @@ def test_time_evaluator(sess):
   A_data = tvm.nd.array(numpy.array([2, 3], dtype='int8'), ctx=sess.context)
   B_data = tvm.nd.array(numpy.array([4], dtype='int8'), ctx=sess.context)
   C_data = tvm.nd.array(numpy.array([0, 0], dtype='int8'), ctx=sess.context)
+  number = 10000
+  repeat = 5
+  min_repeat_ms = 100
+  time_epsilon = 0.1
 
   system_lib = sess._rpc.system_lib()
-  print('got system lib', system_lib)
-  timer_func = system_lib.time_evaluator('add', sess.context, number=10000, repeat=5)
-  print('got timer_func', timer_func)
-  time_res = timer_func(A_data, B_data, C_data)
-  print('time result: ', time_res)
-  print('time mean: ', time_res.mean)
-  print(C_data.asnumpy())
+  # timer_func = system_lib.time_evaluator(
+  #   'add', sess.context,
+  #   number=number, repeat=repeat, min_repeat_ms=min_repeat_ms)
+  # time_res = timer_func(A_data, B_data, C_data)
+  # assert len(time_res.results) == repeat
+  # assert ((time_res.mean * number) + time_epsilon) > min_repeat_ms
+  # assert (C_data.asnumpy() == numpy.array([6, 7])).all()
+
+  # run the time evaluator many times to ensure we don't leak memory (we
+  # allocate a byte array each time to store the doubles)
+  timer_func = system_lib.time_evaluator(
+    'add', sess.context,
+    number=1, repeat=100)
+  # for i in range(50):
+  for i in range(2):
+    timer_func(A_data, B_data, C_data)
+
+  print('MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT')
+  print('MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT')
+  print('MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT')
+  print('MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT MADE IT OUT')
 
 
 if __name__ == '__main__':

@@ -41,7 +41,6 @@ class RPCWrappedFunc : public Object {
   RPCWrappedFunc(void* handle, std::shared_ptr<RPCSession> sess) : handle_(handle), sess_(sess) {}
 
   void operator()(TVMArgs args, TVMRetValue* rv) const {
-    std::cout << "In RPCWrappedFunc operator()" << std::endl;
     std::vector<TVMValue> values(args.values, args.values + args.size());
     std::vector<int> type_codes(args.type_codes, args.type_codes + args.size());
     std::vector<std::unique_ptr<DLTensor>> temp_dltensors;
@@ -49,7 +48,6 @@ class RPCWrappedFunc : public Object {
     // scan and check whether we need rewrite these arguments
     // to their remote variant.
     for (int i = 0; i < args.size(); ++i) {
-      std::cout << "About to process arg " << i << std::endl;
       if (args[i].IsObjectRef<String>()) {
         String str = args[i];
         type_codes[i] = kTVMStr;
@@ -81,7 +79,6 @@ class RPCWrappedFunc : public Object {
           break;
         }
       }
-      std::cout << "Processed arg " << i << std::endl;
     }
     auto set_return = [this, rv](TVMArgs args) { this->WrapRemoteReturnToValue(args, rv); };
     sess_->CallFunc(handle_, values.data(), type_codes.data(), args.size(), set_return);
@@ -345,12 +342,6 @@ PackedFunc WrapTimeEvaluator(PackedFunc pf, TVMContext ctx, int number, int repe
                              int min_repeat_ms) {
   CHECK(pf != nullptr);
 
-  // if (static_cast<int>(ctx.device_type) == static_cast<int>(kDLMicroDev)) {
-  //   auto get_micro_time_evaluator = runtime::Registry::Get("micro._GetMicroTimeEvaluator");
-  //   CHECK(get_micro_time_evaluator != nullptr) << "micro backend not enabled";
-  //   return (*get_micro_time_evaluator)(pf, ctx, number, repeat);
-  // }
-
   auto ftimer = [pf, ctx, number, repeat, min_repeat_ms](TVMArgs args, TVMRetValue* rv) mutable {
     TVMRetValue temp;
     std::ostringstream os;
@@ -364,6 +355,7 @@ PackedFunc WrapTimeEvaluator(PackedFunc pf, TVMContext ctx, int number, int repe
           tend;
       double duration_ms = 0.0;
 
+      // do-while structure ensures we run even when `min_repeat_ms` isn't set (i.e., is 0).
       do {
         if (duration_ms > 0.0) {
           number = static_cast<int>(std::max((min_repeat_ms / (duration_ms / number) + 1),

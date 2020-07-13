@@ -29,25 +29,36 @@ void TVMPlatformAbort(int exit_code) {
   throw "Aborted";
 }
 
-high_resolution_clock::time_point utvm_start_time;
+high_resolution_clock::time_point g_utvm_start_time;
+int g_utvm_timer_running = 0;
 
 int TVMPlatformTimerStart() {
-  utvm_start_time = high_resolution_clock::now();
+  if (g_utvm_timer_running) {
+    std::cerr << "timer already running" << std::endl;
+    return -1;
+  }
+  g_utvm_start_time = high_resolution_clock::now();
+  g_utvm_timer_running = 1;
   return 0;
 }
 
 int TVMPlatformTimerStop(float* res) {
+  if (!g_utvm_timer_running) {
+    std::cerr << "timer not running" << std::endl;
+    return -1;
+  }
   auto utvm_stop_time = high_resolution_clock::now();
   duration<float> time_span = duration_cast<duration<float>>(
-    utvm_stop_time - utvm_start_time);
-  *res = time_span.count();
+    utvm_stop_time - g_utvm_start_time);
+  // convert from seconds to milliseconds
+  *res = time_span.count() * 1000;
+  g_utvm_timer_running = 0;
   return 0;
 }
 
 }
 
-// uint8_t memory[64 * 1024];
-uint8_t memory[128 * 1024];
+uint8_t memory[64 * 1024];
 
 int main(int argc, char** argv) {
   utvm_rpc_server_t rpc_server = utvm_rpc_server_init(memory, sizeof(memory), 8, &utvm_write_func, nullptr);
