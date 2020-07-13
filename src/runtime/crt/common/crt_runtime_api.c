@@ -126,7 +126,7 @@ static TVMModuleHandle EncodeModuleHandle(tvm_module_index_t module_index) {
   return (TVMModuleHandle)((uintptr_t)(module_index | 0x8000));
 }
 
-static int _TVMModCreateFromCModule(const TVMModule* mod, TVMModuleHandle* out_handle) {
+static int TVMModCreateFromCModule(const TVMModule* mod, TVMModuleHandle* out_handle) {
   tvm_module_index_t idx;
 
   for (idx = 0; idx < TVM_CRT_MAX_REGISTERED_MODULES; idx++) {
@@ -160,7 +160,7 @@ int SystemLibraryCreate(TVMValue* args, int* type_codes, int num_args, TVMValue*
 
   if (system_lib_handle == kTVMModuleHandleUninitialized) {
     system_lib = TVMSystemLibEntryPoint();
-    if (_TVMModCreateFromCModule(system_lib, &system_lib_handle) != 0) {
+    if (TVMModCreateFromCModule(system_lib, &system_lib_handle) != 0) {
       TVMAPIErrorf("error registering system lib");
       return -1;
     }
@@ -193,7 +193,7 @@ static int DecodeFunctionHandle(TVMFunctionHandle handle, tvm_module_index_t* mo
     return -1;
   }
 
-  *function_index = ((uint32_t) ((uintptr_t)handle)) & ~0x8000;
+  *function_index = ((uint32_t)((uintptr_t)handle)) & ~0x8000;
   *module_index = unvalidated_module_index;
   return 0;
 }

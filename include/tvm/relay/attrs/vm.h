@@ -17,21 +17,31 @@
  * under the License.
  */
 
-#include <dlpack/dlpack.h>
-#include <tvm/runtime/module.h>
-#include <tvm/runtime/packed_func.h>
-#include <tvm/runtime/registry.h>
+/*!
+ * \file tvm/relay/attrs/vm.h
+ * \brief Attributes for Relay vm operators.
+ */
+#ifndef TVM_RELAY_ATTRS_VM_H_
+#define TVM_RELAY_ATTRS_VM_H_
 
-#include "../../src/runtime/c_runtime_api.cc"
-#include "../../src/runtime/cpu_device_api.cc"
-#include "../../src/runtime/file_util.cc"
-#include "../../src/runtime/graph/graph_runtime.cc"
-#include "../../src/runtime/library_module.cc"
-#include "../../src/runtime/module.cc"
-#include "../../src/runtime/ndarray.cc"
-#include "../../src/runtime/object.cc"
-#include "../../src/runtime/registry.cc"
-#include "../../src/runtime/system_library.cc"
-#include "../../src/runtime/thread_pool.cc"
-#include "../../src/runtime/threading_backend.cc"
-#include "../../src/runtime/workspace_pool.cc"
+#include <tvm/ir/attrs.h>
+
+namespace tvm {
+namespace relay {
+
+/*!
+ * \brief Options for the shape function operator.
+ */
+struct ShapeFuncAttrs : public tvm::AttrsNode<ShapeFuncAttrs> {
+  Array<Integer> is_input;
+
+  TVM_DECLARE_ATTRS(ShapeFuncAttrs, "relay.attrs.ShapeFuncAttrs") {
+    TVM_ATTR_FIELD(is_input).describe(
+        "A bool indicating whether the shape function should"
+        "expect shape or input in each position.");
+  }
+};
+
+}  // namespace relay
+}  // namespace tvm
+#endif  // TVM_RELAY_ATTRS_VM_H_

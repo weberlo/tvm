@@ -37,6 +37,11 @@
 #include <tvm/runtime/crt/memory.h>
 #include <tvm/runtime/crt/platform.h>
 
+/**
+ * \brief Memory pool for virtual dynamic memory allocation
+ */
+static uint8_t g_memory_pool[TVM_CRT_VIRT_MEM_SIZE];
+
 // construct a new page
 Page PageCreate(uint8_t* memory_pool, size_t page_size_bytes, tvm_index_t ptable_begin,
                 tvm_index_t num_pages) {
@@ -98,8 +103,10 @@ IndexedEntry* MultiMap_End(struct MultiMap* map) {
 void MultiMap_Erase(struct MultiMap* map, IndexedEntry* entry) {
   for (uint32_t idx = 0; idx < map->num_entries; idx++) {
     if ((map->entries + idx) == entry) {
-      memcpy(map->entries + idx, map->entries + (idx + 1),
-             sizeof(IndexedEntry) * (map->num_entries - idx));
+      // NOTE: do not use memcpy due to overlap.
+      for (uint32_t src_idx = idx + 1; src_idx < map->num_entries; src_idx++) {
+        map->entries[src_idx - 1] = map->entries[src_idx];
+      }
       map->num_entries--;
       break;
     }
@@ -255,9 +262,6 @@ void MemoryManager_Free(MemoryManager* mgr, void* ptr) {
 
 #define ROUND_UP(qty, modulo) (((qty) + ((modulo)-1)) / (modulo) * (modulo))
 
-static bool g_memory_manager_initialized = 0;
-static MemoryManager g_memory_manager;
-
 void MemoryManagerCreate(MemoryManager* manager, uint8_t* memory_pool,
                          size_t memory_pool_size_bytes, size_t page_size_bytes_log2) {
   memset(manager, 0, sizeof(MemoryManager));
@@ -320,10 +324,14 @@ void TVMInitializeGlobalMemoryManager(uint8_t* memory_pool, size_t memory_pool_s
 
 MemoryManager* TVMGetGlobalMemoryManager() {
   /* initialize once */
-  if (!g_memory_manager_initialized) {
-    TVMPlatformAbort(-1);
+  static uint32_t initialized = 0;
+  static MemoryManager mgr;
+  if (!initialized) {
+    memset(g_memory_pool, 0, sizeof(g_memory_pool));
+    MemoryManagerCreate(&mgr, g_memory_pool, TVM_CRT_VIRT_MEM_SIZE, TVM_CRT_PAGE_BYTES_LOG);
+    initialized = 1;
   }
-  return &g_memory_manager;
+  return &mgr;
 }
 
 /** \brief Allocate memory from manager */

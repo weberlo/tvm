@@ -17,37 +17,24 @@
  * under the License.
  */
 
-#define TVM_CRT_LOG_VIRT_MEM_SIZE 16
-#define TVM_CRT_PAGE_BYTES 4096
+#ifndef TVM_PARSER_PARSER_H_
+#define TVM_PARSER_PARSER_H_
+/*!
+ * \file parser.h
+ * \brief A parser for TVM IR.
+ */
+#include <tvm/runtime/packed_func.h>
+#include <tvm/runtime/registry.h>
 
-#include <gtest/gtest.h>
-#include <tvm/runtime/crt/memory.h>
+#include <fstream>
+#include <string>
 
-#include "../../src/runtime/crt/memory.c"
+namespace tvm {
+namespace parser {
 
-TEST(CRTMemory, Alloc) {
-  for (int idx = 0; idx < 65536; idx++) {
-    void* a = vmalloc(1);
-    EXPECT_EQ(vleak_size, 1);
-    vfree(a);
-    EXPECT_EQ(vleak_size, 0);
-  }
-}
+IRModule Parse(std::string file_name, std::string file_content);
 
-TEST(CRTMemory, Realloc) {
-  for (int idx = 0; idx < 65536; idx++) {
-    void* a = vrealloc(0, 1);
-    EXPECT_EQ(vleak_size, 1);
-    void* b = vrealloc(a, 1);
-    EXPECT_EQ(a, b);
-    EXPECT_EQ(vleak_size, 1);
-    vfree(a);
-    EXPECT_EQ(vleak_size, 0);
-  }
-}
+}  // namespace parser
+}  // namespace tvm
 
-int main(int argc, char** argv) {
-  testing::InitGoogleTest(&argc, argv);
-  testing::FLAGS_gtest_death_test_style = "threadsafe";
-  return RUN_ALL_TESTS();
-}
+#endif  // TVM_PARSER_PARSER_H_

@@ -194,6 +194,7 @@ file(GLOB_RECURSE COMPILER_SRCS
     src/autotvm/*.cc
     src/tir/*.cc
     src/driver/*.cc
+    src/parser/*.cc
     src/printer/*.cc
     src/support/*.cc
     )
@@ -307,6 +308,7 @@ endif(USE_EXAMPLE_EXT_RUNTIME)
 
 # Module rules
 include(cmake/modules/VTA.cmake)
+include(cmake/modules/StandaloneCrt.cmake)
 include(cmake/modules/CUDA.cmake)
 include(cmake/modules/Hexagon.cmake)
 include(cmake/modules/OpenCL.cmake)
