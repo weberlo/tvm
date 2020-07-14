@@ -37,9 +37,9 @@ typedef struct TVMGraphRuntimePoolEntry {
 
 // Node entry
 typedef struct TVMGraphRuntimeNodeEntry {
-  uint32_t node_id;
-  uint32_t index;
-  uint32_t version;
+  unsigned long node_id;
+  unsigned long index;
+  unsigned long version;
   // JSON Loader
   void (*Load)(JSONReader* reader);
 } TVMGraphRuntimeNodeEntry;
@@ -70,10 +70,10 @@ typedef struct TVMGraphRuntime {
   /*! \brief The graph nodes counter. */
   uint32_t nodes_count;
   /*! \brief The argument nodes. */
-  uint32_t* input_nodes;
+  unsigned long* input_nodes;
   uint32_t input_nodes_count;
   /*! \brief Used for quick entry indexing. */
-  uint32_t* node_row_ptr;
+  unsigned long* node_row_ptr;
   uint32_t node_row_ptr_count;
   /*! \brief Output entries. */
   TVMGraphRuntimeNodeEntry* outputs;

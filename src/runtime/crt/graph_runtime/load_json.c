@@ -30,9 +30,9 @@
 
 // the node entry structure in serialized format
 typedef struct JSONNodeEntry {
-  uint32_t node_id;
-  uint32_t index;
-  uint32_t version;
+  unsigned long node_id;
+  unsigned long index;
+  unsigned long version;
   void (*Load)(struct JSONNodeEntry* entry, JSONReader* reader);
 } JSONNodeEntry;
 
@@ -215,21 +215,21 @@ int JSONReader_ReadString(JSONReader* reader, char* out_str) {
   return status;
 }
 
-int JSONReader_ReadUnsignedInteger(JSONReader* reader, unsigned int* out_value) {
+int JSONReader_ReadUnsignedInteger(JSONReader* reader, unsigned long* out_value) {
   int status = 0;
   char* endptr;
   const char* icstr = reader->isptr;
-  unsigned int number = strtol(icstr, &endptr, 10);
+  unsigned long number = strtol(icstr, &endptr, 10);
   reader->isptr += endptr - icstr;
   *out_value = number;
   return status;
 }
 
-int JSONReader_ReadInteger(JSONReader* reader, int64_t* out_value) {
+int JSONReader_ReadInteger(JSONReader* reader, long* out_value) {
   int status = 0;
   char* endptr;
   const char* icstr = reader->isptr;
-  int64_t number = strtol(icstr, &endptr, 10);
+  long number = strtol(icstr, &endptr, 10);
   reader->isptr += endptr - icstr;
   *out_value = number;
   return status;

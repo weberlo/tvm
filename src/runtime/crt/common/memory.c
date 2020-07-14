@@ -262,6 +262,9 @@ void MemoryManager_Free(MemoryManager* mgr, void* ptr) {
 
 #define ROUND_UP(qty, modulo) (((qty) + ((modulo)-1)) / (modulo) * (modulo))
 
+static bool g_memory_manager_initialized = 0;
+static MemoryManager g_memory_manager;
+
 void MemoryManagerCreate(MemoryManager* manager, uint8_t* memory_pool,
                          size_t memory_pool_size_bytes, size_t page_size_bytes_log2) {
   memset(manager, 0, sizeof(MemoryManager));
@@ -320,7 +323,7 @@ void TVMInitializeGlobalMemoryManager(uint8_t* memory_pool, size_t memory_pool_s
                       page_size_bytes_log2);
 
   g_memory_manager_initialized = true;
-  }
+}
 
 MemoryManager* TVMGetGlobalMemoryManager() {
   /* initialize once */

@@ -26,6 +26,8 @@
 #ifndef TVM_RUNTIME_CRT_INCLUDE_TVM_RUNTIME_CRT_INTERNAL_COMMON_LOGGING_H_
 #define TVM_RUNTIME_CRT_INCLUDE_TVM_RUNTIME_CRT_INTERNAL_COMMON_LOGGING_H_
 
+#include <tvm/runtime/crt/logging.h>
+
 #ifndef CHECK
 #define CHECK(x)                                 \
   do {                                           \
