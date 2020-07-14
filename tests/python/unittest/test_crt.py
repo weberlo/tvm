@@ -31,6 +31,7 @@ def test_compile_runtime():
   compiler = tvm.micro.DefaultCompiler(target=target)
   opts = tvm.micro.DefaultOptions()
   opts['include_dirs'].append(os.path.join(tvm.micro.TVM_ROOT_DIR, 'src', 'runtime', 'crt', 'host'))
+  opts['include_dirs'].append(os.path.join(tvm.micro.TVM_ROOT_DIR, 'src', 'runtime', 'crt', 'include'))
   # lib_opts = copy.deepcopy(bin_opts)
   # lib_opts['profile']['common'].append('-Werror')
   # lib_opts['cflags'] = ['-Wno-error=incompatible-pointer-types']
