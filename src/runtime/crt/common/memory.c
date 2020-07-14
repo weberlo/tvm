@@ -37,11 +37,6 @@
 #include <tvm/runtime/crt/memory.h>
 #include <tvm/runtime/crt/platform.h>
 
-/**
- * \brief Memory pool for virtual dynamic memory allocation
- */
-static uint8_t g_memory_pool[TVM_CRT_VIRT_MEM_SIZE];
-
 // construct a new page
 Page PageCreate(uint8_t* memory_pool, size_t page_size_bytes, tvm_index_t ptable_begin,
                 tvm_index_t num_pages) {
@@ -326,15 +321,8 @@ void TVMInitializeGlobalMemoryManager(uint8_t* memory_pool, size_t memory_pool_s
 }
 
 MemoryManager* TVMGetGlobalMemoryManager() {
-  /* initialize once */
-  static uint32_t initialized = 0;
-  static MemoryManager mgr;
-  if (!initialized) {
-    memset(g_memory_pool, 0, sizeof(g_memory_pool));
-    MemoryManagerCreate(&mgr, g_memory_pool, TVM_CRT_VIRT_MEM_SIZE, TVM_CRT_PAGE_BYTES_LOG);
-    initialized = 1;
-  }
-  return &mgr;
+  CHECK(g_memory_manager_initialized);
+  return &g_memory_manager;
 }
 
 /** \brief Allocate memory from manager */

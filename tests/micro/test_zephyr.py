@@ -2,6 +2,7 @@ import contextlib
 import copy
 import glob
 import os
+import shutil
 
 import numpy
 
@@ -12,12 +13,13 @@ from tvm.micro.contrib import zephyr
 from tvm.contrib import device_util
 from tvm.contrib import util
 
-BUILD = False
+BUILD = True
 DEBUG = False
 
 def test_compile_runtime():
   """Test compiling the on-device runtime."""
-  target = tvm.target.target.micro('stm32f746xx')
+#  target = tvm.target.target.micro('stm32f746xx')
+  target = tvm.target.target.micro('nrf5340')
 
   A = tvm.te.placeholder((2,), dtype='int8')
   B = tvm.te.placeholder((1,), dtype='int8')
@@ -34,8 +36,10 @@ def test_compile_runtime():
   project_dir = '/Users/andrew/ws/nrf5340/autotvm'
   compiler = zephyr.ZephyrCompiler(
     project_dir=project_dir,
-    board='nucleo_f746zg',
-#    board='nrf5340pdk_nrf5340_cpuapp',
+#    board='nucleo_f746zg',
+    board='nrf5340pdk_nrf5340_cpuapp',
+    zephyr_toolchain_variant='GNUARMEMB',
+    env_vars={'GNUARMEMB_TOOLCHAIN_PATH': os.path.dirname(os.path.dirname(shutil.which('arm-none-eabi-gcc')))},
   )
 
   root_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -44,6 +48,7 @@ def test_compile_runtime():
 #  bin_opts.setdefault('ccflags', []).append('-std=gnu++14')
   bin_opts.setdefault('ldflags', []).append('-std=gnu++14')
   bin_opts.setdefault('include_dirs', []).append(f'{project_dir}/crt')
+  bin_opts.setdefault('include_dirs', []).append(os.path.realpath(os.path.join(os.path.dirname(__file__), '..', '..', 'src', 'runtime', 'crt', 'include')))
 
   lib_opts = copy.deepcopy(bin_opts)
   lib_opts['profile']['common'].append('-Werror')
@@ -60,6 +65,7 @@ def test_compile_runtime():
 
   with contextlib.ExitStack() as exit_stack:
     flasher_kw = {
+       'nrfjprog_snr': '960104913',
 #      'debug': DEBUG,
 #      'debug_remote_hostport': '{}:{:d}'.format(*device_transport.openocd_gdb_host_port_tuple(0)),
     }

@@ -181,6 +181,7 @@ def micro(hardware='unknown', options=None):
     """
     trans_table = {
         "stm32f746xx": ["-device=stm32f746xx", "-mcpu=cortex-m7", "-mfpu=fpuv5-sp-d16", "-keys=micro-runtime"],
+        "nrf5340": ["-device=nrf5340", "-mcpu=cortex-m33", "-mfpu=fpv5-sp-d16", "-keys=micro-runtime"],
     }
     opts = _merge_opts(trans_table[hardware], options)
 

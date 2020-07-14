@@ -23,6 +23,9 @@ class SubprocessEnv(object):
     for k, v in self._default_overrides.items():
       env[k] = v
 
+#    print('run with env', cmd)
+#    import pprint
+#    pprint.pprint(env)
     return subprocess.check_output(cmd, env=env, **kw)
 
 
@@ -216,6 +219,7 @@ class ZephyrFlasher(object):
     self._openocd_serial = openocd_serial
     self._subprocess_env = subprocess_env
     self._debug_rpc_session = debug_rpc_session
+    self._nrfjprog_snr = nrfjprog_snr
 
   def _get_nrf_device_args(self):
     nrfjprog_args = ['nrfjprog', '--ids']
