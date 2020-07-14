@@ -37,10 +37,10 @@ def test_compile_runtime():
   # lib_opts['cflags'] = ['-Wno-error=incompatible-pointer-types']
 
   micro_binary = tvm.micro.build_static_runtime(workspace, compiler, mod, opts, opts)
-  device_transport = device_util.DeviceTransportLauncher({
-    'num_instances': 1,
-    'use_tracker': False,
-  })
+#  device_transport = device_util.DeviceTransportLauncher({
+#    'num_instances': 1,
+#    'use_tracker': False,
+#  })
 
   with contextlib.ExitStack() as exit_stack:
     flasher_kw = {
