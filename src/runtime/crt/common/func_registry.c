@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <tvm/runtime/crt/func_registry.h>
+#include <sys/types.h>
 
 /*!
  * \brief strcmp against the next string in the registry, and return the end.

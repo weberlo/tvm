@@ -33,13 +33,13 @@ def test_compile_runtime():
   workspace = tvm.micro.Workspace(debug=True)
 
 #  rpc_session = tvm.rpc.connect('127.0.0.1', 9090)
-  project_dir = '/Users/andrew/ws/nrf5340/autotvm'
+  project_dir = os.path.expanduser('~/ws/utvm-zephyr-runtime')
   compiler = zephyr.ZephyrCompiler(
     project_dir=project_dir,
 #    board='nucleo_f746zg',
     board='nrf5340pdk_nrf5340_cpuapp',
-    zephyr_toolchain_variant='GNUARMEMB',
-    env_vars={'GNUARMEMB_TOOLCHAIN_PATH': os.path.dirname(os.path.dirname(shutil.which('arm-none-eabi-gcc')))},
+    zephyr_toolchain_variant='gnuarmemb',
+    env_vars={'GNUARMEMB_TOOLCHAIN_PATH': '~/ws/gcc-arm-none-eabi-9-2020-q2-update'},
   )
 
   root_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', '..'))
