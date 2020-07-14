@@ -23,7 +23,7 @@ from tvm.relay.type_functor import TypeMutator
 
 # operators that are allowed in prefix/suffix partitions, because they are used
 # to quantize/dequantize
-ALLOWED_CONVERSION_OPS = ['add', 'multiply', 'right_shift', 'clip', 'round', 'cast']
+ALLOWED_CONVERSION_OPS = ['add', 'multiply', 'right_shift', 'clip', 'round', 'cast', 'transpose']
 
 def partition_conversions(mod, quantized_dtypes):
     """Partition mod into input quantization, core quantized inference, and output dequantization.
@@ -77,9 +77,13 @@ def partition_conversions(mod, quantized_dtypes):
     assert len(mod.functions) == 1
     pre_mod, mid_mod = partition_prefix(mod, quantized_dtypes)
     mid_mod, post_mod = partition_suffix(mid_mod, quantized_dtypes)
-    assert has_only_conversion_ops(pre_mod['main'])
+
+    # TODO(weberlo) should we have a mode where we don't have the pre and post
+    # checks (like `INTEGRAL_CORE` vs. `ALL_INTEGRAL`)?
+
+    # assert has_only_conversion_ops(pre_mod['main'])
     assert relay.analysis.all_dtypes(mid_mod['main']).issubset(quantized_dtypes)
-    assert has_only_conversion_ops(post_mod['main'])
+    # assert has_only_conversion_ops(post_mod['main'])
     return fuse_partitions(pre_mod, mid_mod, post_mod)
 
 
@@ -136,31 +140,32 @@ def fuse_partitions(pre_mod, mid_mod, post_mod):
     return fused_mod
 
 
-def with_dtype(typ, target_dtype):
-    """Generates a type from the given type where all dtypes are replaced with the target dtype.
+# TODO pretty sure we don't even need this
+# def with_dtype(typ, target_dtype):
+#     """Generates a type from the given type where all dtypes are replaced with the target dtype.
 
-    Parameters
-    ----------
-    typ : relay.Type
-        Type whose dtypes are being replaced
+#     Parameters
+#     ----------
+#     typ : relay.Type
+#         Type whose dtypes are being replaced
 
-    target_dtype : str
-        Target data type (e.g., 'int8')
+#     target_dtype : str
+#         Target data type (e.g., 'int8')
 
-    Returns
-    -------
-    typ : relay.Type
-        Type with only `target_dtype` for dtypes
-    """
-    class DtypeReplacer(TypeMutator):
-        def __init__(self, target_dtype):
-            TypeMutator.__init__(self)
-            self.target_dtype = target_dtype
+#     Returns
+#     -------
+#     typ : relay.Type
+#         Type with only `target_dtype` for dtypes
+#     """
+#     class DtypeReplacer(TypeMutator):
+#         def __init__(self, target_dtype):
+#             TypeMutator.__init__(self)
+#             self.target_dtype = target_dtype
 
-        def visit_tensor_type(self, tt):
-            return relay.TensorType(tt.shape, self.target_dtype)
+#         def visit_tensor_type(self, tt):
+#             return relay.TensorType(tt.shape, self.target_dtype)
 
-    return DtypeReplacer(target_dtype).visit(typ)
+#     return DtypeReplacer(target_dtype).visit(typ)
 
 
 class PrefixCutter(ExprMutator):
@@ -199,7 +204,7 @@ class PrefixCutter(ExprMutator):
                     self.subtree_params.clear()
                     mid_param = relay.Var(
                         param.name_hint,
-                        with_dtype(param.type_annotation, arg.checked_type.dtype))
+                        arg.checked_type)
                     self.prefix_binding_map[mid_param] = pre_param
                     # return new parameter, then we can use
                     # relay.analysis.free_vars at the end of the pass to generate
