@@ -30,7 +30,7 @@ _DUMP_ROOT_PREFIX = "tvmdbg_"
 _DUMP_PATH_PREFIX = "_tvmdbg_"
 
 
-def create(graph_json_str, libmod, ctx, dump_root=None):
+def create(graph_json_str, libmod, ctx, dump_root=None, number=10, repeat=1, min_repeat_ms=1):
     """Create a runtime executor module given a graph and module.
 
     Parameters
@@ -72,7 +72,8 @@ def create(graph_json_str, libmod, ctx, dump_root=None):
             "config.cmake and rebuild TVM to enable debug mode"
         )
     func_obj = fcreate(graph_json_str, libmod, *device_type_id)
-    return GraphModuleDebug(func_obj, ctx, graph_json_str, dump_root)
+    return GraphModuleDebug(func_obj, ctx, graph_json_str, dump_root,
+        number=number, repeat=repeat, min_repeat_ms=min_repeat_ms)
 
 
 class GraphModuleDebug(graph_runtime.GraphModule):
@@ -100,7 +101,7 @@ class GraphModuleDebug(graph_runtime.GraphModule):
     """
 
     def __init__(self, module, ctx, graph_json_str, dump_root,
-            number=10, repeat=1, min_repeat_ms=1):
+            number, repeat, min_repeat_ms):
         self._dump_root = dump_root
         self._dump_path = None
         self._get_output_by_layer = module["get_output_by_layer"]
