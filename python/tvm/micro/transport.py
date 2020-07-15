@@ -203,11 +203,7 @@ class SubprocessTransport(Transport):
     return to_return
 
   def read(self, n):
-    to_return = ''
-    while len(to_return) == 0:
-      to_return = self.stdout.read(n)
-
-    return to_return
+    return self.stdout.read(n)
 
   def close(self):
     self.stdin.close()

@@ -302,20 +302,15 @@ int Framer::WriteAndCrc(const uint8_t* data, size_t data_size_bytes, bool escape
     uint8_t buffer[kMaxStackBufferSizeBytes];
     size_t buffer_ptr = 0;
     size_t i;
-    for (i = 0; i < data_size_bytes; i++) {
+    for (i = 0; i < data_size_bytes && buffer_ptr != kMaxStackBufferSizeBytes; i++) {
       uint8_t c = data[i];
       if (!escape || c != to_integral(Escape::kEscapeStart)) {
         buffer[buffer_ptr] = c;
         buffer_ptr++;
-        if (buffer_ptr == kMaxStackBufferSizeBytes - 1) {
-          i++;
-          break;
-        }
-
         continue;
       }
 
-      if (buffer_ptr == kMaxStackBufferSizeBytes - 2) {
+      if (buffer_ptr == kMaxStackBufferSizeBytes - 1) {
         break;
       }
 
