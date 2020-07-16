@@ -221,10 +221,17 @@ for i in range(10):
     print(f'iteration {i}: all matched')
 
 
+# %%
 ##################
 # Closing thoughts
 ##################
 # This tutorial shows how TVM can be easily leveraged to evaluate Keras models under a minimal runtime.
-# Here are some other considerations worth thinking through when
-# 1. Device resources are often limited. Ensure input, output, and intermediate tensors will fit in device
+# Here are some other considerations worth thinking through when building models for microTVM targets.
+#
+#
+# #. Device resources are often limited. Ensure input, output, and intermediate tensors will fit in device
 #    RAM.
+# #. Debugging can be complex. microTVM defines the ``TVMLogf`` function for printf-style debugging over
+#    the RPC socket. You can use this when implementing your own functions or adapting the microTVM
+#    runtime.
+# #. Quanitzation can produce good performance improvements, but must be tailored to the model in use.
