@@ -257,11 +257,9 @@ class DefaultCompiler(Compiler):
     # for obj in objects:
     #   for lib_name in obj.library_files:
     #     args.append(obj.abspath(lib_name))
-    args.append('-Wl,--start-group')
     for obj in objects:
       for lib_name in obj.library_files:
         args.append(obj.abspath(lib_name))
-    args.append('-Wl,--end-group')
 
     binutil.run_cmd(args)
     return tvm.micro.MicroBinary(output, output_filename, [])

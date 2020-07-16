@@ -88,7 +88,7 @@ def test_time_evaluator(sess):
     'add', sess.context,
     number=1, repeat=5)
   for i in range(50):
-    timer_func(A_data, B_data, C_data)
+    print(timer_func(A_data, B_data, C_data))
 
 
 if __name__ == '__main__':
