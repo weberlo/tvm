@@ -171,9 +171,9 @@ int SystemLibraryCreate(TVMValue* args, int* type_codes, int num_args, TVMValue*
   return 0;
 }
 
-// #define MAX_TIME_EVAL_REPEAT 10
-// static char g_utvm_time_eval_result_data[MAX_TIME_EVAL_REPEAT*sizeof(double) + 1];
-// static TVMByteArray g_utvm_time_eval_result = {
+#define MAX_TIME_EVAL_REPEAT 10
+// static volatile char g_utvm_time_eval_result_data[MAX_TIME_EVAL_REPEAT*sizeof(double) + 1];
+static TVMByteArray g_utvm_time_eval_result;
 //   .data = g_utvm_time_eval_result_data,
 //   .size = 0,
 // };
@@ -213,18 +213,19 @@ int RPCTimeEvaluator(
   }
 
   // TODO(weberlo) should *really* rethink needing to return doubles
-  TVMByteArray* result_byte_arr = (TVMByteArray*) vmalloc(sizeof(TVMByteArray));
+  // TVMByteArray* result_byte_arr = (TVMByteArray*) vmalloc(sizeof(TVMByteArray));
+  TVMByteArray* result_byte_arr = &g_utvm_time_eval_result;
   if (sizeof(double) != 8) {
     TVMAPIErrorf("fp64 not supported on this platform");
     return -1;
   }
-  // if (repeat > MAX_TIME_EVAL_REPEAT) {
-  //   TVMAPIErrorf("repeat greater than %d not allowed", MAX_TIME_EVAL_REPEAT);
-  //   return -1;
-  // }
+  if (repeat > MAX_TIME_EVAL_REPEAT) {
+    TVMAPIErrorf("repeat greater than %d not allowed", MAX_TIME_EVAL_REPEAT);
+    return -1;
+  }
   size_t data_size = 8 * repeat + 1;
   // g_utvm_time_eval_result.size = data_size;
-  result_byte_arr->data = vmalloc(data_size);
+  // result_byte_arr->data = vmalloc(data_size);
   result_byte_arr->size = data_size;
   for (int i = 0; i < repeat; i++) {
     double repeat_res_us = 0.0;
@@ -269,6 +270,7 @@ int RPCTimeEvaluator(
     // ((uint32_t*) result_byte_arr->data)[2*i] = *((uint32_t*) &mean_exec_ms);
     // ((uint32_t*) result_byte_arr->data)[2*i+1] = *(((uint32_t*) &mean_exec_ms) + 1);
   }
+  ((char*) result_byte_arr->data)[result_byte_arr->size - 1] = 0;
 
   *ret_type_code = kTVMBytes;
   ret_val->v_handle = result_byte_arr;
@@ -425,6 +427,9 @@ tvm_crt_error_t TVMInitializeRuntime() {
   for (idx = 0; idx < TVM_CRT_MAX_REGISTERED_MODULES; idx++) {
     registered_modules[idx] = NULL;
   }
+
+  g_utvm_time_eval_result.data = vmalloc(MAX_TIME_EVAL_REPEAT*sizeof(double) + 1);
+  g_utvm_time_eval_result.size = 0;
 
   error = TVMFuncRegisterGlobal("runtime.SystemLib", &SystemLibraryCreate, 0);
   if (error != 0) {
