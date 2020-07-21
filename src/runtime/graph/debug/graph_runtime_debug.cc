@@ -108,6 +108,68 @@ class GraphRuntimeDebug : public GraphRuntime {
     return os.str();
   }
 
+  double RunOpRPC(int index) {
+    const TVMContext& ctx = data_entry_[entry_id(index, 0)]->ctx;
+    TVMOpParam param = nodes_[index].param;
+    std::string name = param.func_name;
+    uint32_t num_inputs = param.num_inputs;
+    uint32_t num_outputs = param.num_outputs;
+
+    int num_flat_args = 7 + num_inputs + num_outputs;
+    TVMValue values[num_flat_args];
+    int type_codes[num_flat_args];
+    TVMArgsSetter setter(values, type_codes);
+    int offs = 0;
+    setter(offs, module_);
+    offs++;
+    setter(offs, name);
+    offs++;
+    setter(offs, static_cast<int>(ctx.device_type));
+    offs++;
+    setter(offs, ctx.device_id);
+    offs++;
+    setter(offs, /* number */ 1);
+    offs++;
+    setter(offs, /* repeat */ 1);
+    offs++;
+    setter(offs, /* min_repeat_ms */ 0);
+    offs++;
+
+    const auto& inode = nodes_[index];
+    for (const auto& e : inode.inputs) {
+      uint32_t eid = this->entry_id(e);
+      DLTensor* arg = const_cast<DLTensor*>(data_entry_[eid].operator->());
+      setter(offs, arg);
+      offs++;
+    }
+    for (uint32_t i = 0; i < num_outputs; ++i) {
+      uint32_t eid = this->entry_id(index, i);
+      DLTensor* arg = const_cast<DLTensor*>(data_entry_[eid].operator->());
+      setter(offs, arg);
+      offs++;
+    }
+    auto* time_eval = runtime::Registry::Get("runtime.RPCTimeEvaluator");
+    TVMRetValue rv;
+    time_eval->CallPacked(TVMArgs(values, type_codes, num_flat_args), &rv);
+    TVMSynchronize(ctx.device_type, ctx.device_id, nullptr);
+
+    std::string results = rv.operator std::string();
+    double* results_arr = (double*) results.data();
+    return results_arr[0] * 1e3;
+  }
+
+  double RunOpHost(int index) {
+    auto op_tbegin = std::chrono::high_resolution_clock::now();
+    op_execs_[index]();
+    const TVMContext& ctx = data_entry_[entry_id(index, 0)]->ctx;
+    TVMSynchronize(ctx.device_type, ctx.device_id, nullptr);
+    auto op_tend = std::chrono::high_resolution_clock::now();
+    double op_duration =
+        std::chrono::duration_cast<std::chrono::duration<double> >(op_tend - op_tbegin)
+            .count();
+    return op_duration * 1e6;  // us
+  }
+
   /*!
    * \brief Run each operation and get the output.
    * \param index The index of op which needs to be returned.

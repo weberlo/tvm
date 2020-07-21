@@ -155,6 +155,9 @@ class MinRPCServer {
         ret_value[2].v_handle = ret_value[1].v_handle;
         ret_tcode[2] = kTVMOpaqueHandle;
         this->ReturnPackedSeq(ret_value, ret_tcode, 3);
+      } else if (rv_tcode == kTVMBytes) {
+        ret_tcode[1] = kTVMBytes;
+        this->ReturnPackedSeq(ret_value, ret_tcode, 2);
       } else if (rv_tcode == kTVMPackedFuncHandle || rv_tcode == kTVMModuleHandle) {
         ret_tcode[1] = kTVMOpaqueHandle;
         this->ReturnPackedSeq(ret_value, ret_tcode, 2);
