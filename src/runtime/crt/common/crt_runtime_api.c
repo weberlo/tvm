@@ -171,8 +171,6 @@ int SystemLibraryCreate(TVMValue* args, int* type_codes, int num_args, TVMValue*
   return 0;
 }
 
-static TVMByteArray g_time_eval_result;
-
 int RPCTimeEvaluator(
     TVMValue* args, int* type_codes,
     int num_args,
@@ -212,7 +210,7 @@ int RPCTimeEvaluator(
   size_t data_size = 8 * repeat + 1;
   result_byte_arr->data = vmalloc(data_size);
   result_byte_arr->size = data_size;
-  double* iter = (double*) result_byte_arr->data;
+  // double* iter = (double*) result_byte_arr->data;
   for (int i = 0; i < repeat; i++) {
     double repeat_res_us = 0.0;
     int exec_count = 0;
@@ -220,6 +218,7 @@ int RPCTimeEvaluator(
     do {
       ret_code = TVMPlatformTimerStart();
       if (ret_code != 0) {
+        TVMAPIErrorf("failed to start platform timer");
         return ret_code;
       }
 
@@ -237,14 +236,16 @@ int RPCTimeEvaluator(
       double curr_res_us;
       ret_code = TVMPlatformTimerStop(&curr_res_us);
       if (ret_code != 0) {
+        TVMAPIErrorf("failed to stop platform timer");
         return ret_code;
       }
       repeat_res_us += curr_res_us;
 
     } while (repeat_res_us < min_repeat_us);
     double mean_exec_ms = repeat_res_us / (1000.0 * exec_count);
-    *iter = mean_exec_ms;
-    iter++;
+    // *iter = mean_exec_ms;
+    // iter++;
+    ((double*) result_byte_arr->data)[i] = mean_exec_ms;
   }
 
   *ret_type_code = kTVMBytes;
