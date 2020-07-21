@@ -171,7 +171,9 @@ int SystemLibraryCreate(TVMValue* args, int* type_codes, int num_args, TVMValue*
   return 0;
 }
 
-static TVMByteArray g_time_eval_result;
+// TODO(weberlo) move to crt_config.h?
+#define MAX_TIME_EVAL_REPEAT 10
+static TVMByteArray g_utvm_time_eval_result;
 
 int RPCTimeEvaluator(
     TVMValue* args, int* type_codes,
@@ -208,11 +210,16 @@ int RPCTimeEvaluator(
   }
 
   // TODO(weberlo) should *really* rethink needing to return doubles
-  TVMByteArray* result_byte_arr = (TVMByteArray*) vmalloc(sizeof(TVMByteArray));
-  size_t data_size = 8 * repeat + 1;
-  result_byte_arr->data = vmalloc(data_size);
-  result_byte_arr->size = data_size;
-  double* iter = (double*) result_byte_arr->data;
+  if (sizeof(double) != 8) {
+    TVMAPIErrorf("fp64 not supported on this platform");
+    return -1;
+  }
+  if (repeat > MAX_TIME_EVAL_REPEAT) {
+    TVMAPIErrorf("repeat greater than %d not allowed", MAX_TIME_EVAL_REPEAT);
+    return -1;
+  }
+  size_t data_size = sizeof(double) * repeat + 1;
+  g_utvm_time_eval_result.size = data_size;
   for (int i = 0; i < repeat; i++) {
     double repeat_res_us = 0.0;
     int exec_count = 0;
@@ -220,6 +227,7 @@ int RPCTimeEvaluator(
     do {
       ret_code = TVMPlatformTimerStart();
       if (ret_code != 0) {
+        TVMAPIErrorf("failed to start platform timer");
         return ret_code;
       }
 
@@ -237,18 +245,20 @@ int RPCTimeEvaluator(
       double curr_res_us;
       ret_code = TVMPlatformTimerStop(&curr_res_us);
       if (ret_code != 0) {
+        TVMAPIErrorf("failed to stop platform timer");
         return ret_code;
       }
       repeat_res_us += curr_res_us;
 
     } while (repeat_res_us < min_repeat_us);
     double mean_exec_ms = repeat_res_us / (1000.0 * exec_count);
-    *iter = mean_exec_ms;
-    iter++;
+    ((double*) g_utvm_time_eval_result.data)[i] = mean_exec_ms;
   }
+  // insert null terminator byte
+  ((double*) g_utvm_time_eval_result.data)[g_utvm_time_eval_result.size - 1] = 0;
 
   *ret_type_code = kTVMBytes;
-  ret_val->v_handle = result_byte_arr;
+  ret_val->v_handle = &g_utvm_time_eval_result;
   return 0;
 }
 
@@ -401,6 +411,9 @@ tvm_crt_error_t TVMInitializeRuntime() {
   for (idx = 0; idx < TVM_CRT_MAX_REGISTERED_MODULES; idx++) {
     registered_modules[idx] = NULL;
   }
+
+  g_utvm_time_eval_result.data = vmalloc(MAX_TIME_EVAL_REPEAT*sizeof(double) + 1);
+  g_utvm_time_eval_result.size = 0;
 
   error = TVMFuncRegisterGlobal("runtime.SystemLib", &SystemLibraryCreate, 0);
   if (error != 0) {
