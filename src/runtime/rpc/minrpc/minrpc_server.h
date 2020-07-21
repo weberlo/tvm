@@ -158,11 +158,6 @@ class MinRPCServer {
       } else if (rv_tcode == kTVMBytes) {
         ret_tcode[1] = kTVMBytes;
         this->ReturnPackedSeq(ret_value, ret_tcode, 2);
-        // HACK assuming the only func that returns bytes is RPCTimeAllocator
-        // TODO(weberlo) figure out more principled way to deallocate timing results
-        TVMByteArray* byte_array_ptr = (TVMByteArray*) ret_value[1].v_handle;
-        vfree(const_cast<char*>(byte_array_ptr->data));
-        vfree(byte_array_ptr);
       } else if (rv_tcode == kTVMPackedFuncHandle || rv_tcode == kTVMModuleHandle) {
         ret_tcode[1] = kTVMOpaqueHandle;
         this->ReturnPackedSeq(ret_value, ret_tcode, 2);

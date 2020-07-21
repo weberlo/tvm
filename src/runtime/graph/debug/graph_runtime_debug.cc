@@ -126,11 +126,11 @@ class GraphRuntimeDebug : public GraphRuntime {
     offs++;
     setter(offs, ctx.device_id);
     offs++;
-    setter(offs, 1);
+    setter(offs, /* number */ 1);
     offs++;
-    setter(offs, 1);
+    setter(offs, /* repeat */ 1);
     offs++;
-    setter(offs, 0);
+    setter(offs, /* min_repeat_ms */ 0);
     offs++;
 
     const auto& inode = nodes_[index];
