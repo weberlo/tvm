@@ -171,6 +171,13 @@ int SystemLibraryCreate(TVMValue* args, int* type_codes, int num_args, TVMValue*
   return 0;
 }
 
+// #define MAX_TIME_EVAL_REPEAT 10
+// static char g_utvm_time_eval_result_data[MAX_TIME_EVAL_REPEAT*sizeof(double) + 1];
+// static TVMByteArray g_utvm_time_eval_result = {
+//   .data = g_utvm_time_eval_result_data,
+//   .size = 0,
+// };
+
 int RPCTimeEvaluator(
     TVMValue* args, int* type_codes,
     int num_args,
@@ -207,10 +214,18 @@ int RPCTimeEvaluator(
 
   // TODO(weberlo) should *really* rethink needing to return doubles
   TVMByteArray* result_byte_arr = (TVMByteArray*) vmalloc(sizeof(TVMByteArray));
+  if (sizeof(double) != 8) {
+    TVMAPIErrorf("fp64 not supported on this platform");
+    return -1;
+  }
+  // if (repeat > MAX_TIME_EVAL_REPEAT) {
+  //   TVMAPIErrorf("repeat greater than %d not allowed", MAX_TIME_EVAL_REPEAT);
+  //   return -1;
+  // }
   size_t data_size = 8 * repeat + 1;
+  // g_utvm_time_eval_result.size = data_size;
   result_byte_arr->data = vmalloc(data_size);
   result_byte_arr->size = data_size;
-  // double* iter = (double*) result_byte_arr->data;
   for (int i = 0; i < repeat; i++) {
     double repeat_res_us = 0.0;
     int exec_count = 0;
@@ -246,16 +261,18 @@ int RPCTimeEvaluator(
     // *iter = mean_exec_ms;
     // iter++;
 
-    // ((double*) result_byte_arr->data)[i] = mean_exec_ms;
+    ((double*) result_byte_arr->data)[i] = mean_exec_ms;
+    // ((double*) g_utvm_time_eval_result.data)[i] = mean_exec_ms;
 
-    // HACK it seems the nRF5340 can't hang with Arm's `strd` instruction, so we
-    // emulate the instruction here.
-    ((uint32_t*) result_byte_arr->data)[2*i] = *((uint32_t*) &mean_exec_ms);
-    ((uint32_t*) result_byte_arr->data)[2*i+1] = *(((uint32_t*) &mean_exec_ms) + 1);
+    // // HACK it seems the nRF5340 can't hang with Arm's `strd` instruction, so we
+    // // emulate the instruction here.
+    // ((uint32_t*) result_byte_arr->data)[2*i] = *((uint32_t*) &mean_exec_ms);
+    // ((uint32_t*) result_byte_arr->data)[2*i+1] = *(((uint32_t*) &mean_exec_ms) + 1);
   }
 
   *ret_type_code = kTVMBytes;
   ret_val->v_handle = result_byte_arr;
+  // ret_val->v_handle = &g_utvm_time_eval_result;
   return 0;
 }
 

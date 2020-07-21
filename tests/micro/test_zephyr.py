@@ -117,9 +117,12 @@ def test_compile_runtime():
 
 
 def test_time_eval_int_add():
-  number = 10
+  # number = 10
+  # repeat = 5
+  # min_repeat_ms = 10
+  number = 3
   repeat = 5
-  min_repeat_ms = 10
+  min_repeat_ms = 0
 
   A = tvm.te.placeholder((2,), dtype='int8')
   B = tvm.te.placeholder((1,), dtype='int8')
@@ -130,7 +133,9 @@ def test_time_eval_int_add():
   with sess:
     A_data = tvm.nd.array(np.array([2, 3], dtype='int8'), ctx=sess.context)
     B_data = tvm.nd.array(np.array([4], dtype='int8'), ctx=sess.context)
-    C_data = tvm.nd.array(np.zeros([0, 0], dtype='int8'), ctx=sess.context)
+    # C_data = tvm.nd.array(np.zeros([0, 0], dtype='int8'), ctx=sess.context)
+    C_data = tvm.nd.array(np.array([0, 0], dtype='int8'), ctx=sess.context)
+    print(f'constructed C_data: {C_data.asnumpy()}')
 
     print('[Getting System Lib]')
     system_lib = sess.get_system_lib()
@@ -141,11 +146,14 @@ def test_time_eval_int_add():
     print('[Running Time Evaluator]')
     time_res = timer_func(A_data, B_data, C_data)
     print('[Finished Time Evaluator]')
+    print(f'time_res: {time_res}')
+    print(f'C_data: {C_data.asnumpy()}')
+    # assert len(time_res.results) == repeat
+    # assert time_res.mean > 0.0
+    # # make sure the function actually ran
+    # assert (C_data.asnumpy() == np.array([6, 7])).all()
     import pdb; pdb.set_trace()
-    assert len(time_res.results) == repeat
-    assert time_res.mean > 0.0
-    # make sure the function actually ran
-    assert (C_data.asnumpy() == np.array([6, 7])).all()
+    print('ayy lmao')
 
 
 def test_time_eval_fp32_conv2d():
@@ -178,6 +186,7 @@ def test_time_eval_fp32_conv2d():
     print('[Running Time Evaluator]')
     time_res = timer_func(I_data, F_data, C_data)
     print('[Finished Time Evaluator]')
+    print(f'time_res: {time_res}')
     assert len(time_res.results) == repeat
     assert time_res.mean > 0.0
     host_res = conv2d_nchw_python(I_np, F_np, strides, padding)
@@ -185,9 +194,11 @@ def test_time_eval_fp32_conv2d():
     C_np = C_data.asnumpy()
     print('got data!', C_np)
     assert np.testing.assert_allclose(C_np, host_res, rtol=1e-3, atol=1e-5)
+    import pdb; pdb.set_trace()
+    print('ayy lmao')
 
 
 if __name__ == '__main__':
   # test_compile_runtime()
-  test_time_eval_int_add()
-  # test_time_eval_fp32_conv2d()
+  # test_time_eval_int_add()
+  test_time_eval_fp32_conv2d()
