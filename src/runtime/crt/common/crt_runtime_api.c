@@ -245,7 +245,13 @@ int RPCTimeEvaluator(
     double mean_exec_ms = repeat_res_us / (1000.0 * exec_count);
     // *iter = mean_exec_ms;
     // iter++;
-    ((double*) result_byte_arr->data)[i] = mean_exec_ms;
+
+    // ((double*) result_byte_arr->data)[i] = mean_exec_ms;
+
+    // HACK it seems the nRF5340 can't hang with Arm's `strd` instruction, so we
+    // emulate the instruction here.
+    ((uint32_t*) result_byte_arr->data)[2*i] = *((uint32_t*) &mean_exec_ms);
+    ((uint32_t*) result_byte_arr->data)[2*i+1] = *(((uint32_t*) &mean_exec_ms) + 1);
   }
 
   *ret_type_code = kTVMBytes;

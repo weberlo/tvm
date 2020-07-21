@@ -70,7 +70,8 @@ def _make_sess_from_op(sched, arg_bufs, op_name):
 #      'debug_remote_hostport': '{}:{:d}'.format(*device_transport.openocd_gdb_host_port_tuple(0)),
   }
 
-  debug_rpc_session = tvm.rpc.connect('127.0.0.1', 9090)
+  # debug_rpc_session = tvm.rpc.connect('127.0.0.1', 9090)
+  debug_rpc_session = None
 
 #     if DEBUG:
 #       flasher_kw['debug_wrapping_context_manager'] = device_transport.launch(None)
@@ -112,6 +113,7 @@ def test_compile_runtime():
     system_lib.get_function('add')(A_data, B_data, C_data)
     print('got data!', C_data.asnumpy())
     assert (C_data.asnumpy() == np.array([6, 7])).all()
+    import pdb; pdb.set_trace()
 
 
 def test_time_eval_int_add():
@@ -147,7 +149,7 @@ def test_time_eval_int_add():
 
 
 def test_time_eval_fp32_conv2d():
-  number = 10000
+  number = 100
   repeat = 3
   min_repeat_ms = 10
 
@@ -176,11 +178,13 @@ def test_time_eval_fp32_conv2d():
     print('[Running Time Evaluator]')
     time_res = timer_func(I_data, F_data, C_data)
     print('[Finished Time Evaluator]')
-    import pdb; pdb.set_trace()
     assert len(time_res.results) == repeat
     assert time_res.mean > 0.0
     host_res = conv2d_nchw_python(I_np, F_np, strides, padding)
-    assert np.testing.assert_allclose(C_data.asnumpy(), host_res, rtol=1e-3, atol=1e-5)
+    print('before numpy get')
+    C_np = C_data.asnumpy()
+    print('got data!', C_np)
+    assert np.testing.assert_allclose(C_np, host_res, rtol=1e-3, atol=1e-5)
 
 
 if __name__ == '__main__':
