@@ -30,7 +30,7 @@ _DUMP_ROOT_PREFIX = "tvmdbg_"
 _DUMP_PATH_PREFIX = "_tvmdbg_"
 
 
-def create(graph_json_str, libmod, ctx, dump_root=None, number=10, repeat=1, min_repeat_ms=1):
+def create(graph_json_str, libmod, ctx, dump_root=None):
     """Create a runtime executor module given a graph and module.
 
     Parameters
@@ -72,8 +72,7 @@ def create(graph_json_str, libmod, ctx, dump_root=None, number=10, repeat=1, min
             "config.cmake and rebuild TVM to enable debug mode"
         )
     func_obj = fcreate(graph_json_str, libmod, *device_type_id)
-    return GraphModuleDebug(func_obj, ctx, graph_json_str, dump_root,
-        number=number, repeat=repeat, min_repeat_ms=min_repeat_ms)
+    return GraphModuleDebug(func_obj, ctx, graph_json_str, dump_root)
 
 
 class GraphModuleDebug(graph_runtime.GraphModule):
@@ -100,17 +99,13 @@ class GraphModuleDebug(graph_runtime.GraphModule):
         None will make a temp folder in /tmp/tvmdbg<rand_string> and does the dumping
     """
 
-    def __init__(self, module, ctx, graph_json_str, dump_root,
-            number, repeat, min_repeat_ms):
+    def __init__(self, module, ctx, graph_json_str, dump_root):
         self._dump_root = dump_root
         self._dump_path = None
         self._get_output_by_layer = module["get_output_by_layer"]
         self._run_individual = module["run_individual"]
         graph_runtime.GraphModule.__init__(self, module)
         self._create_debug_env(graph_json_str, ctx)
-        self.number = number
-        self.repeat = repeat
-        self.min_repeat_ms = min_repeat_ms
 
     def _format_context(self, ctx):
         return str(ctx[0]).upper().replace("(", ":").replace(")", "")
@@ -185,8 +180,7 @@ class GraphModuleDebug(graph_runtime.GraphModule):
 
         """
         self.debug_datum._time_list = [
-            [float(t) * 1e-6] for t in
-            self.run_individual(self.number, self.repeat, self.min_repeat_ms)
+            [float(t) * 1e-6] for t in self.run_individual(10, 1, 1)
         ]
         for i, node in enumerate(self.debug_datum.get_graph_nodes()):
             num_outputs = self.debug_datum.get_graph_node_output_num(node)

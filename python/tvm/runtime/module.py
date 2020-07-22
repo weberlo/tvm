@@ -205,13 +205,14 @@ class Module(object):
             The ProfileResult reports `repeat` time costs in seconds.
         """
         try:
+            feval = _ffi_api.RPCTimeEvaluator(
+                self, func_name, ctx.device_type, ctx.device_id,
+                number, repeat, min_repeat_ms)
+
             def evaluator(*args):
                 """Internal wrapped evaluator."""
-                blob = _ffi_api.RPCTimeEvaluator(
-                    self, func_name,
-                    ctx.device_type, ctx.device_id,
-                    number, repeat, min_repeat_ms,
-                    *args)
+                # Wrap feval so we can add more stats in future.
+                blob = feval(*args)
                 fmt = "@" + ("d" * repeat)
                 results = struct.unpack(fmt, blob)
                 mean = sum(results) / float(repeat)
