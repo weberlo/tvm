@@ -85,9 +85,12 @@ class MicroTransportChannel : public RPCChannel {
         CHECK(bytes_consumed <= pending_chunk_.size());
         pending_chunk_ = pending_chunk_.substr(bytes_consumed);
         bytes_received += bytes_consumed;
-
-        if (pf()) {
-          return bytes_received;
+        if (unframer_error < 0) {
+          LOG(ERROR) << "unframer got error code: " << unframer_error;
+        } else {
+          if (pf()) {
+            return bytes_received;
+          }
         }
       }
 

@@ -80,6 +80,11 @@ int Unframer::Write(const uint8_t* data, size_t data_size_bytes, size_t* bytes_c
   input_ = nullptr;
   input_size_bytes_ = 0;
 
+  if (return_code == -1) {
+    state_ = State::kFindPacketStart;
+    ClearBuffer();
+  }
+
   return return_code;
 }
 
@@ -120,7 +125,7 @@ int Unframer::ConsumeInput(uint8_t* buffer, size_t buffer_size_bytes, size_t* by
         uint8_t escape_start = to_integral(Escape::kEscapeStart);
         crc_ = crc16_compute(&escape_start, 1, NULL);
         to_return = -1;
-        i++;
+        saw_escape_start_ = true;
 
         break;
       } else if (c == to_integral(Escape::kEscapeNop)) {
@@ -187,8 +192,7 @@ int Unframer::FindPacketLength() {
 
 
 int Unframer::FindPacketCrc() {
-  CHECK(num_buffer_bytes_valid_ == 0);
-
+//  CHECK(num_buffer_bytes_valid_ == 0);
   while (num_payload_bytes_remaining_ > 0) {
     size_t num_bytes_to_buffer = num_payload_bytes_remaining_;
     if (num_bytes_to_buffer > sizeof(buffer_)) {
