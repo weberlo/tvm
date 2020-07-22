@@ -57,7 +57,13 @@ class GraphRuntimeDebug : public GraphRuntime {
    */
   std::string RunIndividual(int number, int repeat, int min_repeat_ms) {
     // warmup run
-    GraphRuntime::Run();
+    // GraphRuntime::Run();
+    std::cout << "SKIPPING DEBUG_RT WARMUP RUN" << std::endl;
+    std::cout << "SKIPPING DEBUG_RT WARMUP RUN" << std::endl;
+    std::cout << "SKIPPING DEBUG_RT WARMUP RUN" << std::endl;
+    std::cout << "SKIPPING DEBUG_RT WARMUP RUN" << std::endl;
+    std::cout << "SKIPPING DEBUG_RT WARMUP RUN" << std::endl;
+    std::cout << "SKIPPING DEBUG_RT WARMUP RUN" << std::endl;
     std::string tkey = module_->type_key();
     std::vector<double> time_per_op(op_execs_.size(), 0);
     for (int i = 0; i < repeat; ++i) {
@@ -110,6 +116,7 @@ class GraphRuntimeDebug : public GraphRuntime {
     const TVMContext& ctx = data_entry_[entry_id(index, 0)]->ctx;
     TVMOpParam param = nodes_[index].param;
     std::string name = param.func_name;
+    std::cout << "timing " << name << " over RPC" << std::endl;
     uint32_t num_inputs = param.num_inputs;
     uint32_t num_outputs = param.num_outputs;
 
@@ -126,11 +133,11 @@ class GraphRuntimeDebug : public GraphRuntime {
     offs++;
     setter(offs, ctx.device_id);
     offs++;
-    setter(offs, 1);
+    setter(offs, /* number */ 1);
     offs++;
-    setter(offs, 1);
+    setter(offs, /* repeat */ 1);
     offs++;
-    setter(offs, 0);
+    setter(offs, /* min_repeat_ms */ 0);
     offs++;
 
     const auto& inode = nodes_[index];
@@ -153,6 +160,7 @@ class GraphRuntimeDebug : public GraphRuntime {
 
     std::string results = rv.operator std::string();
     double* results_arr = (double*) results.data();
+    std::cout << "finished with time " << results_arr[0] << "ms over RPC" << std::endl;
     return results_arr[0] * 1e3;
   }
 

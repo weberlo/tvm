@@ -168,7 +168,7 @@ class SerialTransport(Transport):
 
     def write(self, data):
         # NOTE(areusch): Due to suspected flaky ST-Link VCP OS X driver, write 1 byte at a time.
-        print('write write', len(data))
+        # print('write ', len(data))
         total_written = 0
         while len(data) > 0:
           num = self._port.write(data[:1])

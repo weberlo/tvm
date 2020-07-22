@@ -191,9 +191,7 @@ def test_time_eval_fp32_conv2d():
     C_np = C_data.asnumpy()
     print('utvm res!', C_np)
     print('host res!', host_res)
-    # assert np.testing.assert_allclose(C_np, host_res, rtol=1e-3, atol=1e-5)
-    import pdb; pdb.set_trace()
-    print('ayy lmao')
+    np.testing.assert_allclose(C_np, host_res, rtol=1e-3, atol=1e-5)
 
 
 if __name__ == '__main__':
