@@ -20,9 +20,10 @@ from topi.testing import conv2d_nchw_python
 BUILD = True
 DEBUG = False
 
-# we fill these out in main
+# we fill these out in main, where the target is determined
 TARGET = None
 ADD_SESS = None
+IDENT_SESS = None
 
 def _make_sess_from_op(op_name, sched, arg_bufs):
   with tvm.transform.PassContext(opt_level=3, config={'tir.disable_vectorize': True}):
@@ -109,6 +110,13 @@ def _make_add_sess():
   C = tvm.te.compute(A.shape, lambda i: A[i] + B[0], name='C')
   sched = tvm.te.create_schedule(C.op)
   return _make_sess_from_op('add', sched, [A, B, C])
+
+
+def _make_ident_sess():
+  A = tvm.te.placeholder((2,), dtype='int8')
+  B = tvm.te.compute(A.shape, lambda i: A[i], name='B')
+  sched = tvm.te.create_schedule(B.op)
+  return _make_sess_from_op('ident', sched, [A, B])
 
 
 def test_compile_runtime():
@@ -217,15 +225,8 @@ def test_time_eval_many_runs():
 
 def test_type_check():
   """Test runtime type checking."""
-  A = tvm.te.placeholder((2,), dtype='int8')
-  B = tvm.te.compute(A.shape, lambda i: A[i], name='B')
-  sched = tvm.te.create_schedule(B.op)
-  op_name = 'ident'
-
-  sess = _make_sess_from_op(op_name, sched, [A, B])
-  with sess:
+  with IDENT_SESS as sess:
     A_data = tvm.nd.array(np.array([2, 3], dtype='int8'), ctx=sess.context)
-    assert (A_data.asnumpy() == np.array([2, 3])).all()
     # NOTE we have made an incorrect call to `np.ones`. we should have given
     # the shape `(2,)`. we would like to pick up this error on the device's
     # runtime.
@@ -235,11 +236,24 @@ def test_type_check():
     system_lib = sess.get_system_lib()
     print('got system lib', system_lib)
     try:
-      system_lib.get_function(op_name)(A_data, B_data)
+      system_lib.get_function('ident')(A_data, B_data)
       assert False, 'no runtime type error was raised'
     except Exception as e:
       assert 'arg1.ndim is expected to equal 1' in str(e)
-    print('passed!')
+
+
+def test_many_tensor_alloc_deallocs():
+  with IDENT_SESS as sess:
+    def make_and_del_tensor():
+      # alloc
+      A = tvm.nd.array(np.ones((8,), dtype='int8'), ctx=sess.context)
+      # read
+      A.asnumpy()
+      # dealloc
+
+    for i in range(50):
+      print(f'Iter {i}')
+      make_and_del_tensor()
 
 
 if __name__ == '__main__':
@@ -247,6 +261,7 @@ if __name__ == '__main__':
   assert len(sys.argv) == 2, 'missing target specifier'
   TARGET = tvm.target.target.micro(sys.argv[1])
   ADD_SESS = _make_add_sess()
+  IDENT_SESS = _make_ident_sess()
   assert 'micro-runtime' in TARGET.keys
   print(f'using target: {TARGET}')
 
@@ -255,3 +270,4 @@ if __name__ == '__main__':
   test_time_eval_fp32_conv2d()
   test_time_eval_many_runs()
   test_type_check()
+  test_many_tensor_alloc_deallocs()
