@@ -57,13 +57,7 @@ class GraphRuntimeDebug : public GraphRuntime {
    */
   std::string RunIndividual(int number, int repeat, int min_repeat_ms) {
     // warmup run
-    // GraphRuntime::Run();
-    std::cout << "SKIPPING DEBUG_RT WARMUP RUN" << std::endl;
-    std::cout << "SKIPPING DEBUG_RT WARMUP RUN" << std::endl;
-    std::cout << "SKIPPING DEBUG_RT WARMUP RUN" << std::endl;
-    std::cout << "SKIPPING DEBUG_RT WARMUP RUN" << std::endl;
-    std::cout << "SKIPPING DEBUG_RT WARMUP RUN" << std::endl;
-    std::cout << "SKIPPING DEBUG_RT WARMUP RUN" << std::endl;
+    GraphRuntime::Run();
     std::string tkey = module_->type_key();
     std::vector<double> time_per_op(op_execs_.size(), 0);
     for (int i = 0; i < repeat; ++i) {
@@ -160,7 +154,6 @@ class GraphRuntimeDebug : public GraphRuntime {
 
     std::string results = rv.operator std::string();
     double* results_arr = (double*) results.data();
-    std::cout << "finished with time " << results_arr[0] << "ms over RPC" << std::endl;
     return results_arr[0] * 1e3;
   }
 

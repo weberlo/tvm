@@ -87,10 +87,7 @@ class ZephyrCompiler(tvm.micro.Compiler):
       project_dir_conf = os.path.join(self._project_dir, 'prj.conf')
       if os.path.exists(project_dir_conf):
         shutil.copy(project_dir_conf, lib_prj_conf)
-      else:
-        assert False, 'why doesn\'t it exist?'
     else:
-      assert False, 'TODO add float config to prj.conf'
       with open(lib_prj_conf, 'w') as prj_conf_f:
         prj_conf_f.write(
           'CONFIG_CPLUSPLUS=y\n'

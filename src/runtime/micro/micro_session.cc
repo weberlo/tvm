@@ -94,7 +94,7 @@ class MicroTransportChannel : public RPCChannel {
       std::string chunk = frecv_(128);
       pending_chunk_ = chunk;
       CHECK(pending_chunk_.size() != 0) << "zero-size chunk encountered";
-      // LOG(INFO) << "receive " << pending_chunk_.size();
+      LOG(INFO) << "receive " << pending_chunk_.size();
       CHECK(pending_chunk_.size() > 0);
     }
   }
@@ -108,7 +108,7 @@ class MicroTransportChannel : public RPCChannel {
 
   size_t Send(const void* data, size_t size) override {
     const uint8_t* data_bytes = static_cast<const uint8_t*>(data);
-    // LOG(INFO) << "send " << size << " bytes" << std::endl;
+    LOG(INFO) << "send " << size << " bytes" << std::endl;
     ssize_t ret = session_.SendMessage(MessageType::kNormalTraffic, data_bytes, size);
     CHECK(ret == 0) << "SendMessage returned " << ret;
 
@@ -116,12 +116,12 @@ class MicroTransportChannel : public RPCChannel {
   }
 
   size_t Recv(void* data, size_t size) override {
-    // LOG(INFO) << "Recv " << size << " bytes";
+    LOG(INFO) << "Recv " << size << " bytes";
     size_t num_bytes_recv = 0;
     while (num_bytes_recv < size) {
       if (message_buffer_ != nullptr) {
         num_bytes_recv += message_buffer_->Read(static_cast<uint8_t*>(data), size);
-        // LOG(INFO) << "Read -> " << num_bytes_recv;
+        LOG(INFO) << "Read -> " << num_bytes_recv;
         if (message_buffer_->ReadAvailable() == 0) {
           message_buffer_ = nullptr;
           session_.ClearReceiveBuffer();
@@ -136,7 +136,7 @@ class MicroTransportChannel : public RPCChannel {
       ReceiveUntil([this]() -> bool {
                      return did_receive_message_;
                    });
-      // LOG(INFO) << "Received " << message_buffer_->ReadAvailable();
+      LOG(INFO) << "Received " << message_buffer_->ReadAvailable();
     }
 
     return num_bytes_recv;
@@ -170,7 +170,7 @@ class MicroTransportChannel : public RPCChannel {
 
       CHECK_EQ(buf->Read(message, sizeof(message) - 1), message_size_bytes);
       message[message_size_bytes] = 0;
-      // LOG(INFO) << "remote: " << message;
+      LOG(INFO) << "remote: " << message;
       session_.ClearReceiveBuffer();
       return;
     }
@@ -209,7 +209,7 @@ void TVMLogf(const char* fmt, ...) {
   va_start(args, fmt);
   vsnprintf(msg_buf, sizeof(msg_buf), fmt, args);
   va_end(args);
-  // LOG(INFO) << msg_buf;
+  LOG(INFO) << msg_buf;
 }
 
 void TVMPlatformAbort(int error_code) {

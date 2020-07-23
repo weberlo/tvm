@@ -213,8 +213,6 @@ int RPCTimeEvaluator(
   }
 
   // TODO(weberlo) should *really* rethink needing to return doubles
-  // TVMByteArray* result_byte_arr = (TVMByteArray*) vmalloc(sizeof(TVMByteArray));
-  TVMByteArray* result_byte_arr = &g_utvm_time_eval_result;
   if (sizeof(double) != 8) {
     TVMAPIErrorf("fp64 not supported on this platform");
     return -1;
@@ -223,10 +221,8 @@ int RPCTimeEvaluator(
     TVMAPIErrorf("repeat greater than %d not allowed", MAX_TIME_EVAL_REPEAT);
     return -1;
   }
-  size_t data_size = 8 * repeat + 1;
-  // g_utvm_time_eval_result.size = data_size;
-  // result_byte_arr->data = vmalloc(data_size);
-  result_byte_arr->size = data_size;
+  size_t data_size = sizeof(double) * repeat + 1;
+  g_utvm_time_eval_result.size = data_size;
   for (int i = 0; i < repeat; i++) {
     double repeat_res_us = 0.0;
     int exec_count = 0;
@@ -259,22 +255,13 @@ int RPCTimeEvaluator(
 
     } while (repeat_res_us < min_repeat_us);
     double mean_exec_ms = repeat_res_us / (1000.0 * exec_count);
-    // *iter = mean_exec_ms;
-    // iter++;
-
-    ((double*) result_byte_arr->data)[i] = mean_exec_ms;
-    // ((double*) g_utvm_time_eval_result.data)[i] = mean_exec_ms;
-
-    // // HACK it seems the nRF5340 can't hang with Arm's `strd` instruction, so we
-    // // emulate the instruction here.
-    // ((uint32_t*) result_byte_arr->data)[2*i] = *((uint32_t*) &mean_exec_ms);
-    // ((uint32_t*) result_byte_arr->data)[2*i+1] = *(((uint32_t*) &mean_exec_ms) + 1);
+    ((double*) g_utvm_time_eval_result.data)[i] = mean_exec_ms;
   }
-  ((char*) result_byte_arr->data)[result_byte_arr->size - 1] = 0;
+  // insert null terminator byte
+  ((double*)g_utvm_time_eval_result.data)[g_utvm_time_eval_result.size - 1] = 0;
 
   *ret_type_code = kTVMBytes;
-  ret_val->v_handle = result_byte_arr;
-  // ret_val->v_handle = &g_utvm_time_eval_result;
+  ret_val->v_handle = &g_utvm_time_eval_result;
   return 0;
 }
 

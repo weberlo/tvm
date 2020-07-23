@@ -24,8 +24,6 @@ TARGET = tvm.target.target.micro('nrf5340')
 
 def _make_sess_from_op(sched, arg_bufs, op_name):
   with tvm.transform.PassContext(opt_level=3, config={'tir.disable_vectorize': True}):
-    # TODO(weberlo) very fundamental question, but why do we need to pass in
-    # the arg_bufs, when it should be derivable from the schedule?
     mod = tvm.build(sched, arg_bufs, TARGET, target_host=TARGET, name=op_name)
 
   workspace = tvm.micro.Workspace(debug=True)
@@ -116,9 +114,6 @@ def test_compile_runtime():
 
 
 def test_time_eval_int_add():
-  # number = 10
-  # repeat = 5
-  # min_repeat_ms = 10
   number = 3
   repeat = 5
   min_repeat_ms = 0
@@ -132,11 +127,8 @@ def test_time_eval_int_add():
   with sess:
     A_data = tvm.nd.array(np.array([2, 3], dtype='int8'), ctx=sess.context)
     B_data = tvm.nd.array(np.array([4], dtype='int8'), ctx=sess.context)
-    # C_data = tvm.nd.array(np.zeros([0, 0], dtype='int8'), ctx=sess.context)
     C_data = tvm.nd.array(np.array([0, 0], dtype='int8'), ctx=sess.context)
-    print(f'constructed C_data: {C_data.asnumpy()}')
 
-    print('[Getting System Lib]')
     system_lib = sess.get_system_lib()
     print('[Getting Time Evaluator]')
     timer_func = system_lib.time_evaluator(
@@ -174,20 +166,15 @@ def test_time_eval_fp32_conv2d():
     F_data = tvm.nd.array(F_np, ctx=sess.context)
     C_data = tvm.nd.array(np.zeros(get_const_tuple(C.shape)).astype('float32'), ctx=sess.context)
 
-    print('[Getting System Lib]')
     system_lib = sess.get_system_lib()
-    print('[Getting Time Evaluator]')
     timer_func = system_lib.time_evaluator(
       'conv2d', sess.context,
       number=number, repeat=repeat, min_repeat_ms=min_repeat_ms)
-    print('[Running Time Evaluator]')
     time_res = timer_func(I_data, F_data, C_data)
-    print('[Finished Time Evaluator]')
     print(f'time_res: {time_res}')
     assert len(time_res.results) == repeat
     assert time_res.mean > 0.0
     host_res = conv2d_nchw_python(I_np, F_np, strides, padding)
-    print('before numpy get')
     C_np = C_data.asnumpy()
     print('utvm res!', C_np)
     print('host res!', host_res)
