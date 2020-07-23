@@ -268,6 +268,7 @@ inline void CodeGenCHost::PrintTernaryCondExpr(const T* op, const char* compare,
 runtime::Module BuildCHost(IRModule mod, std::string target_str) {
   using tvm::runtime::Registry;
   bool output_ssa = false;
+  // TODO(weberlo) make configurable
   bool emit_asserts = true;
   CodeGenCHost cg;
   cg.Init(output_ssa, emit_asserts, target_str);
