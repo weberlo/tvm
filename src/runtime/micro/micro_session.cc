@@ -82,6 +82,7 @@ class MicroTransportChannel : public RPCChannel {
                                              pending_chunk_.size(),
                                              &bytes_consumed);
 
+        LOG(INFO) << "consumed " << bytes_consumed << " / " << pending_chunk_.size();
         CHECK(bytes_consumed <= pending_chunk_.size());
         pending_chunk_ = pending_chunk_.substr(bytes_consumed);
         bytes_received += bytes_consumed;
