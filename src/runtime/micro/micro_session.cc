@@ -81,7 +81,7 @@ class MicroTransportChannel : public RPCChannel {
         int unframer_error = unframer_.Write((const uint8_t*) pending_chunk_.data(),
                                              pending_chunk_.size(),
                                              &bytes_consumed);
-        CHECK(unframer_error >= 0) << "unframer got error code: " << unframer_error;
+
         CHECK(bytes_consumed <= pending_chunk_.size());
         pending_chunk_ = pending_chunk_.substr(bytes_consumed);
         bytes_received += bytes_consumed;
