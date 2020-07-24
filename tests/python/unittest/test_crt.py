@@ -22,8 +22,10 @@ DEBUG = False
 
 # we fill these out in main, where the target is determined
 TARGET = None
-ADD_SESS = None
-IDENT_SESS = None
+
+# TODO(weberlo) fix bug with sessions not being reusable
+# ADD_SESS = None
+# IDENT_SESS = None
 
 def _make_sess_from_op(op_name, sched, arg_bufs):
   with tvm.transform.PassContext(opt_level=3, config={'tir.disable_vectorize': True}):
@@ -121,7 +123,8 @@ def _make_ident_sess():
 
 def test_compile_runtime():
   """Test compiling the on-device runtime."""
-  with ADD_SESS as sess:
+  # with ADD_SESS as sess:
+  with _make_add_sess() as sess:
     A_data = tvm.nd.array(np.array([2, 3], dtype='int8'), ctx=sess.context)
     assert (A_data.asnumpy() == np.array([2, 3])).all()
     B_data = tvm.nd.array(np.array([4], dtype='int8'), ctx=sess.context)
@@ -142,7 +145,8 @@ def test_time_eval_int_add():
   repeat = 5
   min_repeat_ms = 0
 
-  with ADD_SESS as sess:
+  # with ADD_SESS as sess:
+  with _make_add_sess() as sess:
     A_data = tvm.nd.array(np.array([2, 3], dtype='int8'), ctx=sess.context)
     B_data = tvm.nd.array(np.array([4], dtype='int8'), ctx=sess.context)
     C_data = tvm.nd.array(np.array([0, 0], dtype='int8'), ctx=sess.context)
@@ -206,7 +210,8 @@ def test_time_eval_many_runs():
   repeat = 5
   min_repeat_ms = 0
 
-  with ADD_SESS as sess:
+  # with ADD_SESS as sess:
+  with _make_add_sess() as sess:
     A_data = tvm.nd.array(np.array([2, 3], dtype='int8'), ctx=sess.context)
     B_data = tvm.nd.array(np.array([4], dtype='int8'), ctx=sess.context)
     C_data = tvm.nd.array(np.array([0, 0], dtype='int8'), ctx=sess.context)
@@ -225,7 +230,8 @@ def test_time_eval_many_runs():
 
 def test_type_check():
   """Test runtime type checking."""
-  with IDENT_SESS as sess:
+  # with IDENT_SESS as sess:
+  with _make_ident_sess() as sess:
     A_data = tvm.nd.array(np.array([2, 3], dtype='int8'), ctx=sess.context)
     # NOTE we have made an incorrect call to `np.ones`. we should have given
     # the shape `(2,)`. we would like to pick up this error on the device's
@@ -243,7 +249,8 @@ def test_type_check():
 
 
 def test_many_tensor_alloc_deallocs():
-  with IDENT_SESS as sess:
+  # with IDENT_SESS as sess:
+  with _make_ident_sess() as sess:
     def make_and_del_tensor():
       # alloc
       A = tvm.nd.array(np.ones((8,), dtype='int8'), ctx=sess.context)
@@ -259,8 +266,8 @@ if __name__ == '__main__':
   # TODO(weberlo) remove before mainlining
   assert len(sys.argv) == 2, 'missing target specifier'
   TARGET = tvm.target.target.micro(sys.argv[1])
-  ADD_SESS = _make_add_sess()
-  IDENT_SESS = _make_ident_sess()
+  # ADD_SESS = _make_add_sess()
+  # IDENT_SESS = _make_ident_sess()
   assert 'micro-runtime' in TARGET.keys
   print(f'using target: {TARGET}')
 
