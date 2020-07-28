@@ -210,10 +210,6 @@ int RPCTimeEvaluator(
   }
 
   // TODO(weberlo) should *really* rethink needing to return doubles
-  if (sizeof(double) != 8) {
-    TVMAPIErrorf("fp64 not supported on this platform");
-    return -1;
-  }
   if (repeat > MAX_TIME_EVAL_REPEAT) {
     TVMAPIErrorf("repeat greater than %d not allowed", MAX_TIME_EVAL_REPEAT);
     return -1;
@@ -412,6 +408,10 @@ tvm_crt_error_t TVMInitializeRuntime() {
     registered_modules[idx] = NULL;
   }
 
+  if (sizeof(double) != 8) {
+    TVMAPIErrorf("fp64 not supported on this platform");
+    return -1;
+  }
   g_utvm_time_eval_result.data = vmalloc(MAX_TIME_EVAL_REPEAT*sizeof(double) + 1);
   g_utvm_time_eval_result.size = 0;
 

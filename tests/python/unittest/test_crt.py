@@ -52,7 +52,7 @@ def _make_x86_64_sess(mod):
   micro_binary = tvm.micro.build_static_runtime(workspace, compiler, mod, opts, opts)
 
   flasher_kw = {
-    # 'debug': DEBUG,
+    'debug': DEBUG,
   }
   flasher = compiler.Flasher(**flasher_kw)
   return tvm.micro.Session(binary=micro_binary, flasher=flasher)
@@ -85,7 +85,7 @@ def _make_cortex_m33_sess(mod):
   lib_opts['cflags'].pop()
 
   flasher_kw = {
-    # 'debug': DEBUG,
+    'debug': DEBUG,
   }
 
   # debug_rpc_session = tvm.rpc.connect('127.0.0.1', 9090)
@@ -123,7 +123,6 @@ def _make_ident_sess():
 
 def test_compile_runtime():
   """Test compiling the on-device runtime."""
-  # with ADD_SESS as sess:
   with _make_add_sess() as sess:
     A_data = tvm.nd.array(np.array([2, 3], dtype='int8'), ctx=sess.context)
     assert (A_data.asnumpy() == np.array([2, 3])).all()
@@ -145,22 +144,17 @@ def test_time_eval_int_add():
   repeat = 5
   min_repeat_ms = 0
 
-  # with ADD_SESS as sess:
   with _make_add_sess() as sess:
     A_data = tvm.nd.array(np.array([2, 3], dtype='int8'), ctx=sess.context)
     B_data = tvm.nd.array(np.array([4], dtype='int8'), ctx=sess.context)
     C_data = tvm.nd.array(np.array([0, 0], dtype='int8'), ctx=sess.context)
 
     system_lib = sess.get_system_lib()
-    print('[Getting Time Evaluator]')
     timer_func = system_lib.time_evaluator(
       'add', sess.context,
       number=number, repeat=repeat, min_repeat_ms=min_repeat_ms)
-    print('[Running Time Evaluator]')
     time_res = timer_func(A_data, B_data, C_data)
-    print('[Finished Time Evaluator]')
     print(f'time_res: {time_res}')
-    print(f'C_data: {C_data.asnumpy()}')
     assert len(time_res.results) == repeat
     assert time_res.mean > 0.0
     # make sure the function actually ran
@@ -210,15 +204,12 @@ def test_time_eval_many_runs():
   repeat = 5
   min_repeat_ms = 0
 
-  # with ADD_SESS as sess:
   with _make_add_sess() as sess:
     A_data = tvm.nd.array(np.array([2, 3], dtype='int8'), ctx=sess.context)
     B_data = tvm.nd.array(np.array([4], dtype='int8'), ctx=sess.context)
     C_data = tvm.nd.array(np.array([0, 0], dtype='int8'), ctx=sess.context)
 
     system_lib = sess.get_system_lib()
-    print('[Getting Time Evaluator]')
-
     # run the time evaluator many times to ensure we don't ruin device state
     # after each execution
     timer_func = system_lib.time_evaluator(
@@ -230,7 +221,6 @@ def test_time_eval_many_runs():
 
 def test_type_check():
   """Test runtime type checking."""
-  # with IDENT_SESS as sess:
   with _make_ident_sess() as sess:
     A_data = tvm.nd.array(np.array([2, 3], dtype='int8'), ctx=sess.context)
     # NOTE we have made an incorrect call to `np.ones`. we should have given
@@ -249,7 +239,6 @@ def test_type_check():
 
 
 def test_many_tensor_alloc_deallocs():
-  # with IDENT_SESS as sess:
   with _make_ident_sess() as sess:
     def make_and_del_tensor():
       # alloc
@@ -258,16 +247,17 @@ def test_many_tensor_alloc_deallocs():
       A.asnumpy()
       # dealloc
 
-    for i in range(50):
+    for i in range(20):
       make_and_del_tensor()
 
 
 if __name__ == '__main__':
   # TODO(weberlo) remove before mainlining
-  assert len(sys.argv) == 2, 'missing target specifier'
-  TARGET = tvm.target.target.micro(sys.argv[1])
-  # ADD_SESS = _make_add_sess()
-  # IDENT_SESS = _make_ident_sess()
+  if len(sys.argv) == 2:
+    TARGET = tvm.target.target.micro(sys.argv[1])
+  else:
+    print('missing micro target specifier. assuming x86-64')
+    TARGET = tvm.target.target.micro('x86-64')
   assert 'micro-runtime' in TARGET.keys
   print(f'using target: {TARGET}')
 
