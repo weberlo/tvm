@@ -84,15 +84,10 @@ def _make_cortex_m33_sess(mod):
     micro_binary = tvm.micro.build_static_runtime(workspace, compiler, mod, lib_opts, bin_opts)
   lib_opts['cflags'].pop()
 
-  flasher_kw = {
-    'debug': DEBUG,
-  }
-
   # debug_rpc_session = tvm.rpc.connect('127.0.0.1', 9090)
   debug_rpc_session = None
 
   flasher = compiler.Flasher(
-    **flasher_kw,
     openocd_serial='066DFF343039564157214347',
     debug_rpc_session=debug_rpc_session)
   if BUILD:
