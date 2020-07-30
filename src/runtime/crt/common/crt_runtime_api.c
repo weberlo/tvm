@@ -171,6 +171,93 @@ int SystemLibraryCreate(TVMValue* args, int* type_codes, int num_args, TVMValue*
   return 0;
 }
 
+// TODO(weberlo) move to crt_config.h?
+#define MAX_TIME_EVAL_REPEAT 10
+static TVMByteArray g_utvm_time_eval_result;
+
+int RPCTimeEvaluator(
+    TVMValue* args, int* type_codes,
+    int num_args,
+    TVMValue* ret_val, int* ret_type_code) {
+  ret_val[0].v_handle = NULL;
+  ret_type_code[0] = kTVMNullptr;
+  if (num_args < 7) {
+    TVMAPIErrorf("not enough args");
+    return -1;
+  }
+  if (type_codes[0] != kTVMOpaqueHandle ||
+      type_codes[1] != kTVMModuleHandle ||
+      type_codes[2] != kTVMStr ||
+      type_codes[3] != kTVMContext ||
+      type_codes[4] != kTVMArgInt ||
+      type_codes[5] != kTVMArgInt ||
+      type_codes[6] != kTVMArgInt) {
+    TVMAPIErrorf("one or more invalid arg types");
+    return -1;
+  }
+
+  TVMModuleHandle mod = (TVMModuleHandle) args[1].v_handle;
+  const char* name = args[2].v_str;
+  TVMContext ctx = args[3].v_ctx;
+  int number = args[4].v_int64;
+  int repeat = args[5].v_int64;
+  int min_repeat_us = (/* min_repeat_ms */ args[6].v_int64) * 1000;
+
+  TVMFunctionHandle func_to_time;
+  int ret_code = TVMModGetFunction(mod, name, /* query_imports */ 0, &func_to_time);
+  if (ret_code != 0) {
+    return ret_code;
+  }
+
+  // TODO(weberlo) should *really* rethink needing to return doubles
+  if (repeat > MAX_TIME_EVAL_REPEAT) {
+    TVMAPIErrorf("repeat greater than %d not allowed", MAX_TIME_EVAL_REPEAT);
+    return -1;
+  }
+  size_t data_size = sizeof(double) * repeat + 1;
+  g_utvm_time_eval_result.size = data_size;
+  for (int i = 0; i < repeat; i++) {
+    double repeat_res_us = 0.0;
+    int exec_count = 0;
+    // do-while structure ensures we run even when `min_repeat_ms` isn't set (i.e., is 0).
+    do {
+      ret_code = TVMPlatformTimerStart();
+      if (ret_code != 0) {
+        TVMAPIErrorf("failed to start platform timer");
+        return ret_code;
+      }
+
+      for (int j = 0; j < number; j++) {
+        ret_code = TVMFuncCall(
+          func_to_time,
+          &(args[7]), &(type_codes[7]), num_args - 7,
+          ret_val, ret_type_code);
+        if (ret_code != 0) {
+          return ret_code;
+        }
+      }
+      exec_count += number;
+
+      double curr_res_us;
+      ret_code = TVMPlatformTimerStop(&curr_res_us);
+      if (ret_code != 0) {
+        TVMAPIErrorf("failed to stop platform timer");
+        return ret_code;
+      }
+      repeat_res_us += curr_res_us;
+
+    } while (repeat_res_us < min_repeat_us);
+    double mean_exec_ms = repeat_res_us / (1000.0 * exec_count);
+    ((double*) g_utvm_time_eval_result.data)[i] = mean_exec_ms;
+  }
+  // insert null terminator byte
+  ((double*) g_utvm_time_eval_result.data)[g_utvm_time_eval_result.size - 1] = 0;
+
+  *ret_type_code = kTVMBytes;
+  ret_val->v_handle = &g_utvm_time_eval_result;
+  return 0;
+}
+
 static TVMFunctionHandle EncodeFunctionHandle(tvm_module_index_t module_index,
                                               tvm_function_index_t function_index) {
   return (TVMFunctionHandle)((uintptr_t)(
@@ -321,7 +408,19 @@ tvm_crt_error_t TVMInitializeRuntime() {
     registered_modules[idx] = NULL;
   }
 
+  if (sizeof(double) != 8) {
+    TVMAPIErrorf("fp64 not supported on this platform");
+    return -1;
+  }
+  g_utvm_time_eval_result.data = vmalloc(MAX_TIME_EVAL_REPEAT*sizeof(double) + 1);
+  g_utvm_time_eval_result.size = 0;
+
   error = TVMFuncRegisterGlobal("runtime.SystemLib", &SystemLibraryCreate, 0);
+  if (error != 0) {
+    return error;
+  }
+
+  error = TVMFuncRegisterGlobal("runtime.RPCTimeEvaluator", &RPCTimeEvaluator, 0);
   if (error != 0) {
     return error;
   }
