@@ -22,9 +22,6 @@ from topi.testing import conv2d_nchw_python
 BUILD = True
 DEBUG = False
 
-# we fill these out in main, where the target is determined
-TARGET = None
-
 # TODO(weberlo) fix bug with sessions not being reusable
 # ADD_SESS = None
 # IDENT_SESS = None
