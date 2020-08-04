@@ -74,7 +74,7 @@ def _make_cortex_m33_sess(mod):
 
   if BUILD:
     micro_binary = tvm.micro.build_static_runtime(
-      workspace, compiler, mod, lib_opts=opts['lib_opts'], bin_opts=opts['bin_opts'])
+      workspace, compiler, mod, **opts)
 
   # debug_rpc_session = tvm.rpc.connect('127.0.0.1', 9090)
   debug_rpc_session = None

@@ -40,18 +40,13 @@ def test_compile_runtime():
   )
 
   root_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', '..'))
-  bin_opts = tvm.micro.DefaultOptions()
-  bin_opts.setdefault('profile', {})['common'] = ['-Wno-unused-variable']
-  bin_opts.setdefault('ccflags', []).append('-std=gnu++14')
-  bin_opts.setdefault('ldflags', []).append('-std=gnu++14')
-  bin_opts.setdefault('include_dirs', []).append(f'{project_dir}/crt')
-
-  lib_opts = copy.deepcopy(bin_opts)
-  lib_opts['profile']['common'].append('-Werror')
-  lib_opts['cflags'] = ['-Wno-error=incompatible-pointer-types']
+  opts = tvm.micro.DefaultOptions(f'{project_dir}/crt')
+  # TODO(weberlo) verify this is necessary
+  opts['bin_opts']['ccflags'] = ['-std=gnu++14']
+  opts['lib_opts']['ccflags'] = ['-std=gnu++14']
 
   if BUILD:
-    micro_binary = tvm.micro.build_static_runtime(workspace, compiler, mod, lib_opts, bin_opts)
+    micro_binary = tvm.micro.build_static_runtime(workspace, compiler, mod, **opts)
   lib_opts['cflags'].pop()
 
   device_transport = device_util.DeviceTransportLauncher({
