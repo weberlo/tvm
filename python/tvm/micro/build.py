@@ -91,15 +91,26 @@ RUNTIME_SRC_REGEX = re.compile('^.*\.cc?$', re.IGNORECASE)
 
 _CRT_DEFAULT_OPTIONS = {
   'ccflags': ['-std=c++11'],
+  'ldflags': ['-std=gnu++14'],
   'include_dirs': [f'{TVM_ROOT_DIR}/include',
                    f'{TVM_ROOT_DIR}/3rdparty/dlpack/include',
                    f'{TVM_ROOT_DIR}/3rdparty/mbed-os/targets/TARGET_NORDIC/TARGET_NRF5x/TARGET_SDK_11/libraries/crc16/',
-                   f'{TVM_ROOT_DIR}/3rdparty/dmlc-core/include'],
+                   f'{TVM_ROOT_DIR}/3rdparty/dmlc-core/include',
+                   f'{CRT_ROOT_DIR}/include'
+                   ],
+  'profile': {
+    'common': ['-Wno-unused-variable']
+  }
 }
 
 
-def DefaultOptions():
-  return copy.deepcopy(_CRT_DEFAULT_OPTIONS)
+def DefaultOptions(target_include_dir):
+  bin_opts = copy.deepcopy(_CRT_DEFAULT_OPTIONS)
+  bin_opts['include_dirs'].append(target_include_dir)
+  lib_opts = copy.deepcopy(bin_opts)
+  lib_opts['profile']['common'].append('-Werror')
+  lib_opts['cflags'] = ['-Wno-error=incompatible-pointer-types']
+  return {'bin_opts': bin_opts, 'lib_opts': lib_opts}
 
 
 def build_static_runtime(workspace, compiler, module, lib_opts=None, bin_opts=None):

@@ -43,13 +43,14 @@ def _make_x86_64_sess(mod):
   workspace = tvm.micro.Workspace(debug=True)
 
   compiler = tvm.micro.DefaultCompiler(target=TARGET)
-  opts = tvm.micro.DefaultOptions()
-  opts['include_dirs'].append(
-    os.path.join(tvm.micro.CRT_ROOT_DIR, 'host'))
-  opts['include_dirs'].append(
-    os.path.join(tvm.micro.CRT_ROOT_DIR, 'include'))
+  opts = tvm.micro.DefaultOptions(os.path.join(tvm.micro.CRT_ROOT_DIR, 'host'))
 
-  micro_binary = tvm.micro.build_static_runtime(workspace, compiler, mod, opts, opts)
+  micro_binary = tvm.micro.build_static_runtime(
+    # the x86 compiler *expects* you to give the exact same dictionary for both
+    # lib_opts and bin_opts. so the library compiler is mutating lib_opts and
+    # the binary compiler is expecting those mutations to be in bin_opts.
+    # TODO(weberlo) fix this very bizarre behavior
+    workspace, compiler, mod, lib_opts=opts['bin_opts'], bin_opts=opts['bin_opts'])
 
   flasher_kw = {
     'debug': DEBUG,
@@ -69,20 +70,11 @@ def _make_cortex_m33_sess(mod):
     env_vars={'GNUARMEMB_TOOLCHAIN_PATH': '~/ws/gcc-arm-none-eabi-9-2020-q2-update'},
   )
 
-  bin_opts = tvm.micro.DefaultOptions()
-  bin_opts.setdefault('profile', {})['common'] = ['-Wno-unused-variable']
-  bin_opts.setdefault('ldflags', []).append('-std=gnu++14')
-  bin_opts.setdefault('include_dirs', []).append(f'{project_dir}/crt')
-  crt_include_dir = os.path.realpath(os.path.join(tvm.micro.CRT_ROOT_DIR, 'include'))
-  bin_opts.setdefault('include_dirs', []).append(crt_include_dir)
-
-  lib_opts = copy.deepcopy(bin_opts)
-  lib_opts['profile']['common'].append('-Werror')
-  lib_opts['cflags'] = ['-Wno-error=incompatible-pointer-types']
+  opts = tvm.micro.DefaultOptions(f'{project_dir}/crt')
 
   if BUILD:
-    micro_binary = tvm.micro.build_static_runtime(workspace, compiler, mod, lib_opts, bin_opts)
-  lib_opts['cflags'].pop()
+    micro_binary = tvm.micro.build_static_runtime(
+      workspace, compiler, mod, **opts)
 
   # debug_rpc_session = tvm.rpc.connect('127.0.0.1', 9090)
   debug_rpc_session = None
