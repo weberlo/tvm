@@ -262,12 +262,10 @@ def test_autotvm():
 
   workspace = tvm.micro.Workspace(debug=True)
   compiler = tvm.micro.DefaultCompiler(target=target)
-  lib_opts = tvm.micro.DefaultOptions()
-  lib_opts['include_dirs'].append(os.path.join(tvm.micro.TVM_ROOT_DIR, 'src', 'runtime', 'crt', 'host'))
-  lib_opts['include_dirs'].append(os.path.join(tvm.micro.TVM_ROOT_DIR, 'src', 'runtime', 'crt', 'include'))
+  opts = tvm.micro.DefaultOptions(os.path.join(tvm.micro.CRT_ROOT_DIR, 'host'))
 
   adapter = tvm.micro.AutoTvmAdapter(workspace, compiler, compiler.flasher_factory,
-                                     lib_opts=lib_opts)
+                                     lib_opts=opts['lib_opts'])
 
   builder = tvm.autotvm.LocalBuilder(
       build_func=adapter.StaticRuntime,
@@ -282,8 +280,6 @@ def test_autotvm():
              measure_option=measure_option,
              callbacks=[],
              si_prefix='k')
-
-
 
 
 if __name__ == '__main__':
